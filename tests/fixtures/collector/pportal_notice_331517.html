@@ -1,0 +1,691 @@
+
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+
+
+
+
+<html class="no-js">
+
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+<meta name="description" content="">
+<meta name="keywords" content="">
+<meta name="viewport" content="width=1280">
+<meta name="contextPath" content="/pps-web-biz" />
+
+<!-- 共通情報　ヘッダー -->
+
+
+
+
+<script
+	src="/pps-web-biz/resources/vendor/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script
+	src="/pps-web-biz/resources/vendor/jquery-block-ui-2.70.0/jquery.blockUI.js"></script>
+<script
+	src="/pps-web-biz/resources/vendor/jquery-ui-1.13.1/jquery-ui.min.js"></script>
+<script
+	src="/pps-web-biz/resources/vendor/mousetrap-1.6.5/mousetrap.min.js"></script>    
+<script
+    src="/pps-web-biz/resources/app/javascript/common/calendar-jp.js"></script>
+<script
+    src="/pps-web-biz/resources/app/javascript/common/commonPreprocess.js"></script>
+<script
+    src="/pps-web-biz/resources/app/javascript/common/common.js?verno=001"></script>
+<script
+    src="/pps-web-biz/resources/app/javascript/common/commonPps.js"></script>
+    
+<script 
+    src="/pps-web-biz/resources/app/javascript/common/functions.js"></script>
+    
+    
+
+
+     
+<script>
+var waitingMessage = '<img src="/pps-web-biz/resources/app/image/common/loading.gif" alt="ローディングアイコン">';
+var waitingColor = '#6495ed';
+</script>
+     
+     
+
+
+<script
+    src="/pps-web-biz/resources/app/javascript/sc03/SC03.buttoncontrol.js?verno=113"></script>
+<script
+    src="/pps-web-biz/resources/app/javascript/fza99/FZA99.js"></script>
+
+
+
+<script
+    src="/pps-web-biz/resources/app/javascript/techtouch/prod_techtouch_snippet.js?verno=001"></script>
+<script defer
+    src="/pps-web-biz/resources/app/javascript/techtouch/cookieconsent.js?verno=001"></script>
+<script defer
+    src="/pps-web-biz/resources/app/javascript/techtouch/prod_cookieconsent_init.js?verno=001"></script>
+
+
+
+
+
+<title>調達情報の詳細</title>
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/reset.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/common.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonBbs.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonFaq.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonFooter.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonForm.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonHeader.css">
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonPps.css">
+
+
+    <link rel="stylesheet"
+        href="/pps-web-biz/resources/app/css/techtouch/cookieconsent.css">
+
+
+    
+        <link rel="shortcut icon"
+            href="/pps-web-biz/resources/app/image/common/favicon.ico">
+        <link 
+            href="/pps-web-biz/resources/vendor/css/lib/portal_biz/jquery-ui.min.css" rel = "stylesheet">
+        <link 
+            href="/pps-web-biz/resources/vendor/css/lib/portal_biz/jquery-ui.theme.css" rel = "stylesheet">
+        <link 
+            href="/pps-web-biz/resources/vendor/css/lib/jquery-ui.structure.css" rel = "stylesheet">  
+        <link 
+            href="/pps-web-biz/resources/app/css/assets/portal_biz/style.css" rel = "stylesheet">
+    
+    
+
+<body>
+
+
+     
+     <body>
+     
+     
+
+  <div id="wrapper">
+    
+
+
+
+
+
+
+
+
+
+<!-- 共通情報　ヘッダー -->
+
+
+
+
+
+<header class="header">
+
+    
+        <div class="header-inner">
+    
+    
+        <div class="inner">
+        
+            
+                
+                    <a tabindex="100" href="/pps-web-biz/"><img src="/pps-web-biz/resources/app/image/common/ttl_logo.png" alt="案件調達ポータルLOGO"></a>
+			        <div class="screen-reader-text"><a href="#main-content">本文へ移動する</a></div>
+			        
+			        <ul class="site-nav">
+			          <li class="site-nav-item1"><a href="/pps-web-biz/UZA01/OZA0101">ポータルトップへ<i class="icon-link"></i></a></li>
+			          <li class="site-nav-item2"><a href="/pps-web-biz/resources/app/html/manuals.html">操作マニュアル<i class="icon-link"></i></a></li>
+			          <li class="site-nav-item3"><a href="/pps-web-biz/UZA03/OZA0301">FAQ・お問い合わせ<i class="icon-link"></i></a></li>
+			          <li class="site-nav-item4"><a href="/pps-web-biz/resources/app/html/glossary.html">用語集<i class="icon-link"></i></a></li>
+			          <li class="site-nav-item5"><a href="/pps-web-biz/geps-common/resources/app/html/training.html">トレーニング<i class="icon-link"></i></a></li>
+			          <li class="site-nav-item6"><a href="/pps-web-biz/geps-common/resources/app/html/trainingsession.html">講習会情報<i class="icon-link"></i></a></li>
+			        </ul>
+                
+                
+            
+        <div class="font-zoom">
+          <span class="font-zoom-label">文字サイズ</span>
+          <div class="frm-toggle" data-role="font-size-change">
+            <label><input type="radio" name="font-size" value="size-m" checked><span>普通</span></label>
+            <label><input type="radio" name="font-size" value="size-l"><span>大</span></label>
+            <label><input type="radio" name="font-size" value="size-ll"><span>特大</span></label>
+          </div>
+        </div>
+            
+            
+		        <ul class="header-inner-menu">
+	                
+	                    
+	                        <li class="inner-menu-login"><a tabindex="140" href="/pps-web-biz/UZA01/OZA0103"><img src="/pps-web-biz/resources/app/image/common/btn_login.png" alt="ログイン">ログイン</a></li>
+	                    
+	                    
+	                
+                </ul>
+            
+            
+
+        </div>
+    </div>
+</header>
+<!-- /共通情報　ヘッダー -->
+
+    
+
+
+
+
+
+
+
+
+
+<!-- 共通情報　メニュー、パンくず -->
+
+<!-- global-nav -->
+
+    
+    
+    <nav class="global-nav">
+      <ul>
+        <li><button data-role="global-nav-toggle">調達情報検索</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <p class="global-nav-label">調達案件を探す</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAA01/OAA0100?OAA0115">調達情報検索<i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/UAA01/OAA0100?OAA0116">Search of Procurement Information<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+              <ul>
+                <li>
+                  <p class="global-nav-label">調達情報の通知</p>
+                  <ul>
+                  
+                  
+                  	<li><a tabindex="230" href="/pps-web-biz/UZA01/OZA0103?pt=UAD03">あなたへの通知を確認<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                    <li><a tabindex="225" href="/pps-web-biz/UZA01/OZA0103?pt=UAD02">調達情報通知の条件を指定<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                  
+                  </ul>
+                </li>
+              </ul>
+              <ul>
+                <li>
+                  <p class="global-nav-label">オープンカウンタ（少額）に参加する</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAA01/OAA0100?OAA0115&link=17">調達情報検索・見積書提出（オープンカウンタ（少額））<i class="icon-link"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.geps.go.jp/biz-contract/UKZ27/OKZ27_M01_B01','keiyakuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">事業者決定結果確認（オープンカウンタ（少額））<i class="icon-external"></i></a></li>
+                  </ul>
+                </li>
+                <li>
+                  <ul>
+                    <li><a href="/pps-web-biz/resources/app/html/beginner.html#sec03">初めてご利用になる方へ<i class="icon-link"></i></a><br>
+                      <span class="global-nav-note">※機能の概要や事前準備について記載しています。</span></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+        <li><button data-role="global-nav-toggle">事業者検索</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAB01/OAB0101">事業者情報検索<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+                <li>
+                  <p class="global-nav-label">落札実績情報のダウンロード</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAB02/OAB0201">落札実績情報の一覧<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+        <li><button data-role="global-nav-toggle">入札・契約</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <ul>
+                    <li><a onclick="javascript:window.open('https://www.nyusatsu.geps.go.jp/OMP/Accepter/','nyuusatuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">入札業務<i class="icon-rock"></i><i class="icon-external"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.nyusatsu.geps.go.jp/OMP/Publish/EbController/','nyuusatuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">入札結果確認<i class="icon-external"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.geps.go.jp/biz-contract/UK/top_biz','keiyakuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">契約業務<i class="icon-rock"></i><i class="icon-external"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+        <li><button data-role="global-nav-toggle">統一資格審査申請</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <ul>
+                    <li><a href="/pps-web-biz/geps-chotatujoho/resources/app/html/shinsei_internet.html">インターネットによる申請<i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/geps-chotatujoho/resources/app/html/shinsei_yusojisan.html">郵送・持参による申請<i class="icon-link"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.chotatujoho.geps.go.jp/csjs/ex021/ShozaichiMenuAction.do?start=ex','shikaku','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">受付・審査窓口検索<i class="icon-external"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.chotatujoho.geps.go.jp/csjs/ex016/StartShikakushaMenuAction.do','shikaku','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">有資格者名簿閲覧<i class="icon-external"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+              <ul>
+                <li>
+                  <ul>
+                    <li><a href="/pps-web-biz/geps-chotatujoho/resources/app/html/yukoshikaku.html">各年度に有効な資格の審査申請について<i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/geps-chotatujoho/resources/app/html/shikaku.html">全省庁統一資格について<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+        <li><button data-role="global-nav-toggle">少額物品販売</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <p class="global-nav-label">事業者情報の登録・商品情報管理・受注管理</p>
+                  <ul>
+                    <li><a onclick="javascript:window.open('https://www.marketplace.geps.go.jp/biz-marketplace/UMZ02/OMZ02_M01_00','shougakubuppin','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">少額物品販売業務<i class="icon-rock"><i class="icon-external"></i></i></a></li>
+                  </ul>
+                </li>
+                <li>
+                  <ul>
+                    <li><a href="/pps-web-biz/resources/app/html/beginner.html#sec02">初めてご利用になる方へ<i class="icon-link"></i></a><br>
+                    <span class="global-nav-note">※機能の概要や事前準備について記載しています。</span></li>
+                  </ul>
+                </li> 
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+        <li><a href="/pps-web-biz/UAD01/OAD0101">事業者プロフィール<i class="icon-rock"></i></a></li>
+        <li><button data-role="global-nav-toggle">利用者情報</button>
+          <div class="global-nav-child">
+            <div>
+              <ul>
+                <li>
+                  <p class="global-nav-label">初めて利用する方</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UZA01/OZA0102">利用者登録<i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/UAE01/OAE0100?OAE0123">利用者情報修正<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+              <ul>
+                <li>
+                  <p class="global-nav-label">電子証明書／マイナンバーカードで登録した方</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAE01/OAE0102?OAE0136">利用者情報更新<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.geps.go.jp/biz-contract/UR/top_biz1','keiyakuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">事業者情報登録・更新<i class="icon-rock"></i><i class="icon-external"></i></a></li>
+                    <li><a onclick="javascript:window.open('https://www.geps.go.jp/biz-contract/UR/top_biz1','keiyakuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');" target="_blank">委任状作成・承認<i class="icon-rock"></i><i class="icon-external"></i></a></li>
+                    <li><a href="/pps-web-biz/UAE04/OAE0401">電子証明書更新<i class="icon-link"></i></a></li>
+                    <li>利用者情報登録（再申請）
+                    <ul>
+                        <li class="management-info-link-navi"><a href="/pps-web-biz/UAE05/OAE0501">代表者</a><i class="icon-link"></i></li>
+                        <li class="management-info-link-navi"><a href="/pps-web-biz/UAE05/OAE0541">代理人</a><i class="icon-link"></i></li>
+                    </ul>
+                    </li>
+                    <li>利用者情報修正（再申請）
+                    <ul>
+                        <li class="management-info-link-navi"><a href="/pps-web-biz/UAE05/OAE0502">代表者</a><i class="icon-link"></i></li>
+                        <li class="management-info-link-navi"><a href="/pps-web-biz/UAE05/OAE0542">代理人</a><i class="icon-link"></i></li>
+                    </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+              <ul>
+                <li>
+                  <p class="global-nav-label">ID・パスワードで登録した方</p>
+                  <ul>
+                    <li><a href="/pps-web-biz/UAE02/OAE0209?ss01=login-idpass">利用者情報更新<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/UAE02/OAE0209?ss01=login-idpass">利用者情報削除<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/UAE02/OAE0209?ss01=login-idpass">パスワード変更<i class="icon-rock"></i><i class="icon-link"></i></a></li>
+                    <li><a href="/pps-web-biz/UAE02/OAE0228">パスワード初期化<i class="icon-link"></i></a></li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+            <button class="btn-global-nav-close" data-role="global-nav-close">グローバルナビを閉じる</button>
+          </div>
+        </li>
+      </ul>
+    </nav>
+    <div class="global-nav-overlay" data-role="global-nav-close"></div>
+    
+    
+
+
+    <div class="breadcrumbs">
+        <ul class="inner">
+        	<li>
+            <a href="/pps-web-biz/" class="aside-inner-arrow text-link">トップ</a>&nbsp;&nbsp;調達情報公開機能
+        	</li>
+        </ul>
+    </div>
+<!-- /共通情報　メニュー、パンくず -->
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonPpUpdate.css">
+
+
+
+
+
+
+
+<article>
+    <div class="main-ttl">
+        <div class="ttl-area">
+            <h2>調達情報の詳細</h2>
+        </div>
+    </div>
+<div class="main-item">
+
+<form id="tri_WAB0102FM01" action="/pps-web-biz/UAA01/OAA0100" method="post"> 
+    <div class="alert message-error input-error-list" >
+        
+        
+        
+        
+        
+    </div>  
+    <table class="main-table-pattern1">
+            
+                    
+                        <tr>
+                            <th>調達案件番号</th>
+                            
+                                
+                                 
+                                    <td colspan="5">0000000000000331517</td>
+                                
+                            
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementCla">
+                            <th>調達種別</th>
+                            
+                                
+                                
+                                    <td colspan="5">一般競争入札の入札公告（WTO対象）</td>
+                                
+                            
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/cla">
+                            <th>分類</th>
+                            <td colspan="5">物品・役務</td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/articleNm">
+                            <th>調達案件名称</th>
+                            <td colspan="5">恩給事務総合システムのガバメントクラウドへの移行に係る作業の請負</td>
+                        </tr>
+                        <tr class="info-date"
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/publicStartDate">
+                            <th>公開開始日</th>
+                            <td colspan="2">
+                            
+                                令和04年10月28日
+                            </td>
+                            <th>公開終了日</th>
+                            <td colspan="2">
+                            
+                                令和09年10月27日
+                            </td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementOrgan">
+                            <th>調達機関</th>
+                            
+                                
+                                 
+                                    <td colspan="5">総務省</td>
+                                
+                            
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementOraganLocation">
+                            <th>調達機関所在地</th>
+                            
+                                
+                                 
+                                    <td colspan="5">東京都</td>
+                                
+                                                        
+                        </tr>
+                        
+                            
+                        
+                        
+                            
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        <tr>
+                            <th rowspan="2">調達品目分類</th>
+                            <td colspan="5">
+                                    コンピュータ・サービス
+                            </td>
+                        </tr>
+                        
+                        
+                        <tr>
+                            <td colspan="5">
+                                    電子計算機サービス及び関連のサービス
+                            </td>
+                        </tr>
+                        
+                        
+                        
+                        
+                        
+                        
+                        
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/publicNoticeContent">
+                            <th>公告内容</th>
+                            
+                                
+                                 
+                                    <td colspan="5">入札公告<br /><br />次のとおり一般競争入札に付します。<br />令和４年10月28日<br />支出負担行為担当官<br />総務省政策統括官（統計制度・恩給担当）<br />    阪本　克彦<br />◎調達機関番号　012　◎所在地番号　13<br />１　調達内容<br /> (1) 品目分類番号　71、27<br /> (2) 購入等件名及び数量<br />   恩給事務総合システムのガバメントクラウドへの移行に係る作業の請負　一式<br /> (3) 調達案件の特質等  入札説明書による。<br /> (4) 契約期間　入札説明書による。<br /> (5) 納入場所　入札説明書による。<br /> (6) 入札方法　総合評価落札方式をもって行うので、入札金額を記載した入札書及び提案書等を提出すること。なお、落札決定に当たっては、入札書に記載された金額に当該金額の10％に相当する額を加算した金額（当該金額に１円未満の端数があるときは、その端数金額を切り捨てるものとする。）をもって落札金額とするので、入札者は、消費税及び地方消費税に係る課税事業者であるか免税事業者であるかを問わず、見積もった金額の110分の100に相当する金額を入札書に記載すること。<br /> (7) 本調達案件は、紙による従来の応札及び入開札手続と併せて、「電子調達システム」を利用した応札及び入開札手続を使用するものとする。<br />２　競争参加資格<br /> (1) 予算決算及び会計令第70条の規定に該当しない者であること。なお、未成年者、被保佐人又は被補助人であって、契約締結のために必要な同意を得ている者は、同条中、特別の理由がある場合に該当する。<br /> (2) 予算決算及び会計令第71条の規定に該当しない者であること。<br /> (3) 令和４・５・６年度総務省競争参加資格（全省庁統一資格）において「役務の提供等」において「情報処理」のＡ又はＢの等級に格付けされ、関東・甲信越地域の競争参加資格を有する者であること。<br /> (4) 暴力団が実質的に経営を支配する者又はこれに準ずる者でないこと。<br />３　入札書等の提出場所等<br /> (1) 入札書等の提出場所、契約条項を示す場所、入札説明書の交付場所及び問い合わせ先<br />  〒162－8022　東京都新宿区若松町19－１  <br />  総務省政策統括官（恩給担当）付恩給管理官付専門官　小島　薫　電話03-5273-1322<br /> (2) 入札書の受領期限　令和４年12月19日（月）14時（郵送による場合は、同時刻までに必着のこと。）<br /> (3) 入札説明書の交付方法　本公告の日から上記(1)の場所にて交付する。<br /> (4) 開札の日時及び場所　令和４年12月27日 <br /> （火）14時　総務省第二庁舎第一会議室（   <br />418号室）<br /> (5) 入札者に求められる義務等　入札に参加を希望する者は、入札説明書に明記されている各種書類を令和４年12月19日（月）14時までに上記(1)に示す場所に提出しなければならない。提出された各種書類を審査の結果、当該案件を履行できると認められた者に限り、入札の対象者とする。なお、提出した各種書類について説明を求められたときは、これに応じなければならない。<br />４　その他<br /> (1) 契約手続において使用する言語及び通貨<br />日本語及び日本国通貨<br /> (2) 入札保証金及び契約保証金　免除<br /> (3) 入札の無効　本公告に示した競争参加資格のない者の提出した入札書、入札者に求められる義務を履行しなかった者の提出した入札書は無効とする。<br /> (4) 契約書作成の要否　要　　<br /> (5) 落札者の決定方法　予算決算及び会計令第79条の規定に基づいて作成された予定価格の制限の範囲内の入札金額を提示した入札者であって、入札説明書で指定する性能、機能等の要件のうち、必須とした項目についての基準をすべて満たしている提案をした入札者の中から入札説明書で定める総合評価落札方式をもって落札者を決定する。<br /> (6) 手続における交渉の有無  無<br /> (7) 詳細は入札説明書による。<br />５　Summary<br /> (1) Contracting entity　: SAKAMOTO Katsuhiko, Director-General for Policy Planning(Statistical Policy・Onkyu), Ministry of Internal Affairs and Communications (MIC)<br /> (2) Classification of the services to be procured: 71,27<br /> (3) Nature and quantity of the services to be required: Migration of Pension System to Government Cloud１set<br /> (4) Fulfillment period: As shown in the tender documentation<br /> (5) Fulfillment place: As shown in the tender documentation<br /> (6) Qualification for participating in the tendering procedures: Suppliers eligible for participating in the proposed tender are those who shall:<br />  (a) not come under Article 70 of the Cabinet Order concerning the Budget,Auditing and Accounting. Furthermore,minors,Person under Conservatorship or Person under Assistance that obtained the consent necessary for concluding a contract may be applicable under cases of special reasons within the said clause.<br />  (b) not come under Article 71 of the Cabinet Order concerning the Budget, Auditing and Accounting.<br />  (c) have Grade 「A」or 「B」“offer of services etc”in the Kanto・Koushin'etsu district,in terms of the qualification for participating in tenders by MIC (Single qualification for every ministry and agency)in the fiscal years 2022,2023 and 2024.<br /> (7) Time limit for tender: Until 14:00  19 December 2022<br /> (8) Contact point for the notice: KOJIMA Kaoru, Contracting  Officer Onkyu  management officer, Director-General for Policy Planning(Onkyu),MIC,19-1 Wakamatsu‐cho,Shinjuku-ku,Tokyo 162-8022 Japan. TEL 03-5273-1322 <br /></td>
+                                
+                            
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementDocumentDownloadUrl1">
+                            <th>調達資料１</th>
+                            <td colspan="5">
+                                
+                                
+                                
+                                    <a class="text-link" tabindex="1000" href="https://www.geps.go.jp/biz-contract/UKB06/OKB06_M01_B01.do?PRM=tfuKCYAlXws%2B6AkxWtydKx3apBqmqZ6iz%2FywW5jBbEA%3D" target="_blank">調達資料１ダウンロードURL</a> 
+                                
+                            
+                            </td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementDocumentDownloadUrl2">
+                            <th>調達資料２</th>
+                            <td colspan="5">
+                                
+                                
+                                    -
+                                
+                                
+                            
+                            </td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementDocumentDownloadUrl3">
+                            <th>調達資料３</th>
+                            <td colspan="5">
+                                
+                                
+                                    -
+                                
+                                
+                            
+                            </td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementDocumentDownloadUrl4">
+                            <th>調達資料４</th>
+                            <td colspan="5">
+                                
+                                
+                                    -
+                                
+                                
+                            
+                            </td>
+                        </tr>
+                        <tr
+                            id="tri_WAB0102FM01/procurementInformationDetailBean/procurementDocumentDownloadUrl5">
+                            <th>調達資料５</th>
+                            <td colspan="5">
+                                
+                                
+                                    -
+                                
+                                
+                            
+                            </td>
+                        </tr>
+                    
+            
+        </table>
+            
+                
+                    <div class="ta-r">
+                        <div class="main-item-submit submit-large">
+                            <input id="OAA0113" type="button" value="入札"
+                                class="button-orange main-item-button button-large nowait nodisabled"
+                                onclick="javascript:window.open('https://www.nyusatsu.geps.go.jp/OMP/Accepter/index.jsp?PRM=0000000000000331517','nyuusatuss','location=no,status=no,titlebar=no,menubar=no,toolbar=no,resizable=yes,scrollbars=yes, width=1280, height=800');"
+                                tabindex="3000" />
+                        </div>
+                    </div>
+                    
+                
+                
+                
+            
+        <div>
+<input type="hidden" name="_csrf" value="test-token" />
+</div></form>
+</div>
+</article>
+
+    <br/>
+    <div class="main-item">
+        <p id="toTopIcon" class="main-totop"><a tabindex="9000" href="/pps-web-biz/">トップページへ戻る</a></p>
+        <a tabindex="9010" class="fixed-totop" href="#">
+        
+            
+                <img class="over" src="/pps-web-biz/resources/app/image/common/btn_pagetop_off.png" alt="先頭へ戻る">
+            
+            
+        
+        </a>
+    </div>
+    
+
+
+
+
+
+
+
+
+
+<!-- 共通情報　フッター -->
+
+<link rel="stylesheet"
+    href="/pps-web-biz/resources/app/css/common/commonPpUpdate.css">
+
+     
+        <link 
+            href="/pps-web-biz/resources/app/css/assets/portal_biz/style.css" rel = "stylesheet">
+    
+    
+
+    
+    <!-- footer -->
+    <footer class="footer">
+       <ul class="footer-nav">
+		
+		     
+		        <li><a href="/pps-web-biz/resources/app/html/outline.html">本システムについて<i class="icon-link-white"></i></a></li>
+		        <li><a href="/pps-web-biz/resources/app/html/sitepolicy.html">ご利用にあたって<i class="icon-link-white"></i></a></li>
+		        <li><a href="/pps-web-biz/resources/app/html/link.html">関連サイトへのリンク<i class="icon-link-white"></i></a></li>
+		        <li><a href="/pps-web-biz/resources/app/html/privacy.html">プライバシーポリシー<i class="icon-link-white"></i></a></li>
+		        <li><a href="/pps-web-biz/resources/app/html/sitemap.html">サイトマップ<i class="icon-link-white"></i></a></li>      
+		    
+		    
+		
+      </ul>
+
+      <p class="footer-copyright">Copyright &copy; Digital Agency All Rights Reserved.</p>
+    </footer>
+<!-- /共通情報　フッター -->
+    <form id="emptyForm" action="/pps-web-biz/UAA01/OAA0121" method="post"><div>
+<input type="hidden" name="_csrf" value="test-token" />
+</div></form>
+  </div>
+</body>
+</html>

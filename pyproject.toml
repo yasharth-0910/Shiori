@@ -1,0 +1,50 @@
+[project]
+name = "shiori"
+version = "0.0.0"
+description = "Offline reader for Japanese public tender documents."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "lxml>=5.4",
+    "networkx>=3.3",
+    "numpy>=2.2",
+    "onnxruntime==1.23.2",
+    "opencv-python-headless>=4.11",
+    "pillow>=12",
+    "pydantic>=2",
+    "pymupdf>=1.28.2",
+    "pyyaml>=6",
+    "tqdm>=4.66",
+]  # pymupdf: AGPL (D-08, D-28). The rest is for OCR (D-36): onnxruntime is pinned
+# to the version NDLOCR-Lite pins for macOS; lxml, networkx, tqdm, pyyaml are its imports.
+
+[dependency-groups]
+collector = [
+    "beautifulsoup4>=4.15.0",
+    "httpx>=0.28.1",
+]
+dev = ["pyright", "pytest", "ruff"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+# models/ holds the NDLOCR-Lite checkout (D-36): third-party code, not ours to check.
+exclude = ["models", "data", ".venv", "**/node_modules", "**/__pycache__"]
+typeCheckingMode = "basic"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]  # dev-time packages (collector/) are not installed
+markers = ["corpus: reads files in data/raw/ (gitignored); skipped when they are missing"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core/shiori_core"]

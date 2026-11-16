@@ -1,0 +1,18 @@
+{
+ "_about": "SHA-256 (UTF-8) of reviewed restricted-document sentences that are allowed to appear in tracked files. Hashes and short labels only, no text.",
+ "sentence_sha256": {
+  "58cead39ea3a1ae8a8e03724ddf4bd3313a1db9a48fa291df8a656cb3b8b8366": "contract period boilerplate",
+  "e2ee88dc30fa25441745a69e34115c43d75c9d9fcfbd4eae35b6c8de862c8fb2": "see bid instructions boilerplate",
+  "fbba8cfc68c941a0891a8f87b342da5d3866d044471378d7ccd17878ac44a146": "mail form boilerplate",
+  "d1aef5229f418e47924a11d7f9c1afea6976171e8a50f7f1ff9edada9f1a06bd": "law name heading",
+  "1e2acb083e48ba36254338c1201a5694e6124955d20f409b304bc30db21da4d6": "adobe reader notice 1",
+  "5053971da1fc56a98c05ab87202c1cb56279b59c2afea0739fedb8680d95fcac": "adobe reader notice 2",
+  "85c4e859e9d9054203236d8e1fe59e1f2fe7334f99a27f7b7d77060a363920f3": "per bid instructions and spec boilerplate",
+  "5e20aeac53dcc0432bfc07f935af8db862929242b3da890040cc2769d9775f24": "contract signing to end of FY2026 boilerplate",
+  "2568ff016576c536b58d3139a230bed065c85c2c62c29d53044d915e975652ed": "Asahikawa listing page URL (bare public address, not document text)",
+  "8be7301356528fa38bf970a14ec5cce7eff01605d70af733539e990d8ded6059": "contract period from signing; exact sentence in open d4000027",
+  "8060b6fe27f97bee8f33077c080bdc1a5c465d2ddaa2aee8348266534f0aef2f": "lowest price award tail; same text inside sentences of open f19cddbd and 30 more open docs",
+  "30f4b7d900fb53fca4120e241a22ffb5a31943d13db5df17788d2109df404f79": "consumption tax rounding clause; same text inside longer sentences of open 6b7142ab and 1bfaa824"
+ },
+ "known_debt": []
+}

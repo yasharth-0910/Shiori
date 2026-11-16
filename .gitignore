@@ -1,0 +1,30 @@
+# Data and models (see data/README.md). Manifests, splits and open-doc labels stay committed.
+data/raw/
+data/processed/
+# Labels for restricted/unknown documents (D-24)
+data/eval_private/
+# Raw labeler answers, usage ledger, review batches: hold restricted-document text
+data/cache/
+models/
+*.gguf
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Secrets (cloud API keys for dev-time pre-labeling)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+CLAUDE.md

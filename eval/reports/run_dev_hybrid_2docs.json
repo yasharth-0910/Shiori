@@ -1,0 +1,1667 @@
+{
+ "name": "dev_hybrid_2docs",
+ "split": "dev",
+ "extractor": "hybrid",
+ "date": "2026-11-16T11:11:36+00:00",
+ "git_commit": "78fac4186849dd10c78dce65309052db33a5a6b9",
+ "extractor_version": "0.3.0",
+ "schema_version": "1.0.0",
+ "documents": [
+  "136dfba9ee59",
+  "563042df9941"
+ ],
+ "skipped": [],
+ "documents_in_split": 2,
+ "label_lines_reviewed_by_a_model": [
+  28,
+  46
+ ],
+ "overall": {
+  "verified_accuracy": [
+   20,
+   46
+  ],
+  "value_accuracy": [
+   20,
+   46
+  ],
+  "citation_exists": [
+   19,
+   19
+  ],
+  "value_in_citation": [
+   19,
+   19
+  ],
+  "not_found": [
+   27,
+   46
+  ],
+  "hallucination": [
+   0,
+   19
+  ],
+  "wrong_shown": [
+   4,
+   46
+  ],
+  "over_abstention": [
+   16,
+   35
+  ]
+ },
+ "tier1": {
+  "verified_accuracy": [
+   10,
+   20
+  ],
+  "value_accuracy": [
+   10,
+   20
+  ],
+  "citation_exists": [
+   14,
+   14
+  ],
+  "value_in_citation": [
+   14,
+   14
+  ],
+  "not_found": [
+   6,
+   20
+  ],
+  "hallucination": [
+   0,
+   14
+  ],
+  "wrong_shown": [
+   4,
+   20
+  ],
+  "over_abstention": [
+   4,
+   18
+  ]
+ },
+ "by_kind": {
+  "list": {
+   "verified_accuracy": [
+    0,
+    6
+   ],
+   "value_accuracy": [
+    0,
+    6
+   ],
+   "citation_exists": [
+    4,
+    4
+   ],
+   "value_in_citation": [
+    4,
+    4
+   ],
+   "not_found": [
+    2,
+    6
+   ],
+   "hallucination": [
+    0,
+    4
+   ],
+   "wrong_shown": [
+    4,
+    6
+   ],
+   "over_abstention": [
+    2,
+    6
+   ]
+  },
+  "structured": {
+   "verified_accuracy": [
+    20,
+    32
+   ],
+   "value_accuracy": [
+    20,
+    32
+   ],
+   "citation_exists": [
+    15,
+    15
+   ],
+   "value_in_citation": [
+    15,
+    15
+   ],
+   "not_found": [
+    17,
+    32
+   ],
+   "hallucination": [
+    0,
+    15
+   ],
+   "wrong_shown": [
+    0,
+    32
+   ],
+   "over_abstention": [
+    10,
+    25
+   ]
+  },
+  "text": {
+   "verified_accuracy": [
+    0,
+    8
+   ],
+   "value_accuracy": [
+    0,
+    8
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    8,
+    8
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    8
+   ],
+   "over_abstention": [
+    4,
+    4
+   ]
+  }
+ },
+ "by_field": {
+  "award_method": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "bid_bond": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "contact": {
+   "verified_accuracy": [
+    1,
+    2
+   ],
+   "value_accuracy": [
+    1,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    1,
+    1
+   ]
+  },
+  "contracting_officer": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "deadlines": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    2,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "delivery_deadline": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    0
+   ]
+  },
+  "delivery_location": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    0
+   ]
+  },
+  "eligibility": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    2,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "issuer_org": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "item_category": {
+   "verified_accuracy": [
+    1,
+    2
+   ],
+   "value_accuracy": [
+    1,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    1,
+    1
+   ]
+  },
+  "language_currency": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "notice_date": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    1,
+    1
+   ],
+   "value_in_citation": [
+    1,
+    1
+   ],
+   "not_found": [
+    1,
+    2
+   ],
+   "hallucination": [
+    0,
+    1
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    1
+   ]
+  },
+  "performance_bond": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "performance_period": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "procurement_type": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "required_documents": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "scope_summary": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    0
+   ]
+  },
+  "spec_access": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    0
+   ]
+  },
+  "submission_modes": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "tax_basis": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "title": {
+   "verified_accuracy": [
+    0,
+    2
+   ],
+   "value_accuracy": [
+    0,
+    2
+   ],
+   "citation_exists": [
+    0,
+    0
+   ],
+   "value_in_citation": [
+    0,
+    0
+   ],
+   "not_found": [
+    2,
+    2
+   ],
+   "hallucination": [
+    0,
+    0
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    2,
+    2
+   ]
+  },
+  "unified_qualification": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  },
+  "wto_covered": {
+   "verified_accuracy": [
+    2,
+    2
+   ],
+   "value_accuracy": [
+    2,
+    2
+   ],
+   "citation_exists": [
+    2,
+    2
+   ],
+   "value_in_citation": [
+    2,
+    2
+   ],
+   "not_found": [
+    0,
+    2
+   ],
+   "hallucination": [
+    0,
+    2
+   ],
+   "wrong_shown": [
+    0,
+    2
+   ],
+   "over_abstention": [
+    0,
+    2
+   ]
+  }
+ },
+ "records": [
+  {
+   "doc": "136dfba9ee59",
+   "field": "title",
+   "kind": "text",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "issuer_org",
+   "kind": "text",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "contracting_officer",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "notice_date",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "procurement_type",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "award_method",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "item_category",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "scope_summary",
+   "kind": "text",
+   "tier1": false,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "performance_period",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "delivery_deadline",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "absent",
+   "pred": "absent",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "delivery_location",
+   "kind": "text",
+   "tier1": false,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "eligibility",
+   "kind": "list",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": true,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "unified_qualification",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "deadlines",
+   "kind": "list",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": true,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "submission_modes",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "bid_bond",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "performance_bond",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "tax_basis",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "language_currency",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "required_documents",
+   "kind": "list",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "contact",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "wto_covered",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "136dfba9ee59",
+   "field": "spec_access",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "title",
+   "kind": "text",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "issuer_org",
+   "kind": "text",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "contracting_officer",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "notice_date",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "absent",
+   "pred": "absent",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "procurement_type",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "award_method",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "item_category",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "absent",
+   "pred": "absent",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "scope_summary",
+   "kind": "text",
+   "tier1": false,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "performance_period",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "delivery_deadline",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "absent",
+   "pred": "absent",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "delivery_location",
+   "kind": "text",
+   "tier1": false,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "eligibility",
+   "kind": "list",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": true,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "unified_qualification",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "deadlines",
+   "kind": "list",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": true,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "submission_modes",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "bid_bond",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "performance_bond",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "tax_basis",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "language_currency",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "required_documents",
+   "kind": "list",
+   "tier1": false,
+   "gold": "present",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": true
+  },
+  {
+   "doc": "563042df9941",
+   "field": "contact",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "absent",
+   "pred": "absent",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "wto_covered",
+   "kind": "structured",
+   "tier1": false,
+   "gold": "present",
+   "pred": "present",
+   "value_ok": true,
+   "verified_ok": true,
+   "cite_exists": true,
+   "value_in": true,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  },
+  {
+   "doc": "563042df9941",
+   "field": "spec_access",
+   "kind": "structured",
+   "tier1": true,
+   "gold": "see_other_document",
+   "pred": "absent",
+   "value_ok": false,
+   "verified_ok": false,
+   "cite_exists": null,
+   "value_in": null,
+   "halluc": false,
+   "wrong_shown": false,
+   "over_abstain": false
+  }
+ ]
+}

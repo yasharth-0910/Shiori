@@ -1,0 +1,320 @@
+{
+  "seed": 20261016,
+  "split": "dev",
+  "rules": {
+    "total": 20,
+    "wave_size": 5,
+    "org_max": 6,
+    "min_orgs": 4,
+    "min_notice_summary": 6,
+    "target": {
+      "notice": 12,
+      "bid_instructions": 4,
+      "spec": 4
+    },
+    "min_japanese_sentences": 5
+  },
+  "pilot_qualified": [
+    "28ad40ea4b1f",
+    "4b0b9d8229c7",
+    "4c40bbd831fe",
+    "563042df9941",
+    "f19cddbd4cba"
+  ],
+  "pilot_left_out": [],
+  "open_dev_by_type": {
+    "notice": 48,
+    "bid_instructions": 8,
+    "spec": 8,
+    "other": 8,
+    "forms": 3,
+    "qa": 5,
+    "draft_contract": 1,
+    "evaluation_criteria": 1
+  },
+  "skipped": {},
+  "shortfalls": {
+    "bid_instructions": "wanted 4, got 3",
+    "spec": "wanted 4, got 2"
+  },
+  "bundles_complete": 1,
+  "bundles_with_two_or_more": 2,
+  "waves": [
+    {
+      "wave": 0,
+      "already_labeled": true,
+      "docs": [
+        {
+          "doc_id": "28ad40ea4b1f2ae2367d7e72c3012e4d03abcfc8c743b0266075f811e81055ba",
+          "wave": 0,
+          "stratum": "bid_instructions",
+          "doc_type": "bid_instructions",
+          "org": "和歌山県",
+          "pages": 7,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:d00222734"
+        },
+        {
+          "doc_id": "4b0b9d8229c764560896364feeef424a3d1a9386e0c0256d83b6ae9639eb4989",
+          "wave": 0,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "和歌山県",
+          "pages": null,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:koubo"
+        },
+        {
+          "doc_id": "4c40bbd831fea8b05609b62c41e1ba4fba9d908bb428bbb7f5b073b5f3a4098d",
+          "wave": 0,
+          "stratum": "spec",
+          "doc_type": "spec",
+          "org": "和歌山県",
+          "pages": 6,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:d00222620"
+        },
+        {
+          "doc_id": "563042df99412305a30cb51ebfc443b267e7ddfebd406195ab28272072a38c15",
+          "wave": 0,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "内閣府",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000618279"
+        },
+        {
+          "doc_id": "f19cddbd4cba4d5c652b00037987359faed65f10139632e647960368c1adb53a",
+          "wave": 0,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "法務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000617751"
+        }
+      ]
+    },
+    {
+      "wave": 1,
+      "already_labeled": false,
+      "docs": [
+        {
+          "doc_id": "d40000275df6c48bb6647cc8bda599762f2cf7880e02665e9c2148a513d649a7",
+          "wave": 1,
+          "stratum": "bid_instructions",
+          "doc_type": "bid_instructions",
+          "org": "和歌山県",
+          "pages": 13,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:d00222620"
+        },
+        {
+          "doc_id": "136dfba9ee5931a6913c268344daa03160bfd2623b75fc76eb6da34181f4303c",
+          "wave": 1,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "農林水産省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000609775"
+        },
+        {
+          "doc_id": "84e9d0c8325c7d021ff68402bdecfe06a61831908de6440d0b8f46de7d85f7fe",
+          "wave": 1,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "厚生労働省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000617362"
+        },
+        {
+          "doc_id": "389a7520420c01db0f2a677711e4f2ec5bd5a2e1fc196c0e52ff388c094cf274",
+          "wave": 1,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "農林水産省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000624227"
+        },
+        {
+          "doc_id": "a13baaac55c85035135c8d3d26f2b8e2de6b5761b931984b4d0e2950e7ab3da5",
+          "wave": 1,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "農林水産省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000618539"
+        }
+      ]
+    },
+    {
+      "wave": 2,
+      "already_labeled": false,
+      "docs": [
+        {
+          "doc_id": "e71b351a07838fc6e4e8d0e53545f6815de5689a910f7846f7137955a2584a5b",
+          "wave": 2,
+          "stratum": "bid_instructions",
+          "doc_type": "bid_instructions",
+          "org": "和歌山県",
+          "pages": 7,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:koubo"
+        },
+        {
+          "doc_id": "58f13b9c2e878a3f81422034923231c9bf501d7fae03a8a6287cdca022325d4a",
+          "wave": 2,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "総務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000331517"
+        },
+        {
+          "doc_id": "a9049787410848d2add154cbd7d369015a43abdacf9cb9bd5f0fb355be1edbd4",
+          "wave": 2,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "内閣府",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000623829"
+        },
+        {
+          "doc_id": "714055a2a2b8e976e5fdf5b1157c2666daaefcf5f05fec60650a4cf435e49cdd",
+          "wave": 2,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "内閣府",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000624709"
+        },
+        {
+          "doc_id": "d0174ce05b189a3ef1024d7dc563782efdcd9bca5f2f04d959d1661042a42371",
+          "wave": 2,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "厚生労働省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000617728"
+        }
+      ]
+    },
+    {
+      "wave": 3,
+      "already_labeled": false,
+      "docs": [
+        {
+          "doc_id": "7e591bba3e4f23a58a394d8c7b56b4c1bfa4ec33e5821a03f478f2476d0c1091",
+          "wave": 3,
+          "stratum": "spec",
+          "doc_type": "spec",
+          "org": "和歌山県",
+          "pages": 2,
+          "source": "wakayama_pref",
+          "bundle_id": "wakayama_pref:koubo"
+        },
+        {
+          "doc_id": "6b7142ab74f4ac1db3601e2edad1b7db8273e48367ba51126ebb78cd7230e8bf",
+          "wave": 3,
+          "stratum": "notice_summary",
+          "doc_type": "notice",
+          "org": "法務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000614280"
+        },
+        {
+          "doc_id": "2fa0d5a484d0a9fdb2b70efacc61a120a3311e194339b7e37a1c4595a130a105",
+          "wave": 3,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "総務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000533540"
+        },
+        {
+          "doc_id": "9c955892570f61ec11b92e2ec3af6b20530bd75f579b7fa7410a7005dff3a94c",
+          "wave": 3,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "法務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000615359"
+        },
+        {
+          "doc_id": "f08ea5aea45fc3e83a87e36f0160462190db902c6ef06d463df591aa56e3c2ef",
+          "wave": 3,
+          "stratum": "notice_other",
+          "doc_type": "notice",
+          "org": "総務省",
+          "pages": null,
+          "source": "p-portal",
+          "bundle_id": "p-portal:0000000000000541596"
+        }
+      ]
+    }
+  ],
+  "reserve": [
+    {
+      "doc_id": "53320d90cf87d7db2f0caef75e1b10061f26f67d00af1f8597e4be9dbbf4d9bb",
+      "wave": -1,
+      "stratum": "bid_instructions",
+      "doc_type": "bid_instructions",
+      "org": "和歌山県",
+      "pages": 9,
+      "source": "wakayama_pref",
+      "bundle_id": "wakayama_pref:d00221579"
+    },
+    {
+      "doc_id": "fd637c1deea14163e88539307f6bd4f9fb1a72edb5b7229b4350ea2be0401415",
+      "wave": -1,
+      "stratum": "spec",
+      "doc_type": "spec",
+      "org": "和歌山県",
+      "pages": 4,
+      "source": "wakayama_pref",
+      "bundle_id": "wakayama_pref:d00222576"
+    },
+    {
+      "doc_id": "a81e99fecea5797c73e7efa0bf4e7fca213e0dd1ab15e97dc38d2f468b5e4384",
+      "wave": -1,
+      "stratum": "notice_summary",
+      "doc_type": "notice",
+      "org": "厚生労働省",
+      "pages": null,
+      "source": "p-portal",
+      "bundle_id": "p-portal:0000000000000604520"
+    },
+    {
+      "doc_id": "bf99e8ba6a15b015e86791f584cacfee78694d9b0cb0a45f8ccbfeae80e0e33a",
+      "wave": -1,
+      "stratum": "notice_other",
+      "doc_type": "notice",
+      "org": "総務省",
+      "pages": null,
+      "source": "p-portal",
+      "bundle_id": "p-portal:0000000000000547486"
+    },
+    {
+      "doc_id": "01e953d899adfa0d82d04f5dacd60d5c399a89dc8af8c2adae92f445d3dea9fb",
+      "wave": -1,
+      "stratum": "bid_instructions",
+      "doc_type": "bid_instructions",
+      "org": "和歌山県",
+      "pages": 8,
+      "source": "wakayama_pref",
+      "bundle_id": "wakayama_pref:d00222518"
+    }
+  ]
+}
