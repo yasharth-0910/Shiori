@@ -216,6 +216,8 @@ class CallStat:
     dropped: dict[str, int] = dc_field(default_factory=dict)  # reason -> items
     call_failed: str | None = None  # error type, never a message
     retries: int = 0
+    recovered: int = 0  # deadline items whose date was read from the cited sentence
+    polarity_set: int = 0  # eligibility items whose polarity was set by the guide rule
     # For the diagnostic (eval/hybrid.py), in memory only: the ids sent, and every item
     # the model proposed with its verdict ("kept" or the reason it was dropped).
     retrieved: list[str] = dc_field(default_factory=list)
@@ -223,6 +225,9 @@ class CallStat:
 
 
 MAIL = "郵送"
+# A requirement written with its negation kept (…ないこと, …でないこと, …がない者であること):
+# docs/labeling_guide.md, eligibility rule. Same pattern as eval/silver/agree.py (core cannot import eval).
+NEGATION_END = re.compile(r"(?:では|で|が)?ない(?:者であること|こと|者)$")
 
 
 @dataclass
@@ -283,6 +288,30 @@ def _deadline_when(item: dict, cited: list[Sentence]) -> tuple[str, str] | None:
     return when, sp.text + "".join(s.text_norm for s in cited if s is not sent)
 
 
+def _recover_date(it: dict, by_id: dict[str, Sentence]) -> str | None:
+    """The date of a deadline the model gave without datetime or relative_text, read from
+    its cited sentences with the normalizer, or None. Only a date the wording makes
+    certain: one distinct date among the spans that fit the kind (mail spans for
+    mail_arrival, the others for any other kind). Two dates or none means None; nothing
+    is guessed. `_check` then runs its usual date and time checks on the result."""
+    ids = it.get("citations")
+    if not ids or any(i not in by_id for i in ids):
+        return None
+    mail_kind = it.get("kind") == "mail_arrival"
+    spans = [sp for i in ids for sp in spans_of(by_id[i].text_norm)]
+    pref = [sp for sp in spans if sp.mail == mail_kind] or spans
+    dates = {sp.date for sp in pref}
+    return dates.pop() if len(dates) == 1 else None
+
+
+def _polarity(it: dict) -> str:
+    """The guide's rule: a text_ja that keeps its negation is a requirement. The other half
+    (negation stripped means disqualification) is not applied: a text without a negation can
+    be a plain requirement, so the model's answer stays."""
+    text = re.sub(r"[。．.]+$", "", it["text_ja"])
+    return "requirement" if NEGATION_END.search(text) else it["polarity"]
+
+
 def _check(fld: str, it: dict, by_id: dict[str, Sentence]) -> tuple[dict | None, str]:
     """(the item, "") when it passes, else (None, reason)."""
     ids = it.get("citations") or []
@@ -293,6 +322,8 @@ def _check(fld: str, it: dict, by_id: dict[str, Sentence]) -> tuple[dict | None,
         it[TEXT_KEY[fld]] = it[TEXT_KEY[fld]].replace("\n", "").strip()
         if not value_in_citation(it[TEXT_KEY[fld]], cited):
             return None, "value_not_in_citation"
+        if fld == "eligibility":
+            it["polarity"] = _polarity(it)
         return it, ""
     if it.get("relative_text") is not None:
         if not value_in_citation(it["relative_text"], cited):
@@ -335,10 +366,17 @@ def read_items(
             it = item_model.model_validate(it).model_dump(exclude_none=False)
             it = {k: v for k, v in it.items() if k not in DROP_PROPS}
         except ValidationError:
-            stat.dropped["schema"] = stat.dropped.get("schema", 0) + 1
-            stat.trace.append((it, "schema"))
-            continue
+            fixed = _recovered(fld, it, item_model, by_id)
+            if fixed is None:
+                stat.dropped["schema"] = stat.dropped.get("schema", 0) + 1
+                stat.trace.append((it, "schema"))
+                continue
+            it = fixed
+            stat.recovered += 1
+        raw_pol = it.get("polarity")
         ok, why = _check(fld, dict(it), by_id)
+        if ok is not None and raw_pol is not None and ok["polarity"] != raw_pol:
+            stat.polarity_set += 1
         if ok is None:
             stat.dropped[why] = stat.dropped.get(why, 0) + 1
             stat.trace.append((it, why))
@@ -351,6 +389,22 @@ def read_items(
             stat.trace.append((ok, "kept"))
     stat.kept = len(kept)
     return kept
+
+
+def _recovered(fld: str, it: dict, item_model: type[BaseModel], by_id: dict[str, Sentence]) -> dict | None:  # fmt: skip
+    """A deadline that has a kind and citations but neither datetime nor relative_text,
+    with the date read from the cited sentences; None when it is not that case, the
+    sentences do not give one date, or the result is still not a valid item."""
+    if fld != "deadlines" or it.get("datetime") or it.get("relative_text"):
+        return None
+    when = _recover_date({**it}, by_id)
+    if when is None:
+        return None
+    try:
+        got = item_model.model_validate({**it, "datetime": when, "relative_text": None})
+    except ValidationError:
+        return None
+    return {k: v for k, v in got.model_dump(exclude_none=False).items() if k not in DROP_PROPS}  # fmt: skip
 
 
 def _item_model(fld: str) -> type[BaseModel]:

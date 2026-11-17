@@ -50,7 +50,11 @@ def row(name: str, gguf: str) -> str:
     failed = sum(bool(s["call_failed"]) for s in calls)
     docs = max(len(rep["documents"]), 1)
     secs = sum(s["seconds"] for s in stats) / docs
-    wall = (TIMES / f"{name}.time").read_text().strip() if (TIMES / f"{name}.time").exists() else "?"
+    wall = (
+        (TIMES / f"{name}.time").read_text().strip()
+        if (TIMES / f"{name}.time").exists()
+        else "?"
+    )
     d = diag_counts(name)
     cells = [cell(*t[k]) for k in KEYS]
     return f"| `{gguf}` | {len(recs)} | " + " | ".join(cells) + f" | {secs:.0f} | not recorded | {failed} of {len(calls)} | {d[1]} / {d[2]} / {d[3]} / {d[4]} / {d[5]} | {wall} |"  # fmt: skip
@@ -67,7 +71,10 @@ def main() -> int:
     ]  # fmt: skip
     L += [row(n, g) for n, g in MODELS if (REPORTS / f"run_cmp_{n}.json").exists() or (TIMES / f"{n}.time").exists()]  # fmt: skip
     fails = [f"- `{g}`: no result. llama-server exited while loading (RuntimeError in the run, exit 1, 1 to 2 s, no request sent). The same load failure is in `model_loadcheck.md`: for the qwen3.5-4b file the loader rejects `qwen35.rope.dimension_sections` (wrong array length), for the gemma4 file it says `failed to load model` with no further detail in that report. Not retried, not swapped." for n, g in MODELS if n.endswith("_ollama") and (TIMES / f"{n}.time").exists() and not (REPORTS / f"run_cmp_{n}.json").exists()]  # fmt: skip
-    for n, g in MODELS:  # models that ran but whose calls failed: error types only, no text
+    for (
+        n,
+        g,
+    ) in MODELS:  # models that ran but whose calls failed: error types only, no text
         tf = TRACES / f"trace_cmp_{n}.json"
         if tf.exists():
             kinds: dict[str, int] = {}
@@ -75,7 +82,11 @@ def main() -> int:
                 if st["call_failed"]:
                     kinds[st["call_failed"]] = kinds.get(st["call_failed"], 0) + 1
             if kinds:
-                fails.append(f"- `{g}` ran, calls failed after the retry (error type: count): " + ", ".join(f"{k} {v}" for k, v in kinds.items()) + ". Not found is the recorded result for those fields. Cause not investigated.")
+                fails.append(
+                    f"- `{g}` ran, calls failed after the retry (error type: count): "
+                    + ", ".join(f"{k} {v}" for k, v in kinds.items())
+                    + ". Not found is the recorded result for those fields. Cause not investigated."
+                )
     L += ["", "## Failures", ""] + (fails or ["- none."]) + [""]
     (REPORTS / "model_compare_list_fields.md").write_text("\n".join(L))
     print(f"wrote {REPORTS / 'model_compare_list_fields.md'}")

@@ -226,3 +226,75 @@ def test_required_documents_reads_document_style_headings() -> None:
     ss[10] = sent("h_s11", "入札書を提出すること", ["競争入札に付する事項", "入札方法"])
     assert "h_s11" in [s.id for s in llm.retrieve("required_documents", ss)]
     assert llm.retrieve("eligibility", ss) == []  # other fields keep their own cues
+
+
+# --- Phase 5 fix 1 (eval/reports/phase5_fix1_changelog.md) -------------------------------------
+
+BID = "(4)　入札書の受領期限　令和８年10月15日13時30分（ただし、郵送による入札は、令和８年10月14日16時00分必着）"
+NONE = {"eligibility": {"items": []}, "required_documents": {"items": []}}
+
+
+def deadline_run(
+    item: dict, ss: list[Sentence], stats: list[llm.CallStat] | None = None
+):
+    return llm.extract_lists("notice", ss, fake({**NONE, "deadlines": {"items": [item]}}), stats)  # fmt: skip
+
+
+def test_deadline_without_datetime_is_recovered_from_the_cited_sentence_f19cddbd4cba() -> (
+    None
+):
+    ss = [sent("h_s44", "入札書の受領期限", ["入札書の受領期限"]), sent("h_s45", BID)]
+    stats: list[llm.CallStat] = []
+    mail = {
+        "kind": "mail_arrival",
+        "citations": ["h_s45"],
+    }  # the model left datetime out
+    other = {"kind": "other", "citations": ["h_s45"]}
+    got = deadline_run(mail, ss, stats)["deadlines"].normalized["items"][0]
+    assert got["datetime"] == "2026-10-14T16:00:00+09:00" and got["flags"] == ["arrival_required"]  # fmt: skip
+    dl = next(x for x in stats if x.field == "deadlines")
+    assert dl.recovered == 1 and dl.dropped == {}
+    got = deadline_run(other, ss)["deadlines"].normalized["items"][0]
+    assert got["datetime"] == "2026-10-15T13:30:00+09:00"  # the kind picks the span
+
+
+def test_deadline_without_datetime_is_dropped_when_the_sentence_gives_no_single_date_f19cddbd4cba() -> None:  # fmt: skip
+    two = sent(
+        "h_s45", "受付期間　令和８年10月１日から令和８年10月15日まで", ["受付期間"]
+    )
+    stats: list[llm.CallStat] = []
+    assert "deadlines" not in deadline_run({"kind": "other", "citations": ["h_s45"]}, [two], stats)  # fmt: skip
+    dl = next(x for x in stats if x.field == "deadlines")
+    assert dl.dropped == {"schema": 1} and dl.recovered == 0
+    none = sent("h_s45", "入札書の受領期限は別途通知する。", ["入札書の受領期限"])
+    assert "deadlines" not in deadline_run({"kind": "other", "citations": ["h_s45"]}, [none])  # fmt: skip
+    cited_unknown = {"kind": "other", "citations": ["p9_s9"]}
+    assert "deadlines" not in deadline_run(cited_unknown, [two])
+
+
+def test_eligibility_kept_negation_is_a_requirement_f19cddbd4cba() -> None:
+    text = "予算決算及び会計令第71条の規定に該当しない者であること。"
+    ss = [
+        sent("h_s2", "競争参加資格", ["競争参加資格"]),
+        sent("h_s3", text, ["競争参加資格"]),
+    ]
+
+    def run(text_ja: str, pol: str) -> tuple[dict, llm.CallStat]:
+        item = {
+            "kind": "legal",
+            "polarity": pol,
+            "text_ja": text_ja,
+            "citations": ["h_s3"],
+        }
+        stats: list[llm.CallStat] = []
+        out = llm.extract_lists("notice", ss, fake({**NONE, "eligibility": {"items": [item]}, "deadlines": {"items": []}}), stats)  # fmt: skip
+        return out["eligibility"].normalized["items"][0], stats[0]
+
+    got, stat = run(text, "disqualification")  # guide: negation kept = requirement
+    assert got["polarity"] == "requirement" and stat.polarity_set == 1
+    got, stat = run(text, "requirement")
+    assert got["polarity"] == "requirement" and stat.polarity_set == 0
+    stripped = (
+        "予算決算及び会計令第71条の規定に該当する者"  # not in the sentence: dropped
+    )
+    assert llm._polarity({"text_ja": stripped, "polarity": "disqualification"}) == "disqualification"  # fmt: skip
