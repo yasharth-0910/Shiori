@@ -268,7 +268,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--extractor", default="stub", choices=sorted(EXTRACTORS))
     ap.add_argument("--name", help="report name (default <split>_<extractor>)")
     ap.add_argument("--docs", nargs="*", help="only documents whose id starts with one of these")  # fmt: skip
+    ap.add_argument("--model", type=Path, help="GGUF for --extractor hybrid (default: hybrid.MODEL)")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.model:
+        from eval import hybrid
+
+        hybrid.MODEL = a.model
     from eval.documents import load_sentences
     from eval.silver import run
 
