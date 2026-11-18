@@ -1,0 +1,25 @@
+{
+  "name": "shiori-app",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "npm run build && electron .",
+    "build": "node -e \"require('fs').cpSync('node_modules/pdfjs-dist/cmaps','public/cmaps',{recursive:true})\" && tsc -p tsconfig.json && tsc -p tsconfig.electron.json && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.5.438",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "44.4.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

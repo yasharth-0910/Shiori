@@ -745,6 +745,15 @@ Decision:
 - Base model state, no base model locked by this entry: Qwen3.5-9B leads on dev, 19 of 42 against 18 of 42 for Gemma 4 E4B. One row apart is not a gap to rely on. Gemma's license is still unverified: Apache-2.0 comes from the upstream card as recorded in `docs/sources.md`, the Open question of D-70 (2026-11-18) stays open, and nothing of Gemma is redistributed.
 Consequences: The roadmap line moves past Phase 5. Phase 5 leaves open, and these stay open: the Windows 16 GB run and the formal base-model decision entry (Phase 4), the native-speaker audit and the test split labeling (Phase 3, D-68), the categories for the non-list fields, and the label or convention questions already in Open questions (eligibility legal or other, name boundaries, extra items). Test split untouched, `EXTRACTOR_VERSION` unchanged, no model run for this entry.
 
+## D-75: Desktop app shell (Phase 7, step 1): dependencies and their licenses
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: Phase 7 may start in parallel (roadmap). First step is a minimal Electron shell with a PDF.js viewer and a fields panel fed by a static fixture built from a dev label file (`scripts/export_app_fixture.py`). Versions are the ones `npm` resolved on 2026-11-19; licenses read from each package's `package.json`.
+Shipped (runtime) dependencies: `react` 19.3.1 MIT, `react-dom` 19.3.1 MIT, `pdfjs-dist` 6.5.438 Apache-2.0 (bundled locally, worker and CMaps copied into the build, nothing fetched at run time), `electron` 44.4.5 MIT (pinned: 45.x download stalled, 44.4.5 was in the local cache; bump later) (the Chromium and Node it bundles carry their own licenses, listed in its LICENSES.chromium.html; to be collected in Phase 8's license review).
+Build-time only: `vite` 8.3.8 MIT, `@vitejs/plugin-react` 6.3.0 MIT, `typescript` 7.0.2 Apache-2.0, `@types/react`, `@types/react-dom`, `@types/node` all MIT.
+Design choices: the renderer is served from a custom `shiori://` scheme by the main process (PDF.js needs fetch, which `file://` blocks); no preload script; `contextIsolation` on, `nodeIntegration` off, `sandbox` on; CSP `default-src 'none'` with `'self'` only; main also cancels every request that is not `shiori:`, `devtools:`, `data:` or `blob:`, and denies all permission requests. `tests/test_app_no_network.py` fails on any URL, network API or remote CSP source in `app/`. Fixture and PDF are written to `app/public/` (gitignored: the fixture holds document text).
+Consequences: `npm install` and the first Electron start download from the network at dev time only (the Electron binary); the shipped app does not. Packaging (Phase 8) must re-check the Electron and Chromium license files.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

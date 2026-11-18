@@ -221,16 +221,16 @@ One entry per module. Keep the status and interface lines current. Status values
 ## App (`app/`, shipped)
 
 ### main
-- **Status:** planned (Phase 7)
+- **Status:** started (Phase 7 step 1, D-75): window, `shiori://` scheme, request block, permission deny. Sidecar and llama-server spawning not built.
 - **Purpose:** window lifecycle, spawning sidecar and llama-server, IPC bridge, network block, keychain.
 
 ### viewer
-- **Status:** planned (Phase 7)
+- **Status:** started (Phase 7 step 1, D-75): `app/src/PdfView.tsx`, one canvas per page at devicePixelRatio, highlight divs from `boxes` (PDF points x 1.4), jump scrolls the first box to centre. Boxes are already top-left origin (core/models.py), so no y flip is needed. Rotated pages not tested yet.
 - **Purpose:** PDF.js rendering, highlight overlay drawn from sentence boxes, scroll-to-page.
 - **Gotcha:** PDF coordinates have origin bottom-left, PDF.js viewport is top-left and scaled. Convert with the viewport transform, and test on rotated pages.
 
 ### fields_panel / summary_panel
-- **Status:** planned (Phase 7)
+- **Status:** fields panel started (Phase 7 step 1): reads a static fixture (`scripts/export_app_fixture.py`, label file as fake model output). Status words are the label statuses, not "verified": nothing is verified by code in the app yet. Summary panel planned.
 - **Purpose:** show FieldResults with status and citation chips; show summary lines linked to fields.
 
 ### settings

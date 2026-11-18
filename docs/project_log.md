@@ -222,6 +222,7 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 ## Phase 7: Desktop app MVP
 
 ### Achieved
+- Step 1 (2026-11-19, D-75): Electron + React + Vite shell in `app/`, PDF.js viewer, fields panel from a fixture of one open dev document, citation chip jumps to the page and draws the box. `tests/test_app_no_network.py`. Checked by screenshot at devicePixelRatio 2 (p1 title line, p4 issuer line).
 ### Changed from the plan (what, why, decision number)
 ### Fallbacks taken
 ### Missed or still open

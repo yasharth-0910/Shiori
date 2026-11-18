@@ -1,0 +1,15 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; font-size: 14px; }
+body { margin: 0; }
+.layout { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+.fields { overflow: auto; padding: 8px 12px; border-right: 1px solid #8884; }
+.field h3 { margin: 12px 0 2px; font-size: 13px; }
+.field p { margin: 2px 0 4px; }
+.st { font-weight: 400; font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #8883; }
+.st-present { background: #2a82; color: #1a6b2a; }
+.chip { font-size: 11px; margin: 2px 4px 2px 0; padding: 1px 6px; border: 1px solid #8886; border-radius: 10px; background: none; color: inherit; cursor: pointer; }
+.chip.on { background: #fd03; border-color: #c90; }
+.pdf { overflow: auto; background: #8883; padding: 8px 0; }
+.page { position: relative; margin: 0 auto 12px; background: #fff; box-shadow: 0 1px 4px #0006; }
+.page canvas { display: block; }
+.hl { position: absolute; background: #ffd00055; outline: 2px solid #e8a200; pointer-events: none; }
+.err { padding: 16px; }

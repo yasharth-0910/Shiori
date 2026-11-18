@@ -28,3 +28,8 @@ node_modules/
 # OS
 .DS_Store
 CLAUDE.md
+
+# Desktop app build output and the dev fixture (holds document text), see scripts/export_app_fixture.py
+app/dist/
+app/dist-electron/
+app/public/
