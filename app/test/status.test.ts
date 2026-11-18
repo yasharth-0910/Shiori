@@ -1,5 +1,6 @@
 // Run: npm test (node strips the types). Imports the pure status rule only.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { stateOf, unusualSection } from "../src/status.ts";
 
@@ -32,7 +33,7 @@ test("hand-altered row: value_in_citation failed -> needs review", () => {
   assert.equal(stateOf(f, sentences), "needs_review");
 });
 
-test("only heading_cue fails: still verified, note shown", () => {
+test("only heading_cue fails: needs review (D-76), note still available", () => {
   const f = field({
     checks: [
       { name: "schema_valid", passed: true },
@@ -40,7 +41,7 @@ test("only heading_cue fails: still verified, note shown", () => {
       { name: "heading_cue", passed: false },
     ],
   });
-  assert.equal(stateOf(f, sentences), "verified");
+  assert.equal(stateOf(f, sentences), "needs_review");
   assert.equal(unusualSection(f), true);
   assert.equal(unusualSection(field({})), false);
 });
@@ -67,4 +68,33 @@ test("no stored checks -> not verified", () => {
 test("absent and see_other_document keep their own states", () => {
   assert.equal(stateOf(field({ status: "absent", citations: [] }), sentences), "not_found");
   assert.equal(stateOf(field({ status: "see_other_document" }), sentences), "other_document");
+});
+
+// Procurement type in the dev fixture: Section 2 sentence plus a Section 8 sentence, heading_cue false.
+test("procurement type shape (p1_s13 + p4_s19, heading_cue false): needs review, note kept", () => {
+  const two = {
+    p1_s13: sentences.p1_s5,
+    p4_s19: sentences.p1_s5,
+  };
+  const f = field({
+    field: "procurement_type",
+    citations: ["p1_s13", "p4_s19"],
+    checks: [
+      { name: "schema_valid", passed: true },
+      { name: "citations_exist", passed: true },
+      { name: "value_in_citation", passed: true },
+      { name: "values_roundtrip", passed: true },
+      { name: "heading_cue", passed: false },
+    ],
+  });
+  assert.equal(stateOf(f, two), "needs_review");
+  assert.equal(unusualSection(f), true);
+});
+
+// The fixture is gitignored (it holds document text), so this runs only where it exists.
+test("real fixture: procurement_type is needs review", { skip: !existsSync("public/fixture.json") }, () => {
+  const fx = JSON.parse(readFileSync("public/fixture.json", "utf8"));
+  const f = fx.fields.find((x: { field: string }) => x.field === "procurement_type");
+  assert.equal(stateOf(f, fx.sentences), "needs_review");
+  assert.equal(unusualSection(f), true);
 });
