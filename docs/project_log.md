@@ -197,6 +197,7 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 
 ### Achieved
 - Phase 5 design review (2026-11-18, read-only, no model, no code change): why list fields stay at 26 to 28% verified (11 of 39 for both Qwen3.5-9B after fix 2 and Gemma 4 E4B after fix 1). Of the 28 rows not right per model, rows touched / rows where it is the only cause, Qwen: label or convention 16 / 11, retrieval 4 / 0, value and kind normalization 5 / 2, validator reading one sentence at a time 10 / 2, model 7 / 2 (Gemma: 19 / 8, 4 / 0, 10 / 3, 11 / 0, 5 / 0). With the labels as they are, Qwen can reach at most 23 of 39. The proviso and electronic-kind rules are in the prompt and both models still miss them. Recommended next: settle conventions and extra items with a native reader, let the validator read the neighbouring sentence, set deadline kind and missing dates in code. Upper bounds, fit to these 14 documents (`eval/reports/phase5_design_review.md`).
+- Fix 4 (2026-11-18, D-72): same-datetime, same-sentence deadline copies. On 5d75d4a67c71 Qwen3.5-9B and Gemma 4 E4B each gave 6 deadline rows for 3 events; replay on the saved traces (no model run) leaves 3 each, other models unchanged (`eval/reports/phase5_fix4_deadline_dupes.md`). Item counts only, not rescored.
 ### Changed from the plan (what, why, decision number)
 ### Fallbacks taken
 ### Missed or still open

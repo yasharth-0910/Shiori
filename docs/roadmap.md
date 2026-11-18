@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 3: Labels, closed except the native-speaker audit and the test split labeling (both stay for the end). Gold wave 1 closed with 4 of 5 documents, waves 2 and 3 not run (D-68). Phase 4 is next.**
+**Phase 5: Failure analysis and pipeline fixes, in progress (fixes 1 to 4 on the list fields, D-71, D-72). Phase 4 is mostly done: the harness, the pipeline and the dev model comparison exist; the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
 
@@ -120,19 +120,19 @@ Part E: sv4 and review in Claude Code (D-54, D-55; no labeling calls)
 
 ## Phase 4: Baseline benchmark and model choice
 
-- [ ] Eval harness (`eval/run.py`): runs pipeline config on a split, writes JSON + markdown report
-- [ ] Extraction pipeline v0 (candidate retrieval by heading cues + LLM extraction with JSON-schema constrained output + deterministic normalization + citation verification)
-- [ ] Run 5 to 7 candidate models from `docs/sources.md` on **dev**
-- [ ] Record per model: verified field accuracy, citation precision/recall, hallucination rate, latency per doc, peak RAM, model file size, license
+- [x] Eval harness (`eval/run.py`): runs pipeline config on a split, writes JSON + markdown report
+- [x] Extraction pipeline v0 (candidate retrieval by heading cues + LLM extraction with JSON-schema constrained output + deterministic normalization + citation verification)
+- [x] Run 5 to 7 candidate models from `docs/sources.md` on **dev** (list fields, 8 models plus Qwen3.5-4B and Gemma 4 E4B in D-70; `eval/reports/model_compare_list_fields.md`)
+- [ ] Record per model: verified field accuracy, citation precision/recall, hallucination rate, latency per doc, peak RAM, model file size, license (partly: accuracy, wall time and license are recorded for the list fields; the full table, peak RAM included, is not confirmed)
 - [ ] Run the best 2 on Windows 16 GB CPU-only (borrow a machine if needed) for latency
 
 **Exit:** a decision entry in `docs/decisions.md` naming the base model, with the benchmark table attached.
 
 ## Phase 5: Failure analysis and pipeline fixes
 
-- [ ] Categorize every dev-set error (extraction, segmentation, retrieval miss, model misread, normalization, verification false reject)
-- [ ] Fix the non-ML causes first (rules, retrieval, prompts, glossary)
-- [ ] Re-run dev after each change; keep a changelog of score movements in the report folder
+- [ ] Categorize every dev-set error (list fields done in `eval/reports/phase5_design_review.md` and the wrong-value report; the other fields not) (extraction, segmentation, retrieval miss, model misread, normalization, verification false reject)
+- [ ] Fix the non-ML causes first (rules, retrieval, prompts, glossary) (fixes 1 to 4 done on list fields: unpaired deadlines, required_documents prompt line, eligibility proviso and 第73条 kind, same-sentence deadline copies; more are open)
+- [ ] Re-run dev after each change; keep a changelog of score movements in the report folder (`eval/reports/phase5_fix*`; fixes 3 and 4 are replays on saved traces, not new model runs)
 
 **Exit:** two consecutive changes give under 1 point of improvement, meaning the cheap fixes are exhausted.
 

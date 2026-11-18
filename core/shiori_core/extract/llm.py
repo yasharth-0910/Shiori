@@ -361,6 +361,46 @@ def _merge_provisos(kept: list[dict], by_id: dict[str, Sentence], stat: CallStat
     return [it for it in kept if id(it) not in gone_ids]
 
 
+# D-72: the kinds a deadline sentence's own heading allows (docs/labeling_guide.md, bid receipt kind).
+# The first cue found in the sentence wins, so a 入札書の提出期限 line that mentions 開札 later is a bid line.
+DEADLINE_CUES = (
+    (re.compile(r"提出書類等"), frozenset({"other"})),
+    (
+        re.compile(r"入札書の(?:提出|受領)期限"),
+        frozenset({"electronic", "bid_in_person"}),
+    ),
+    (re.compile(r"開札"), frozenset({"bid_opening"})),
+)
+
+
+def _cue_kinds(text: str) -> frozenset[str] | None:
+    hits = [(m.start(), kinds) for rx, kinds in DEADLINE_CUES if (m := rx.search(text))]
+    return min(hits, key=lambda h: h[0])[1] if hits else None
+
+
+def _drop_same_sentence_copies(kept: list[dict], by_id: dict[str, Sentence], stat: CallStat) -> list[dict]:  # fmt: skip
+    """Items with the same datetime and the same cited sentences are one event said twice
+    with different kinds. Keep the one whose kind the sentence's own cue allows; drop the
+    rest. No cue, or no item (or more than one) matching it: keep the group as it is,
+    nothing is guessed. Items that cite different sentences are never grouped."""
+    groups: dict[tuple, list[dict]] = {}
+    for it in kept:
+        if it.get("datetime"):
+            groups.setdefault((it["datetime"], tuple(sorted(it["citations"]))), []).append(it)  # fmt: skip
+    gone: set[int] = set()
+    for (_, ids), grp in groups.items():
+        cue = _cue_kinds(" ".join(by_id[i].text_norm for i in ids))
+        fit = [it for it in grp if cue and it["kind"] in cue]
+        if len(grp) > 1 and len(fit) == 1:
+            gone |= {id(it) for it in grp if it is not fit[0]}
+    stat.trace[:] = [
+        (p, "same_sentence" if id(p) in gone else v) for p, v in stat.trace
+    ]
+    if gone:
+        stat.dropped["same_sentence"] = len(gone)
+    return [it for it in kept if id(it) not in gone]
+
+
 def _check(fld: str, it: dict, by_id: dict[str, Sentence]) -> tuple[dict | None, str]:
     """(the item, "") when it passes, else (None, reason)."""
     ids = it.get("citations") or []
@@ -441,6 +481,8 @@ def read_items(
             stat.trace.append((ok, "kept"))
     if fld == "eligibility":
         kept = _merge_provisos(kept, by_id, stat)
+    if fld == "deadlines":
+        kept = _drop_same_sentence_copies(kept, by_id, stat)
     stat.kept = len(kept)
     return kept
 

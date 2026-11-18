@@ -369,3 +369,51 @@ def test_article_73_item_is_kind_other_f19cddbd4cba_5d75d4a67c71() -> None:
     ]
     got, stat = elig(ss2, [item(other, ["h_s43"])])
     assert got[0]["kind"] == "legal" and stat.kind_set == 0
+
+
+# D-72: one event said twice with different kinds (5d75d4a67c71 h_s45 to h_s47)
+DEADLINE_SENTS = {
+    s.id: s
+    for s in [
+        sent("h_s45", "(2)　提出書類等の提出期限　令和８年10月２日17時00分までの平日又は電子調達システム", ["入札書の提出場所等", "提出書類等の提出期限"]),
+        sent("h_s46", "(3)　入札書の提出期限　令和８年10月14日17時00分までの平日又は電子調達システム", ["入札書の提出場所等", "入札書の提出期限"]),
+        sent("h_s47", "(4)　開札の日時及び場所　令和８年10月15日11時　市原刑務所庁舎大会議室及び電子調達システム", ["入札書の提出場所等", "開札の日時及び場所"]),
+        sent("h_s60", "(5)　説明会の日時　令和８年10月２日17時00分", ["説明会"]),
+    ]
+}  # fmt: skip
+
+
+def _read_deadlines(
+    items: list[tuple[str, str, str]],
+) -> tuple[list[dict], llm.CallStat]:
+    raw = [{"kind": k, "datetime": d, "relative_text": None, "flags": [], "citations": [c]} for k, d, c in items]  # fmt: skip
+    stat = llm.CallStat("deadlines")
+    out = llm.read_items("deadlines", json.dumps({"items": raw}), DEADLINE_SENTS, stat)
+    return out, stat
+
+
+def test_deadline_same_datetime_same_sentence_keeps_the_cue_kind_5d75d4a67c71() -> None:
+    out, stat = _read_deadlines([
+        ("other", "2026-10-02T17:00:00+09:00", "h_s45"), ("electronic", "2026-10-02T17:00:00+09:00", "h_s45"),
+        ("other", "2026-10-14T17:00:00+09:00", "h_s46"), ("electronic", "2026-10-14T17:00:00+09:00", "h_s46"),
+        ("bid_opening", "2026-10-15T11:00:00+09:00", "h_s47"), ("electronic", "2026-10-15T11:00:00+09:00", "h_s47"),
+    ])  # fmt: skip
+    assert [(i["citations"][0], i["kind"]) for i in out] == [("h_s45", "other"), ("h_s46", "electronic"), ("h_s47", "bid_opening")]  # fmt: skip
+    assert (stat.proposed, stat.kept, stat.dropped) == (6, 3, {"same_sentence": 3})
+    assert [v for _, v in stat.trace].count("same_sentence") == 3
+
+
+def test_deadline_same_datetime_different_sentences_both_stay_5d75d4a67c71() -> None:
+    out, stat = _read_deadlines([
+        ("other", "2026-10-02T17:00:00+09:00", "h_s45"), ("briefing", "2026-10-02T17:00:00+09:00", "h_s60"),
+    ])  # fmt: skip
+    assert [i["citations"][0] for i in out] == ["h_s45", "h_s60"] and stat.dropped == {}
+
+
+def test_deadline_copies_stay_when_the_cue_picks_no_single_item_5d75d4a67c71() -> None:
+    both = [("other", "2026-10-02T17:00:00+09:00", "h_s60"), ("briefing", "2026-10-02T17:00:00+09:00", "h_s60")]  # fmt: skip
+    assert len(_read_deadlines(both)[0]) == 2  # h_s60 has no cue: nothing is guessed
+    neither = [("briefing", "2026-10-14T17:00:00+09:00", "h_s46"), ("question", "2026-10-14T17:00:00+09:00", "h_s46")]  # fmt: skip
+    assert (
+        len(_read_deadlines(neither)[0]) == 2
+    )  # cue says electronic or bid_in_person, neither is there
