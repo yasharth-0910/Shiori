@@ -61,7 +61,8 @@ RULES = {
     "required_documents": """One item per document the bidder must hand in (提出書類, 提出物, 必要書類).
 - name_ja: the document's name, copied exactly from the sentence.
 - Include 入札書 whenever the notice mentions submitting a bid form in any way (入札書を提出, 入札書に記載, a receipt deadline for bids), plus every document named with a submission deadline or a duty to submit.
-- Do not add 入札書 for a proposal competition that never mentions one.""",
+- Do not add 入札書 for a proposal competition that never mentions one.
+- Go through a numbered list of documents in order, one item per entry, and do not skip entries in the middle. Do not merge several documents into one item.""",
 }
 
 EXAMPLES = {
