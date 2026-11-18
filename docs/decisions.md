@@ -721,6 +721,30 @@ Context: `eval/reports/phase5_remaining_errors_after_fix4.md` ranked two rules t
 Decision: In `core/shiori_core/extract/llm.py`. (1) After the merge, an eligibility item with the same polarity as a merged item, and either the same text (line breaks ignored) or citations inside the merged item's, is dropped (trace verdict `merged_copy`, `CallStat.copies`). The merged item stays. Items that are themselves merged items are never dropped by this. (2) In `read_items`, before the duplicate key, a deadline item with kind other whose cited sentences have the first cue 入札書の受領期限 or 入札書の提出期限 (the D-72 cue, allowed kinds electronic or bid_in_person) gets kind electronic, only when the rules extractor's submission_modes for the notice is electronic only (`CallStat.cue_kind_set`). Any kind other than other is never changed. Prompt text, labels, the scorer and EXTRACTOR_VERSION are untouched. Replay on the saved traces against the corrected dev labels, no model run: `eval/reports/phase5_fix5_copies_and_deadline_cue.md`.
 Consequences: A notice whose submission_modes the rules do not read as electronic only keeps the model's kind. The subset test for rule 1 can drop a differently worded item that cites less than the merged one; in the replay it fired only on identical copies. Numbers are a fit to the dev documents.
 
+## D-74: Phase 5 closed by decision; fixes 1 to 5, start and end numbers, base model state
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: Phase 5's exit criterion in `docs/roadmap.md` is two consecutive changes that each give under 1 point. It is not met: every change since fix 3 moved the score by more than 1 point for both models (`eval/reports/phase5_summary_after_fix4.md`, `eval/reports/phase5_fix5_copies_and_deadline_cue.md`).
+Rules added (list fields only, deterministic, no prompt rewrite except fix 2):
+- Fix 1 (no decision number, `phase5_fix1_changelog.md`): a deadline with a kind and citations but no datetime gets its date from the cited sentence when it holds one distinct date; an eligibility text that keeps its negation is a requirement (guide rule).
+- Fix 2 (no decision number, `phase5_fix2_required_documents.md`): one rule line in the required_documents prompt about a skipped run in one flat list.
+- Fix 3 (D-71): a なお or ただし sentence right after an eligibility item is merged into it; the 第73条 item with the agency's own qualification is kind other.
+- Fix 4 (D-72): same-datetime, same-sentence deadline copies keep the item whose kind the sentence's own cue allows.
+- Fix 5 (D-73): a copy of a merged proviso item is dropped; a bid receipt line the model called other is electronic on an electronic-only notice.
+Rows right (all three list fields, dev, model-reviewed labels):
+
+| | start of Phase 5 | end of Phase 5 |
+| --- | --- | --- |
+| Qwen3.5-9B | 10 of 39 | 19 of 42 |
+| Gemma 4 E4B | 10 of 39 | 18 of 42 |
+
+The start is on 13 documents (39 rows); the 14th document, `5d75d4a67c71`, was labeled later, so the end is on 42 rows and its 3 rows count as wrong at first (`phase5_summary_after_fix4.md`, note 4). The end number is the fix 5 replay with both rules on.
+Decision:
+- Phase 5 is closed by decision, not because the criterion was met. Reasons: (1) one row is 2.4 points on 42 rows, so any change that flips a single row is already over the 1 point line and the criterion cannot be read at this size. (2) What is left needs a native reader or a different model: label or convention is the largest block of the 55 wrong rows in `phase5_remaining_errors_after_fix4.md` (19 primary, 8 Qwen and 11 Gemma), the extra items and the required_documents name boundary cannot be settled by a rule, and a retrieval change needs a model run. (3) Group 3 of that report (drop a deadline whose relative_text has no number) is not implemented: it rests on one row (d230e51e, Qwen), so it is a guess from a single example.
+- Part of the gain is label corrections, not code. The dev labels were corrected during Phase 5 (commits `9deb37d`, `4719503`): the fix 5 baseline reads 15 right for Qwen and 16 for Gemma where the fix 4 summary read 15 and 14, with the same code, so 2 of Gemma's rows come from the labels. The rules in fix 5 were chosen from the dev rows they flip, and both models and the prompts were tuned on these same 14 documents. Every number here is a fit to dev, not a forecast.
+- Base model state, no base model locked by this entry: Qwen3.5-9B leads on dev, 19 of 42 against 18 of 42 for Gemma 4 E4B. One row apart is not a gap to rely on. Gemma's license is still unverified: Apache-2.0 comes from the upstream card as recorded in `docs/sources.md`, the Open question of D-70 (2026-11-18) stays open, and nothing of Gemma is redistributed.
+Consequences: The roadmap line moves past Phase 5. Phase 5 leaves open, and these stay open: the Windows 16 GB run and the formal base-model decision entry (Phase 4), the native-speaker audit and the test split labeling (Phase 3, D-68), the categories for the non-list fields, and the label or convention questions already in Open questions (eligibility legal or other, name boundaries, extra items). Test split untouched, `EXTRACTOR_VERSION` unchanged, no model run for this entry.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

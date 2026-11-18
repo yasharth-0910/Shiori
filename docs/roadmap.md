@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 5: Failure analysis and pipeline fixes, in progress (fixes 1 to 4 on the list fields, D-71, D-72). Phase 4 is mostly done: the harness, the pipeline and the dev model comparison exist; the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
+**Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is next and not started. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
 
@@ -130,11 +130,11 @@ Part E: sv4 and review in Claude Code (D-54, D-55; no labeling calls)
 
 ## Phase 5: Failure analysis and pipeline fixes
 
-- [ ] Categorize every dev-set error (list fields done in `eval/reports/phase5_design_review.md` and the wrong-value report; the other fields not) (extraction, segmentation, retrieval miss, model misread, normalization, verification false reject)
-- [ ] Fix the non-ML causes first (rules, retrieval, prompts, glossary) (fixes 1 to 4 done on list fields: unpaired deadlines, required_documents prompt line, eligibility proviso and 第73条 kind, same-sentence deadline copies; more are open)
-- [ ] Re-run dev after each change; keep a changelog of score movements in the report folder (`eval/reports/phase5_fix*`; fixes 3 and 4 are replays on saved traces, not new model runs)
+- [ ] Categorize every dev-set error (list fields done in `eval/reports/phase5_design_review.md`, `phase5_remaining_errors_after_fix4.md` and the wrong-value report; the other fields not) (extraction, segmentation, retrieval miss, model misread, normalization, verification false reject)
+- [x] Fix the non-ML causes first (rules, retrieval, prompts, glossary) (fixes 1 to 5 done on list fields: unpaired deadlines, required_documents prompt line, eligibility proviso and 第73条 kind, same-sentence deadline copies, merged-proviso copies and the bid receipt cue; the rest needs a native reader or a different model, D-74)
+- [x] Re-run dev after each change; keep a changelog of score movements in the report folder (`eval/reports/phase5_fix*` and `phase5_summary_after_fix4.md`; fixes 3 to 5 are replays on saved traces, not new model runs)
 
-**Exit:** two consecutive changes give under 1 point of improvement, meaning the cheap fixes are exhausted.
+**Exit:** two consecutive changes give under 1 point of improvement, meaning the cheap fixes are exhausted. **Closed by decision, not met (D-74):** each row is 2.4 points on 42 rows, so the 1 point line cannot be read; the remaining errors need a native reader or a different model.
 
 ## Phase 6: LoRA fine-tuning
 
