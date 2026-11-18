@@ -700,6 +700,13 @@ Decision: Download the standard Q4_K_M files from the sources and revisions alre
 Results (dev, 14 documents, 39 list-field rows, from runs executed 2026-11-18, `eval/reports/model_compare_list_fields.md`): Qwen3.5-4B verified 2 of 39, not found 6, wrong value shown 32, 781 s wall, 0 of 38 calls failed. Gemma 4 E4B verified 10 of 39, not found 8, wrong value shown 22, 1080 s wall, 0 of 38 calls failed. Both loaded and answered every call. The same caveats as the report apply: small n, and the prompts were tuned with Qwen3.5-9B.
 Consequences: The two Ollama rows in the report stay as the record of the failed loads; the new rows are separate. Nothing is added to `core/`, `sidecar/` or `app/`. If either model is chosen to ship, re-read its license text and convert from the upstream repo ourselves (sources.md note).
 
+## D-71: Eligibility item for 第73条 and the agency's own qualification is kind other
+Date: 2026-11-18
+Status: accepted (Yasharth's task of 2026-11-18)
+Context: The dev labels give "予算決算及び会計令第73条の規定に基づき、支出負担行為担当官が定める資格を有する者であること" kind other, not legal (the same sentence in `f19cddbd4cba` h_s43 and `5d75d4a67c71` h_s38). The models mostly say legal, because it names a law. The sentence is the agency's own extra qualification, not a rule that applies to every bidder by law, so the label is by meaning and the code follows it. I read it from the wording, not as a native speaker.
+Decision: In `core/shiori_core/extract/llm.py`, an eligibility item whose text_ja starts with 予算決算及び会計令第73条 (after the usual normalization, so full-width digits count) and holds 支出負担行為担当官が定める資格 gets kind other, whatever the model said. Nothing else about the item changes. The same change set also merges a なお or ただし sentence that follows an item's last cited sentence into that item (the rule was already in `docs/labeling_guide.md`; this makes the code do it). Prompt text, labels and the scorer are untouched. Replay on the saved traces: `eval/reports/phase5_fix3_eligibility_proviso.md`.
+Consequences: Two fixed strings are matched, so a differently worded 73条 sentence stays as the model said. Numbers in the replay are a fit to the dev documents.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

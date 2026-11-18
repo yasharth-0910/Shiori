@@ -30,6 +30,7 @@ from pydantic import BaseModel, ValidationError
 from shiori_core.extract.rules import Extracted, Joined, value_in_citation
 from shiori_core.fields import BY_ID, validate_normalized
 from shiori_core.models import Sentence
+from shiori_core.normalize import normalize
 from shiori_core.value_normalize import find_dates, find_deadline_flags, find_times
 
 LIST_FIELDS = ("eligibility", "deadlines", "required_documents")
@@ -219,6 +220,10 @@ class CallStat:
     retries: int = 0
     recovered: int = 0  # deadline items whose date was read from the cited sentence
     polarity_set: int = 0  # eligibility items whose polarity was set by the guide rule
+    merged: int = (
+        0  # なお/ただし sentences merged into the eligibility item before them
+    )
+    kind_set: int = 0  # eligibility items set to kind other by the 第73条 rule (D-71)
     # For the diagnostic (eval/hybrid.py), in memory only: the ids sent, and every item
     # the model proposed with its verdict ("kept" or the reason it was dropped).
     retrieved: list[str] = dc_field(default_factory=list)
@@ -313,6 +318,49 @@ def _polarity(it: dict) -> str:
     return "requirement" if NEGATION_END.search(text) else it["polarity"]
 
 
+# D-71: 第73条 plus 支出負担行為担当官が定める資格 is the agency's own qualification: kind other.
+ART73 = re.compile(r"^予算決算及び会計令第73条")
+OWN_QUALIFICATION = "支出負担行為担当官が定める資格"
+PROVISO = re.compile(r"^(?:なお|ただし)")
+
+
+def _kind(it: dict) -> str:
+    text = normalize(it["text_ja"].strip())[0]
+    return "other" if ART73.match(text) and OWN_QUALIFICATION in text else it["kind"]
+
+
+def _merge_provisos(kept: list[dict], by_id: dict[str, Sentence], stat: CallStat) -> list[dict]:  # fmt: skip
+    """A sentence that starts with なお or ただし right after an item's last cited sentence
+    belongs to that item (docs/labeling_guide.md, minors exception): text_ja gets it on a new
+    line, citations get its id. An item that only cites such a sentence is then dropped
+    (counted as merged in the trace). With no item before it, the sentence stays as it is.
+    "Right after" means the next sentence sent; the windows have no gaps inside a run."""
+    order = list(by_id)
+    pos = {i: n for n, i in enumerate(order)}
+    is_proviso = lambda i: bool(PROVISO.match(by_id[i].text_norm.strip()))  # noqa: E731
+    merged: set[str] = set()
+    for it in kept:
+        ids = it["citations"]
+        last = max((pos[i] for i in ids), default=-1)
+        if (
+            not ids
+            or last + 1 >= len(order)
+            or is_proviso(min(ids, key=pos.__getitem__))
+        ):
+            continue
+        nxt = order[last + 1]
+        if nxt in ids or nxt in merged or not is_proviso(nxt):
+            continue
+        it["text_ja"] += "\n" + one_line(by_id[nxt])
+        it["citations"] = [*ids, nxt]
+        merged.add(nxt)
+    gone = [it for it in kept if it["citations"] and set(it["citations"]) <= merged]
+    gone_ids = {id(it) for it in gone}
+    stat.trace[:] = [(p, "merged" if id(p) in gone_ids else v) for p, v in stat.trace]
+    stat.merged = len(merged)
+    return [it for it in kept if id(it) not in gone_ids]
+
+
 def _check(fld: str, it: dict, by_id: dict[str, Sentence]) -> tuple[dict | None, str]:
     """(the item, "") when it passes, else (None, reason)."""
     ids = it.get("citations") or []
@@ -325,6 +373,7 @@ def _check(fld: str, it: dict, by_id: dict[str, Sentence]) -> tuple[dict | None,
             return None, "value_not_in_citation"
         if fld == "eligibility":
             it["polarity"] = _polarity(it)
+            it["kind"] = _kind(it)
         return it, ""
     if it.get("relative_text") is not None:
         if not value_in_citation(it["relative_text"], cited):
@@ -378,6 +427,8 @@ def read_items(
         ok, why = _check(fld, dict(it), by_id)
         if ok is not None and raw_pol is not None and ok["polarity"] != raw_pol:
             stat.polarity_set += 1
+        if ok is not None and fld == "eligibility" and ok["kind"] != it["kind"]:
+            stat.kind_set += 1
         if ok is None:
             stat.dropped[why] = stat.dropped.get(why, 0) + 1
             stat.trace.append((it, why))
@@ -388,6 +439,8 @@ def read_items(
             seen.add(k)
             kept.append(ok)
             stat.trace.append((ok, "kept"))
+    if fld == "eligibility":
+        kept = _merge_provisos(kept, by_id, stat)
     stat.kept = len(kept)
     return kept
 

@@ -120,5 +120,6 @@ Answers in `data/cache/labeling/answers/pilot2.txt`, `pilot3.txt` and `pilot4.tx
 ## From the gold wave 1 review (not in the prompt)
 
 - **eligibility, minors exception** (F-0076 `136dfba9ee59`, F-0081 `84e9d0c8325c`, F-0137 `a13baaac55c8`): the なお/ただし sentence about 未成年者, 被保佐人 or 被補助人 who have the needed consent stays inside the 第70条 item. Same item, same text_ja, and its sentences go in that item's citations. It is not a separate item and not dropped.
+- **eligibility, 第73条 item** (`f19cddbd4cba` h_s43, `5d75d4a67c71` h_s38): 予算決算及び会計令第73条の規定に基づき、支出負担行為担当官が定める資格を有する者であること is kind other, not legal (D-71).
 - **deadlines, bid receipt kind** (F-0059 `136dfba9ee59`, F-0064 `84e9d0c8325c`, F-0132 `a13baaac55c8`): a bid receipt deadline on an electronic notice is kind electronic. Kind mail_arrival with flag arrival_required only when 必着 is in a cited sentence (F-0132, h_s95). 到着するよう alone (F-0064, h_s85) gives mail_arrival with no flag, because the validator reads only 必着 and 消印有効 as flags.
 - **submission_modes, paper and mail** (F-0068 `136dfba9ee59`, F-0072 `84e9d0c8325c`): when the notice allows paper bidding on request and gives a bid submission place, in_person counts. mail counts only when a sentence says mail or 郵送 (F-0072, h_s85); F-0068 never says it, so no mail.

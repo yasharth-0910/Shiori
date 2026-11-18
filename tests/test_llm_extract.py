@@ -298,3 +298,74 @@ def test_eligibility_kept_negation_is_a_requirement_f19cddbd4cba() -> None:
         "予算決算及び会計令第71条の規定に該当する者"  # not in the sentence: dropped
     )
     assert llm._polarity({"text_ja": stripped, "polarity": "disqualification"}) == "disqualification"  # fmt: skip
+
+
+# --- fix 3: なお/ただし proviso merged into the item before it; 第73条 item is kind other (D-71) ---
+
+S70 = "予算決算及び会計令第70条の規定に該当しない者であること。"
+NAOSHI = "なお、未成年者、被保佐人又は被補助人であって、契約締結のために必要な同意を得ている者は、同条中、特別の理由がある場合に該当する。"
+S73 = "予算決算及び会計令第73条の規定に基づき、支出負担行為担当官が定める資格を有する者であること。"
+
+
+def elig(ss: list[Sentence], items: list[dict]) -> tuple[list[dict], llm.CallStat]:
+    stats: list[llm.CallStat] = []
+    ans = {"eligibility": {"items": items}, "deadlines": {"items": []}, "required_documents": {"items": []}}  # fmt: skip
+    out = llm.extract_lists("notice", ss, fake(ans), stats)
+    return (out["eligibility"].normalized["items"] if "eligibility" in out else []), next(s for s in stats if s.field == "eligibility")  # fmt: skip
+
+
+def item(text: str, ids: list[str], kind: str = "legal") -> dict:
+    return {"kind": kind, "polarity": "requirement", "text_ja": text, "citations": ids}
+
+
+def test_proviso_is_merged_into_the_item_before_it_f19cddbd4cba() -> None:
+    # h_s38 / h_s39 (and h_s40): the model gave the なお sentence as its own item
+    ss = [sent("h_s37", "競争参加資格", ["競争参加資格"]), sent("h_s38", "(1)　" + S70, ["競争参加資格"]),
+          sent("h_s39", NAOSHI, ["競争参加資格"]), sent("h_s40", "(2)　予算決算及び会計令第71条の規定に該当しない者であること。", ["競争参加資格"])]  # fmt: skip
+    got, stat = elig(ss, [item(S70, ["h_s38"]), item(NAOSHI, ["h_s39"], "other"), item("予算決算及び会計令第71条の規定に該当しない者であること。", ["h_s40"])])  # fmt: skip
+    assert [g["citations"] for g in got] == [["h_s38", "h_s39"], ["h_s40"]]
+    assert got[0]["text_ja"] == S70 + "\n" + NAOSHI and got[0]["kind"] == "legal"
+    assert stat.merged == 1 and stat.kept == 2 and [v for _, v in stat.trace] == ["kept", "merged", "kept"]  # fmt: skip
+
+
+def test_proviso_the_model_left_out_is_added_563042df9941() -> None:
+    # h_s40 / h_s41 (ただし, full-width numbers): the model cited only h_s40 and never mentioned h_s41
+    t = "予算決算及び会計令第７０条の規定に該当しない者であること。"
+    tadashi = "ただし、未成年者、被保佐人又は被補助人であって、契約締結のために必要な同意を得ている者については、この限りではない。"
+    ss = [sent("h_s39", "競争参加資格", ["競争参加資格"]), sent("h_s40", "（１）" + t, ["競争参加資格"]), sent("h_s41", tadashi, ["競争参加資格"])]  # fmt: skip
+    got, stat = elig(ss, [item(t, ["h_s40"])])
+    assert (
+        got[0]["citations"] == ["h_s40", "h_s41"]
+        and got[0]["text_ja"] == t + "\n" + tadashi
+    )
+    assert stat.merged == 1
+
+
+def test_proviso_with_no_item_before_it_stays_5d75d4a67c71() -> None:
+    # h_s35 as the only item: nothing to merge into, so it is kept as it is
+    ss = [sent("h_s33", "競争参加資格", ["競争参加資格"]), sent("h_s34", "(1)　" + S70, ["競争参加資格"]), sent("h_s35", NAOSHI, ["競争参加資格"])]  # fmt: skip
+    got, stat = elig(ss, [item(NAOSHI, ["h_s35"], "other")])
+    assert got == [{**item(NAOSHI, ["h_s35"], "other")}] and stat.merged == 0
+    # the model already merged both: nothing follows h_s35, nothing changes
+    got, _ = elig(ss, [item(S70 + "\n" + NAOSHI, ["h_s34", "h_s35"])])
+    assert got[0]["text_ja"] == S70 + NAOSHI and got[0]["citations"] == [
+        "h_s34",
+        "h_s35",
+    ]  # _check drops the model's line break (as before)
+
+
+def test_article_73_item_is_kind_other_f19cddbd4cba_5d75d4a67c71() -> None:
+    # f19cddbd4cba h_s43, 5d75d4a67c71 h_s38: the model said legal
+    ss = [
+        sent("h_s37", "競争参加資格", ["競争参加資格"]),
+        sent("h_s43", "(4)　" + S73, ["競争参加資格"]),
+    ]
+    got, stat = elig(ss, [item(S73, ["h_s43"])])
+    assert got[0]["kind"] == "other" and stat.kind_set == 1
+    other = "予算決算及び会計令第73条の規定に該当しない者であること。"  # no own-qualification wording: unchanged
+    ss2 = [
+        sent("h_s37", "競争参加資格", ["競争参加資格"]),
+        sent("h_s43", other, ["競争参加資格"]),
+    ]
+    got, stat = elig(ss2, [item(other, ["h_s43"])])
+    assert got[0]["kind"] == "legal" and stat.kind_set == 0
