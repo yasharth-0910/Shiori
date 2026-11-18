@@ -13,6 +13,7 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - Import-boundary test exists: fails if `core/` or `sidecar/` imports `collector`, `eval`, `training` or a cloud SDK (roadmap, Phase 0; D-12).
 - Founding decisions D-01 to D-07 recorded: separate from Klaro, extraction with citations, model cites sentence IDs, every citation verified, v1 scope is public tenders, Electron + Python sidecar + llama.cpp, org-level split.
 
+- Fix 5 (2026-11-19, D-73): drop copies of a merged proviso item; a bid receipt line the model called other becomes electronic on an electronic-only notice. Replay on the saved traces (no model run) against the corrected dev labels, rows right of 42: Qwen3.5-9B 15 to 19, Gemma 4 E4B 16 to 18, no row lost (`eval/reports/phase5_fix5_copies_and_deadline_cue.md`).
 ### Changed from the plan (what, why, decision number)
 - pydantic added as the first runtime dependency; license noted as CLAUDE.md requires (D-11).
 - httpx and beautifulsoup4 kept out of runtime dependencies, in a dev-only `collector` group; the boundary test was extended to fail if they appear in `[project].dependencies` (D-12).

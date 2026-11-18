@@ -27,7 +27,12 @@ from dataclasses import field as dc_field
 
 from pydantic import BaseModel, ValidationError
 
-from shiori_core.extract.rules import Extracted, Joined, value_in_citation
+from shiori_core.extract.rules import (
+    Extracted,
+    Joined,
+    submission_modes,
+    value_in_citation,
+)
 from shiori_core.fields import BY_ID, validate_normalized
 from shiori_core.models import Sentence
 from shiori_core.normalize import normalize
@@ -224,6 +229,10 @@ class CallStat:
         0  # なお/ただし sentences merged into the eligibility item before them
     )
     kind_set: int = 0  # eligibility items set to kind other by the 第73条 rule (D-71)
+    copies: int = 0  # eligibility items dropped as copies of a merged item (D-73)
+    cue_kind_set: int = (
+        0  # deadline items set from other to electronic by the cue (D-73)
+    )
     # For the diagnostic (eval/hybrid.py), in memory only: the ids sent, and every item
     # the model proposed with its verdict ("kept" or the reason it was dropped).
     retrieved: list[str] = dc_field(default_factory=list)
@@ -339,6 +348,7 @@ def _merge_provisos(kept: list[dict], by_id: dict[str, Sentence], stat: CallStat
     pos = {i: n for n, i in enumerate(order)}
     is_proviso = lambda i: bool(PROVISO.match(by_id[i].text_norm.strip()))  # noqa: E731
     merged: set[str] = set()
+    grew: list[dict] = []
     for it in kept:
         ids = it["citations"]
         last = max((pos[i] for i in ids), default=-1)
@@ -354,11 +364,32 @@ def _merge_provisos(kept: list[dict], by_id: dict[str, Sentence], stat: CallStat
         it["text_ja"] += "\n" + one_line(by_id[nxt])
         it["citations"] = [*ids, nxt]
         merged.add(nxt)
+        grew.append(it)
     gone = [it for it in kept if it["citations"] and set(it["citations"]) <= merged]
     gone_ids = {id(it) for it in gone}
     stat.trace[:] = [(p, "merged" if id(p) in gone_ids else v) for p, v in stat.trace]
     stat.merged = len(merged)
-    return [it for it in kept if id(it) not in gone_ids]
+    kept = [it for it in kept if id(it) not in gone_ids]
+    # D-73: an item that now says what a merged item says (same polarity and the same
+    # text, or citations inside the merged item's) is a copy of it; the merged item stays.
+    one = lambda t: t.replace("\n", "")  # noqa: E731
+    copies = {
+        id(c)
+        for g in grew
+        for c in kept
+        if c is not g
+        and not any(c is x for x in grew)
+        and c["polarity"] == g["polarity"]
+        and (
+            one(c["text_ja"]) == one(g["text_ja"])
+            or set(c["citations"]) <= set(g["citations"])
+        )  # fmt: skip
+    }
+    stat.trace[:] = [
+        (p, "merged_copy" if id(p) in copies else v) for p, v in stat.trace
+    ]
+    stat.copies = len(copies)
+    return [it for it in kept if id(it) not in copies]
 
 
 # D-72: the kinds a deadline sentence's own heading allows (docs/labeling_guide.md, bid receipt kind).
@@ -371,6 +402,19 @@ DEADLINE_CUES = (
     ),
     (re.compile(r"開札"), frozenset({"bid_opening"})),
 )
+
+
+BID_RECEIPT = frozenset({"electronic", "bid_in_person"})
+
+
+def _receipt_kind(it: dict, by_id: dict[str, Sentence]) -> str:
+    """D-73: a deadline the model called other, on a sentence whose own cue is 入札書の
+    受領期限 or 入札書の提出期限, is the bid receipt: kind electronic (docs/labeling_guide.md
+    line 124, for an electronic notice; the caller checks that). Any other kind stays."""
+    if it["kind"] != "other":
+        return it["kind"]
+    cue = _cue_kinds(" ".join(by_id[i].text_norm for i in it["citations"]))
+    return "electronic" if cue == BID_RECEIPT else "other"
 
 
 def _cue_kinds(text: str) -> frozenset[str] | None:
@@ -442,7 +486,11 @@ def _value_ja(fld: str, items: list[dict], by_id: dict[str, Sentence]) -> str:
 
 
 def read_items(
-    fld: str, raw: str, by_id: dict[str, Sentence], stat: CallStat
+    fld: str,
+    raw: str,
+    by_id: dict[str, Sentence],
+    stat: CallStat,
+    electronic: bool = False,
 ) -> list[dict]:
     """The model's answer as the items that pass every check; the rest are counted in
     `stat.dropped` by reason."""
@@ -465,6 +513,10 @@ def read_items(
             stat.recovered += 1
         raw_pol = it.get("polarity")
         ok, why = _check(fld, dict(it), by_id)
+        if ok is not None and fld == "deadlines" and electronic:
+            kind = _receipt_kind(ok, by_id)
+            stat.cue_kind_set += kind != ok["kind"]
+            ok["kind"] = kind
         if ok is not None and raw_pol is not None and ok["polarity"] != raw_pol:
             stat.polarity_set += 1
         if ok is not None and fld == "eligibility" and ok["kind"] != it["kind"]:
@@ -523,6 +575,8 @@ def extract_lists(
     ss = [s for s in sentences if s.language == "ja"]
     by_id = {s.id: s for s in ss}
     out: dict[str, Extracted] = {}
+    modes = submission_modes(ss)
+    electronic = modes is not None and modes[0]["modes"] == ["electronic"]
     for fld in LIST_FIELDS:
         if doc_type not in BY_ID[fld].applies_to:
             continue
@@ -543,7 +597,7 @@ def extract_lists(
             stat.proposed = stat.kept = 0
             try:
                 raw = complete(SYSTEM, prompt(fld, sent), schema_for(fld), MAX_OUT)
-                items = read_items(fld, raw, {s.id: s for s in sent}, stat)
+                items = read_items(fld, raw, {s.id: s for s in sent}, stat, electronic)
                 stat.call_failed = None
                 break
             except (OSError, ValueError, KeyError, TypeError) as e:

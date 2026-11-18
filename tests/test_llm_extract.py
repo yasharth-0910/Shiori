@@ -417,3 +417,88 @@ def test_deadline_copies_stay_when_the_cue_picks_no_single_item_5d75d4a67c71() -
     assert (
         len(_read_deadlines(neither)[0]) == 2
     )  # cue says electronic or bid_in_person, neither is there
+
+
+# --- fix 5 (D-73): copies of a merged proviso item; bid receipt other is electronic on an electronic notice ---
+
+
+def test_copy_of_a_merged_proviso_item_is_dropped_d230e51e2805() -> None:
+    # d230e51e2805 h_s40 / h_s41 (Qwen3.5-9B): one item cites h_s40 only and takes the proviso in
+    # the merge; another, already citing h_s40 and h_s41, says the same thing afterwards
+    ss = [sent("h_s39", "競争参加資格", ["競争参加資格"]), sent("h_s40", "(1)　" + S70, ["競争参加資格"]), sent("h_s41", NAOSHI, ["競争参加資格"])]  # fmt: skip
+    got, stat = elig(ss, [item(S70, ["h_s40"]), item(S70 + NAOSHI, ["h_s40", "h_s41"])])
+    assert [g["citations"] for g in got] == [["h_s40", "h_s41"]]
+    assert (
+        got[0]["text_ja"] == S70 + "\n" + NAOSHI
+    )  # the merged item stays, not the copy
+    assert (stat.merged, stat.copies, stat.kept) == (1, 1, 1)
+    assert [v for _, v in stat.trace] == ["kept", "merged_copy"]
+    # citations inside the merged item's, other text: also a copy
+    part = "予算決算及び会計令第70条の規定に該当しない者"  # a shorter wording from the same sentence
+    got, stat = elig(ss, [item(S70, ["h_s40"]), item(part, ["h_s40"])])
+    assert [g["citations"] for g in got] == [["h_s40", "h_s41"]] and stat.copies == 1
+
+
+def test_copy_rule_leaves_other_polarity_and_other_sentences_d230e51e2805() -> None:
+    ss = [sent("h_s39", "競争参加資格", ["競争参加資格"]), sent("h_s40", "(1)　" + S70, ["競争参加資格"]), sent("h_s41", NAOSHI, ["競争参加資格"]),
+          sent("h_s42", "(2)　予算決算及び会計令第71条の規定に該当しない者であること。", ["競争参加資格"])]  # fmt: skip
+    other_pol = {
+        **item(S70 + NAOSHI, ["h_s40", "h_s41"]),
+        "polarity": "disqualification",
+    }
+    got, stat = elig(ss, [item(S70, ["h_s40"]), other_pol, item("予算決算及び会計令第71条の規定に該当しない者であること。", ["h_s42"])])  # fmt: skip
+    assert [g["citations"] for g in got] == [["h_s40", "h_s41"], ["h_s40", "h_s41"], ["h_s42"]]  # fmt: skip
+    assert (
+        stat.copies == 0
+    )  # another polarity is not a copy; h_s42 is outside the merged item
+
+
+RECEIPT = {"h_s49": sent("h_s49", "(4)　入札書の受領期限　令和８年10月21日17時00分", ["入札書の提出場所等", "入札書の受領期限"]),
+           "h_s60": sent("h_s60", "(5)　説明会の日時　令和８年10月２日17時00分", ["説明会"])}  # fmt: skip
+
+
+def _receipt(kind: str, cite: str, electronic: bool, dt: str = "2026-10-21T17:00:00+09:00") -> tuple[dict, llm.CallStat]:  # fmt: skip
+    raw = [
+        {
+            "kind": kind,
+            "datetime": dt,
+            "relative_text": None,
+            "flags": [],
+            "citations": [cite],
+        }
+    ]
+    stat = llm.CallStat("deadlines")
+    return llm.read_items("deadlines", json.dumps({"items": raw}), RECEIPT, stat, electronic)[0], stat  # fmt: skip
+
+
+def test_bid_receipt_other_is_electronic_on_an_electronic_notice_f19cddbd4cba() -> None:
+    # f19cddbd4cba h_s49: 入札書の受領期限, model said other, label (guide line 124) says electronic
+    got, stat = _receipt("other", "h_s49", True)
+    assert got["kind"] == "electronic" and stat.cue_kind_set == 1
+
+
+def test_bid_receipt_rule_does_not_fire_f19cddbd4cba() -> None:
+    assert (
+        _receipt("other", "h_s49", False)[0]["kind"] == "other"
+    )  # not an electronic notice
+    got, stat = _receipt(
+        "bid_in_person", "h_s49", True
+    )  # a kind other than other is never overridden
+    assert got["kind"] == "bid_in_person" and stat.cue_kind_set == 0
+    got, stat = _receipt(
+        "other", "h_s60", True, "2026-10-02T17:00:00+09:00"
+    )  # no bid receipt cue
+    assert got["kind"] == "other" and stat.cue_kind_set == 0
+
+
+def test_notice_is_electronic_only_when_the_rules_say_so_f19cddbd4cba() -> None:
+    e = sent("h_s20", "入札は電子調達システムで行う。", ["入札方法"])
+    deadline = {"kind": "other", "datetime": "2026-10-21", "relative_text": None, "flags": [], "citations": ["h_s4"]}  # fmt: skip
+    ans = {"eligibility": {"items": []}, "required_documents": {"items": []}, "deadlines": {"items": [deadline]}}  # fmt: skip
+
+    def kind(ss: list[Sentence]) -> str:
+        out = llm.extract_lists("notice", ss, fake(ans))
+        return out["deadlines"].normalized["items"][0]["kind"]
+
+    assert kind([*DOC, e]) == "electronic"
+    assert kind(DOC) == "other"  # no sentence says the notice is electronic
