@@ -33,6 +33,7 @@ async function createWindow(): Promise<void> {
     width: 1280,
     height: 860,
     show: !process.env.SHIORI_SHOT,
+    titleBarStyle: "hiddenInset",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));

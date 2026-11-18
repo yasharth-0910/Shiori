@@ -22,14 +22,14 @@ test("all stored checks passed and cited id present: verified", () => {
   assert.equal(stateOf(field({}), sentences), "verified");
 });
 
-test("hand-altered row: value_in_citation failed -> found, not verified", () => {
+test("hand-altered row: value_in_citation failed -> needs review", () => {
   const f = field({
     checks: [
       { name: "schema_valid", passed: true },
       { name: "value_in_citation", passed: false },
     ],
   });
-  assert.equal(stateOf(f, sentences), "unverified");
+  assert.equal(stateOf(f, sentences), "needs_review");
 });
 
 test("only heading_cue fails: still verified, note shown", () => {
@@ -51,17 +51,17 @@ test("only a failed non-gating check (field_applicable) does not block either", 
 });
 
 test("only soft checks stored: not verified", () => {
-  assert.equal(stateOf(field({ checks: [{ name: "heading_cue", passed: true }] }), sentences), "unverified");
+  assert.equal(stateOf(field({ checks: [{ name: "heading_cue", passed: true }] }), sentences), "needs_review");
 });
 
 test("cited id missing from the fixture -> not verified", () => {
-  assert.equal(stateOf(field({ citations: ["p9_s9"] }), sentences), "unverified");
+  assert.equal(stateOf(field({ citations: ["p9_s9"] }), sentences), "needs_review");
   const item = { text_ja: "a", text_en: "b", citations: ["p9_s9"] };
-  assert.equal(stateOf(field({ items: [item] }), sentences), "unverified");
+  assert.equal(stateOf(field({ items: [item] }), sentences), "needs_review");
 });
 
 test("no stored checks -> not verified", () => {
-  assert.equal(stateOf(field({ checks: [] }), sentences), "unverified");
+  assert.equal(stateOf(field({ checks: [] }), sentences), "needs_review");
 });
 
 test("absent and see_other_document keep their own states", () => {

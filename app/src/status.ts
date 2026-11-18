@@ -1,11 +1,11 @@
 import type { Field, Fixture } from "./types";
 
-export type State = "verified" | "unverified" | "not_found" | "other_document";
+export type State = "verified" | "needs_review" | "not_found" | "other_document";
 export const STATE_TEXT: Record<State, string> = {
-  verified: "verified",
-  unverified: "found, not verified",
-  not_found: "not found",
-  other_document: "see other document",
+  verified: "Verified",
+  needs_review: "Needs review",
+  not_found: "Not found",
+  other_document: "See other document",
 };
 
 // Checks that decide "verified". Any other stored check (field_applicable, ...) is shown, not gated on.
@@ -21,7 +21,7 @@ export function stateOf(f: Field, sentences: Fixture["sentences"]): State {
   const ids = [...f.citations, ...f.items.flatMap((i) => i.citations)];
   const hard = f.checks.filter((c) => HARD.has(c.name));
   const ok = hard.length > 0 && hard.every((c) => c.passed) && ids.every((id) => id in sentences);
-  return ok ? "verified" : "unverified";
+  return ok ? "verified" : "needs_review";
 }
 
 export const unusualSection = (f: Field): boolean => f.checks.some((c) => c.name === "heading_cue" && !c.passed);
