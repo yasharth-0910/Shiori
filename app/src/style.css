@@ -1,11 +1,18 @@
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; font-size: 14px; }
 body { margin: 0; }
+.right { display: flex; flex-direction: column; min-height: 0; }
+.right .pdf { flex: 1; }
+.detail { padding: 8px 12px; border-bottom: 1px solid #8884; max-height: 30vh; overflow: auto; }
+.detail .ja { font-size: 16px; margin: 4px 0; }
+.detail .sec { font-size: 11px; opacity: .7; }
+.chip.missing { border-color: #c33; color: #c33; }
 .layout { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
 .fields { overflow: auto; padding: 8px 12px; border-right: 1px solid #8884; }
 .field h3 { margin: 12px 0 2px; font-size: 13px; }
 .field p { margin: 2px 0 4px; }
 .st { font-weight: 400; font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #8883; }
-.st-present { background: #2a82; color: #1a6b2a; }
+.st-verified { background: #2a82; color: #1a6b2a; }
+.st-unverified { background: #e8a20033; color: #b07800; }
 .chip { font-size: 11px; margin: 2px 4px 2px 0; padding: 1px 6px; border: 1px solid #8886; border-radius: 10px; background: none; color: inherit; cursor: pointer; }
 .chip.on { background: #fd03; border-color: #c90; }
 .pdf { overflow: auto; background: #8883; padding: 8px 0; }

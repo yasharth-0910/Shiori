@@ -1,7 +1,7 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEffect, useRef, useState } from "react";
-import type { Citation } from "./types";
+import type { Sentence } from "./types";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -9,7 +9,7 @@ const SCALE = 1.4; // CSS px per PDF point
 
 type PageInfo = { n: number; w: number; h: number };
 
-export function PdfView({ url, active }: { url: string; active: Citation | null }) {
+export function PdfView({ url, active }: { url: string; active: Sentence | null }) {
   const [pages, setPages] = useState<PageInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const holder = useRef<HTMLDivElement>(null);
