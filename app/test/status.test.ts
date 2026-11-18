@@ -1,7 +1,7 @@
 // Run: npm test (node strips the types). Imports the pure status rule only.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { stateOf } from "../src/status.ts";
+import { stateOf, unusualSection } from "../src/status.ts";
 
 const sentences = { p1_s5: { page: 1, text_orig: "x", section_path: [], section_titles: [], boxes: [] } };
 const field = (over: object) => ({
@@ -30,6 +30,28 @@ test("hand-altered row: value_in_citation failed -> found, not verified", () => 
     ],
   });
   assert.equal(stateOf(f, sentences), "unverified");
+});
+
+test("only heading_cue fails: still verified, note shown", () => {
+  const f = field({
+    checks: [
+      { name: "schema_valid", passed: true },
+      { name: "value_in_citation", passed: true },
+      { name: "heading_cue", passed: false },
+    ],
+  });
+  assert.equal(stateOf(f, sentences), "verified");
+  assert.equal(unusualSection(f), true);
+  assert.equal(unusualSection(field({})), false);
+});
+
+test("only a failed non-gating check (field_applicable) does not block either", () => {
+  const f = field({ checks: [{ name: "value_in_citation", passed: true }, { name: "field_applicable", passed: false }] });
+  assert.equal(stateOf(f, sentences), "verified");
+});
+
+test("only soft checks stored: not verified", () => {
+  assert.equal(stateOf(field({ checks: [{ name: "heading_cue", passed: true }] }), sentences), "unverified");
 });
 
 test("cited id missing from the fixture -> not verified", () => {

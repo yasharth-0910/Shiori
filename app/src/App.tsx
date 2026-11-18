@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PdfView } from "./PdfView";
-import { STATE_TEXT, stateOf } from "./status";
+import { STATE_TEXT, stateOf, unusualSection } from "./status";
 import type { Field, Fixture } from "./types";
 
 type Active = { id: string; field: Field } | null;
@@ -65,6 +65,7 @@ export function App() {
             <div className="sec">
               section: {sent?.section_path.map((p, i) => `${p} ${sent.section_titles[i] ?? ""}`).join(" > ") || "none"}
             </div>
+            {unusualSection(active.field) && <div className="note">Found in an unusual section</div>}
             <div className="sec">
               checks: {active.field.checks.map((c) => `${c.name} ${c.passed ? "ok" : "FAILED"}`).join(", ") || "none stored"}
             </div>

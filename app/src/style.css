@@ -20,3 +20,4 @@ body { margin: 0; }
 .page canvas { display: block; }
 .hl { position: absolute; background: #ffd00055; outline: 2px solid #e8a200; pointer-events: none; }
 .err { padding: 16px; }
+.note { font-size: 12px; opacity: .85; margin-top: 2px; }
