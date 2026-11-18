@@ -117,3 +117,5 @@ button:disabled { cursor: default; opacity: 0.5; }
 .hl { position: absolute; background: rgba(186, 51, 36, 0.14); outline: 1px solid var(--red); border-radius: 3px; pointer-events: none; }
 .hit { position: absolute; background: rgba(43, 66, 99, 0.14); outline: 1px solid var(--indigo-line); border-radius: 3px; pointer-events: none; }
 .hit.cur { outline: 2px solid var(--indigo); }
+.sumlines { margin: 0; padding: 0 16px 8px 32px; line-height: 1.6; }
+.sumlines li { margin: 6px 0; }

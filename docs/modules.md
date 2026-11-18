@@ -188,8 +188,9 @@ One entry per module. Keep the status and interface lines current. Status values
 - **v0:** template-based English sentences. **v1:** optional LLM rewrite that is only allowed to use field values (checked after generation: every number/date in the output must match a field).
 
 ### translate
-- **Status:** planned (Phase 5)
-- **Purpose:** single-sentence JA -> EN for hover, using the same local model and the glossary.
+- **Status:** planned (single sentence on demand: Phase 5; full document: Phase 10, D-78)
+- **Purpose:** JA -> EN with the same local model and the glossary. Now: one sentence on demand for hover. Phase 10: every sentence of a document, aligned by sentence ID, shown beside the Japanese and labelled machine translation. Never feeds field extraction or citations.
+- **Open:** model and its license (not chosen); quality measure (p-portal English Summaries plus a native reader).
 
 ### glossary
 - **Status:** planned (Phase 4)
@@ -230,8 +231,9 @@ One entry per module. Keep the status and interface lines current. Status values
 - **Gotcha:** PDF coordinates have origin bottom-left, PDF.js viewport is top-left and scaled. Convert with the viewport transform, and test on rotated pages.
 
 ### fields_panel / summary_panel
-- **Status:** fields panel started (Phase 7 step 1): reads a static fixture (`scripts/export_app_fixture.py`, label file as fake model output). Status words are the label statuses, not "verified": nothing is verified by code in the app yet. Summary panel planned.
+- **Status:** fields panel started (Phase 7 step 1): reads a static fixture (`scripts/export_app_fixture.py`, label file as fake model output). Status words are the label statuses, not "verified": nothing is verified by code in the app yet. Summary panel built (D-77, see below). Pill rule (`app/src/status.ts`, D-76): Verified needs every stored hard check passed, all cited ids present, and no failed `heading_cue`; a failed `heading_cue` gives Needs review and the note "Found in an unusual section" stays under the field. `weekday_consistent` and `era_plausible` are not read yet (Open question, D-76).
 - **Purpose:** show FieldResults with status and citation chips; show summary lines linked to fields.
+- **summary_panel (D-77):** `app/src/summary.ts` (pure logic), `app/src/SummaryPanel.tsx` (view, wired in `Workspace.tsx`), `app/test/summary.test.ts`. Input: the fixture and the app's own `stateOf`. Output: one fixed-template line per Verified field, or per item for list fields (deadlines, eligibility, submission_modes), in the order issuer, title, procurement type, deadlines, eligibility, award method, how to submit. Each line ends with a page chip (`p. N`, the page of the first cited sentence that exists) that opens the PDF there and highlights that sentence. Slot fields that are not Verified are never used; they are listed under "Not stated or needs review". A Verified slot field with no stored English text (no `value_en`, no item `text_en`) gives no line and is listed with a note. Component file is `SummaryPanel.tsx` because `Summary.tsx` and `summary.ts` clash on a case-insensitive file system.
 
 ### settings
 - **Status:** planned (Phase 8)

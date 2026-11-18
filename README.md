@@ -4,7 +4,13 @@
 
 Japanese public tenders are long, dense and written in 公用文. Shiori is a desktop app that reads them for you, fully offline, and tells you in English what you need to know before you bid: when it closes, who can bid, what bonds apply, what the tax basis is, which documents to send. Every answer points at the exact sentence it came from. Click it and the PDF opens on that page with the source highlighted.
 
-> Shiori is in development. The app below is the goal, not something you can download yet.
+> Shiori is in development. You can't download it yet.
+
+## Demo video
+
+[![Shiori intro video: reading a Japanese tender in English, with sources](https://img.youtube.com/vi/NeasBmbAPtA/maxresdefault.jpg)](https://youtu.be/NeasBmbAPtA)
+
+<sub>35 seconds of the current desktop app on one public tender (Wakayama Prefecture): open a document, see the fields in English, click one to jump to its source sentence, and search the document when a field is not found. [Watch on YouTube](https://youtu.be/NeasBmbAPtA).</sub>
 
 ## What it will feel like
 

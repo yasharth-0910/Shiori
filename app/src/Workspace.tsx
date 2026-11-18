@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
 import { PdfView, type Find } from "./PdfView";
+import { SummaryPanel } from "./SummaryPanel";
 import { STATE_TEXT, stateOf, unusualSection, type State } from "./status";
 import type { Field, Fixture } from "./types";
 
@@ -99,7 +100,16 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
             </button>
           ))}
         </div>
-        {tab !== "fields" && <p className="empty">Nothing here yet.</p>}
+        {tab === "deadlines" && <p className="empty">Nothing here yet.</p>}
+        {tab === "summary" && (
+          <SummaryPanel
+            fx={fx}
+            onCite={(id) => {
+              setFind(null);
+              setSid(id);
+            }}
+          />
+        )}
         {tab === "fields" && (
           <>
             <div className="counts">

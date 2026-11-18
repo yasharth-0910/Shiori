@@ -185,3 +185,16 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - Korean and German adapters on the same pipeline
 - MCP server exposing the local document store to other local tools
 - Agentic workflows (compare two tenders, draft a bid/no-bid checklist)
+
+## Phase 10: full document translation
+
+Final goal, after everything above. Starts only when Phase 9 is done (D-78). Field extraction stays Japanese-first with code-verified citations; this phase adds a reading aid next to it, not a replacement.
+
+- [ ] Sentence-aligned machine translation of every sentence in a document (one English line per sentence ID)
+- [ ] Japanese and English shown side by side in the app
+- [ ] Every English line labelled as machine translation
+- [ ] The original Japanese is always visible, never replaced
+- [ ] Translation quality measurement: p-portal English Summaries as a reference for the passages they cover, plus review by a native Japanese reader (a bilingual reviewer is needed before this phase starts)
+- [ ] Model decision: which model translates, with its license noted in `docs/decisions.md` before it enters `core/`
+
+**Exit:** a full tender translates sentence by sentence on the dev machine and a 16 GB Windows laptop with Wi-Fi off, quality is measured and reported with its limits, and the app labels all of it as machine translation.
