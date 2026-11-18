@@ -70,6 +70,32 @@ Effect of those 5 label items on the same outputs:
 
 Rows changed because the extractor changed: none in this report.
 
+## Why the 5 rows stay wrong: per row
+
+Source for the first four rows: the saved traces replayed through the current `llm.py`, scored against the current labels with `eval.hybrid.classify` (no model). Sentence ids are within each document. Cause categories: **label** (label granularity or convention), **kind** (kind or value normalization), **validator** (answer item dropped by a check), **model** (the answer item is missing or cut differently). Where a mismatch can be read two ways I give both and do not pick; I read no Japanese meaning into any of them.
+
+| row | label item that does not pair | what differs | cause |
+| --- | --- | --- | --- |
+| `563042df` eligibility, Qwen | item 0 (kind `legal`, cites `h_s40` + `h_s41`) | answer has one item citing `h_s40` only; no item cites `h_s41`. The other 4 label items hit | model (item cut: the label item spans 2 sentences); label granularity is the other reading |
+| `563042df` eligibility, Gemma | item 0 (same) | same as Qwen | same |
+| `f19cddbd` eligibility, Qwen | item 0 (`legal`, cites `h_s38` + `h_s39`) | answer has an item citing `h_s38` only, plus a separate `other` item citing `h_s39`; neither pairs | model (cut per sentence); label granularity is the other reading |
+| `f19cddbd` eligibility, Qwen | item 3 (`other`, cites `h_s43`) | the answer item on `h_s43` has kind `legal`; the sentence is the same | kind (legal versus other, the open question logged 2026-11-18, guide has no line) |
+| `f19cddbd` eligibility, Gemma | item 0 (same as Qwen) | answer has an item citing `h_s38` only; no item cites `h_s39` | model (item cut) |
+| `f19cddbd` eligibility, Gemma | item 3 (same as Qwen) | kind `legal` on the `h_s43` item | kind |
+| `5d75d4a67c71` eligibility, Qwen | item 3 (`other`, cites `h_s38`) | answer item on `h_s38` has kind `legal`. Label item 0 (cites `h_s34` + `h_s35`) pairs, but the answer also has a separate `h_s35` item that pairs with nothing (5 kept, 3 duplicates dropped) | kind (1); the extra item is the same per-sentence cut as above (model) |
+| `5d75d4a67c71` eligibility, Gemma | item 0 (`h_s34` + `h_s35`) | answer item cites `h_s34` only | model (item cut) |
+| `5d75d4a67c71` eligibility, Gemma | item 3 (`other`, `h_s38`) | kind `legal` | kind |
+| `5d75d4a67c71` deadlines, Qwen | none: 3 of 3 label items pair | 3 extra answer items (6 against 3), see the deadline paragraph | model (extra items) |
+| `5d75d4a67c71` deadlines, Gemma | none: 3 of 3 pair | same 3 extra items | model (extra items) |
+| `5d75d4a67c71` required_documents, Qwen | item 1 (cites `h_s45`) and item 3 (cites `h_s54`) | 2 answer items: one cites `h_s32`, `h_s46`, `h_s54` together, one cites `h_s51`. Nothing cites `h_s45`; `h_s54` is inside the merged item | model (2: one entry left out, one folded into another item; the pattern of fix 2) |
+| `5d75d4a67c71` required_documents, Gemma | item 3 (cites `h_s54`) | no answer item cites `h_s54`. Also an extra item citing `h_s29` alone | model (1, plus 1 extra item) |
+
+Counts per cause, non-pairing label items over all 10 rows (the 4 earlier rows, plus the new document's 3 fields for 2 models); 12 items: model 8 (earlier 4, new 4: Gemma eligibility 1, Gemma required_documents 1, Qwen required_documents 2), kind 4 (earlier 2, new 2: `h_s38` once per model), validator 0, label 0 as sole cause. Answer items with no label partner, not counted above: 3 deadline items per model (6), plus 1 eligibility item for Qwen (new document), 1 required_documents item for Gemma. The label granularity reading (label item spans 2 sentences) stays an alternative for the item-cut cases, not decided. In the new document Qwen's duplicate check dropped 3 eligibility items; that is the validator working as designed and caused no miss.
+
+Deadline rows of `5d75d4a67c71`: is the set of 6 answer items an in-person and electronic pair per date? **Per date, yes there are two items, but not always in-person and electronic.** Both models give the identical 6 items. For each of the 3 label dates the answer holds two items with the same datetime and the same cited sentence: dates 1 and 2 (`h_s45`, `h_s46`) are kind `other` plus kind `electronic`; date 3 (`h_s47`) is kind `bid_opening` plus kind `electronic`. The label holds one of each pair: `other` for date 1, `electronic` for date 2, `bid_opening` for date 3. So the pattern is "label kind plus an extra `electronic` copy" on every date, and on date 2 the extra is `other`. The model is adding a second kind per date, which `docs/labeling_guide.md` line 123 (a bid receipt on an electronic notice is kind electronic) does not ask for on the bid-opening date. I did not check what the three sentences say, and `other` is not shown to mean in-person, so whether two receiving modes exist per date is not established. Why the label has `other` for date 1 while the guide rule says electronic: not looked into.
+
+Rerun for these rows: both models, local only, temperature 0, answers saved to the session scratchpad (`newdoc_<model>.json`), no call failed, no llama-server left running. The item counts match the earlier run (Qwen 3/4/5, 3/3/6, 2/4/2; Gemma 2/4/4, 3/3/6, 3/4/4), so the earlier scores stand.
+
 ## What I saw
 
 - Counts above come from the scratch scripts' output on this run: Qwen old13 11/39, new13 11/39, newdoc 0/3, new14 11/42; Gemma old13 11/39, new13 11/39, newdoc 0/3, new14 11/42. Failed calls: none in either run. `pgrep -x llama-server` returned nothing afterwards.
