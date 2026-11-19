@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
+import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
 import { STATE_TEXT, stateOf, unusualSection, type State } from "./status";
+import { enLine, idsOf, unavailableText, type TrState } from "./translate";
 import type { Field, Fixture } from "./types";
 
 type Tab = "summary" | "fields" | "deadlines";
@@ -29,6 +31,25 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const [find, setFind] = useState<Find | null>(null);
   const [hitCount, setHitCount] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
+  const [tr, setTr] = useState<Record<string, TrState>>({}); // by field id; asked when a field is opened, never before
+
+  const translateField = (f: Field) => {
+    const ids = idsOf(f, fx);
+    if (!ids.length || tr[f.field]) return;
+    const set = (v: TrState) => setTr((t) => ({ ...t, [f.field]: v }));
+    if (!window.shiori) return set({ status: "unavailable", reason: "no_document" });
+    set({ status: "loading" });
+    window.shiori.translate(fx.doc_id, ids).then(
+      (r) => set(r.ok ? { status: "ok", items: r.items } : { status: "unavailable", reason: r.reason }),
+      () => set({ status: "unavailable", reason: "failed" }),
+    );
+  };
+
+  const trNote = (f: Field) => {
+    const t = tr[f.field];
+    if (t?.status === "loading") return <p className="meta">Translating</p>;
+    return t?.status === "unavailable" ? <p className="meta">{unavailableText(t.reason)}</p> : null;
+  };
 
   const toggle = (f: Field) => {
     setFind(null);
@@ -38,6 +59,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     } else {
       setOpen(f.field);
       setSid(f.citations.find((id) => id in fx.sentences) ?? null);
+      translateField(f);
     }
   };
 
@@ -64,11 +86,15 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     const groups = f.items.length ? f.items.map((i) => ({ en: i.text_en, ids: i.citations })) : [{ en: null, ids: f.citations }];
     return groups.map((g, n) => (
       <div className="srcgroup" key={n}>
-        {g.en && <div className="en">{g.en}</div>}
+        {g.en && <MachineEn text={g.en} note={null} />}
         {g.ids.map((id) => {
           const s = fx.sentences[id];
+          const t = tr[f.field];
+          const line = t?.status === "ok" ? enLine(t.items[id]) : null;
           return (
-            <button key={id} className={`src${sid === id ? " on" : ""}`} onClick={() => s && setSid(id)} disabled={!s}>
+            <Fragment key={id}>
+            {line && <MachineEn text={line.text} note={line.note} />}
+            <button className={`src${sid === id ? " on" : ""}`} onClick={() => s && setSid(id)} disabled={!s}>
               <span className="ja" lang="ja">{s?.text_orig ?? "Sentence missing from this export."}</span>
               {s && (
                 <span className="meta">
@@ -76,6 +102,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
                 </span>
               )}
             </button>
+            </Fragment>
           );
         })}
       </div>
@@ -155,6 +182,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
                               </>
                             ) : (
                               <>
+                                {trNote(f)}
                                 {sources(f)}
                                 {unusualSection(f) && <p className="meta">Found in an unusual section.</p>}
                                 <button

@@ -25,6 +25,10 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const ID = /^[0-9a-f]{64}$/;
+const SENTENCE = /^(?:p\d+_s\d+|h_s\d+)$/; // a sentence id, as core makes them
+type Translated =
+  | { ok: true; items: Record<string, { en: string; numbers_match: boolean }> }
+  | { ok: false; reason: "no_model" | "no_document" | "failed" };
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
 // SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
 const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
@@ -177,6 +181,20 @@ function registerIpc(): void {
     const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status`);
     const running = s.stage !== "done" && s.stage !== "failed";
     return { ...s, detail: s.detail ?? (running ? b.note : null) };
+  });
+  // English for cited sentences, asked when a field is opened (D-85). Never throws for "no model":
+  // the renderer shows "Model not set up" for that case.
+  ipcMain.handle("shiori:translate", async (e, id: unknown, ids: unknown): Promise<Translated> => {
+    own(e);
+    const doc = docId(id);
+    if (!Array.isArray(ids) || ids.length > 50 || !ids.every((i) => typeof i === "string" && SENTENCE.test(i))) throw new Error("bad_sentence_ids");
+    if (!jobs.has(doc)) return { ok: false, reason: "no_document" }; // e.g. the fixture demo
+    if (!backend?.model) return { ok: false, reason: "no_model" };
+    try {
+      return { ok: true, items: await sidecar.call<Record<string, { en: string; numbers_match: boolean }>>("POST", `/documents/${doc}/translate`, { ids }) };
+    } catch (err) {
+      return { ok: false, reason: (err as Error).message === "sidecar_http_503" ? "no_model" : "failed" };
+    }
   });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
