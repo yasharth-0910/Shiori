@@ -27,7 +27,7 @@ protocol.registerSchemesAsPrivileged([
 const ID = /^[0-9a-f]{64}$/;
 const SENTENCE = /^(?:p\d+_s\d+|h_s\d+)$/; // a sentence id, as core makes them
 type Translated =
-  | { ok: true; items: Record<string, { en: string; numbers_match: boolean }> }
+  | { ok: true; items: Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }> }
   | { ok: false; reason: "no_model" | "no_document" | "failed" };
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
 // SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
@@ -191,7 +191,7 @@ function registerIpc(): void {
     if (!jobs.has(doc)) return { ok: false, reason: "no_document" }; // e.g. the fixture demo
     if (!backend?.model) return { ok: false, reason: "no_model" };
     try {
-      return { ok: true, items: await sidecar.call<Record<string, { en: string; numbers_match: boolean }>>("POST", `/documents/${doc}/translate`, { ids }) };
+      return { ok: true, items: await sidecar.call<Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }>>("POST", `/documents/${doc}/translate`, { ids }) };
     } catch (err) {
       return { ok: false, reason: (err as Error).message === "sidecar_http_503" ? "no_model" : "failed" };
     }

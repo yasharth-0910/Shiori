@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { enLine, idsOf, MT_LABEL, NUMBERS_NOTE, unavailableText } from "../src/translate.ts";
+import { enLine, idsOf, MT_LABEL, NUMBERS_NOTE, PROTECTED_NOTE, unavailableText } from "../src/translate.ts";
 import type { Field, Fixture } from "../src/types.ts";
 
 const field = (over: Partial<Field>): Field => ({ field: "eligibility", status: "present", value_en: null, value_ja: null, items: [], citations: [], checks: [], ...over });
@@ -15,6 +15,13 @@ test("every English line carries the Machine translation label", () => {
 test("a failed numbers check adds the note and keeps the translation", () => {
   assert.deepEqual(enLine({ en: "Deadline: Oct 16", numbers_match: false }), { text: "Deadline: Oct 16", label: MT_LABEL, note: NUMBERS_NOTE });
   assert.equal(enLine({ en: "Deadline: Oct 15", numbers_match: true })?.note, null);
+});
+
+test("a lost protected name or term adds its own note, next to the numbers note if both apply", () => {
+  assert.equal(enLine({ en: "x", numbers_match: true, protected_lost: true })?.note, PROTECTED_NOTE);
+  assert.equal(enLine({ en: "x", numbers_match: false, protected_lost: true })?.note, `${NUMBERS_NOTE}; ${PROTECTED_NOTE}`);
+  assert.equal(enLine({ en: "x", numbers_match: true, protected_lost: false })?.note, null);
+  assert.equal(enLine({ en: "x", numbers_match: true, protected_lost: true })?.text, "x"); // the English is never changed
 });
 
 test("no model: the detail view says Model not set up", () => {

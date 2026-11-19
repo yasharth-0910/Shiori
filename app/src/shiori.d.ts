@@ -1,7 +1,7 @@
 import type { Fixture } from "./types";
 
 export type Translated =
-  | { ok: true; items: Record<string, { en: string; numbers_match: boolean }> }
+  | { ok: true; items: Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }> }
   | { ok: false; reason: "no_model" | "no_document" | "failed" };
 
 export type Status = { doc_id: string; stage: string; pages: number | null; detail: string | null; error: string | null };

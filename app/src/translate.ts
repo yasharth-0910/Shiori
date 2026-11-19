@@ -3,14 +3,17 @@ import type { Field, Fixture } from "./types";
 
 export const MT_LABEL = "Machine translation";
 export const NUMBERS_NOTE = "numbers differ, check the Japanese";
+export const PROTECTED_NOTE = "a name or term was changed, check the Japanese"; // a masked span did not come back (D-87)
 
-export type Tr = { en: string; numbers_match: boolean };
+export type Tr = { en: string; numbers_match: boolean; protected_lost?: boolean };
 export type Reason = "no_model" | "no_document" | "failed";
 export type TrState = { status: "loading" } | { status: "ok"; items: Record<string, Tr> } | { status: "unavailable"; reason: Reason };
 
 /** What to show above one Japanese sentence: the English, its fixed label, and a note when the numbers check failed. */
 export function enLine(tr: Tr | undefined): { text: string; label: string; note: string | null } | null {
-  return tr ? { text: tr.en, label: MT_LABEL, note: tr.numbers_match ? null : NUMBERS_NOTE } : null;
+  if (!tr) return null;
+  const notes = [tr.numbers_match ? null : NUMBERS_NOTE, tr.protected_lost ? PROTECTED_NOTE : null].filter((n) => n !== null);
+  return { text: tr.en, label: MT_LABEL, note: notes.length ? notes.join("; ") : null };
 }
 
 export function unavailableText(reason: Reason): string {
