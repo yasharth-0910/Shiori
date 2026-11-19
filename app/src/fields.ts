@@ -42,19 +42,3 @@ export function countStates(fx: Fixture): Record<State, number> {
 const field = (fx: Fixture, id: string) => fx.fields.find((f) => f.field === id);
 export const titleOf = (fx: Fixture) => ({ en: field(fx, "title")?.value_en ?? null, ja: field(fx, "title")?.value_ja ?? null });
 export const issuerOf = (fx: Fixture) => field(fx, "issuer_org")?.value_en ?? null;
-
-// The current fixture export keeps no date text for deadlines, only citations. When an export adds an
-// ISO `datetime` to a bid item, it shows up here; until then the library shows a dash.
-export function deadlineOf(fx: Fixture): string | null {
-  for (const i of field(fx, "deadlines")?.items ?? []) {
-    const d = i.datetime?.slice(0, 10);
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  }
-  return null;
-}
-
-export function daysLeft(iso: string, today = new Date()): number {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  const start = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.round((Date.UTC(y, m - 1, d) - start) / 86400000);
-}

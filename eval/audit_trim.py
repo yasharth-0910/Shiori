@@ -42,7 +42,42 @@ EXTRA_LABELS = {
     "bid_bond": "Bid deposit (bond)",
     "delivery_location": "Delivery place",
 }
-NOT_FOUND_Q = "Does this document state this anywhere?"
+MAX_CANDIDATES = 4
+# Plain-English meaning of each Not found field, shown under the field name.
+FIELD_MEANING = {
+    "deadlines": "Submission deadline: the last date and time to hand in a bid",
+    "contact": "Contact: who to ask about the tender (office, phone or email)",
+    "bid_bond": "Bid deposit: money a bidder must pay before bidding",
+    "delivery_location": "Delivery place: where the goods or work must be delivered",
+}
+# Words searched in the ORIGINAL Japanese text (never normalized text) to find
+# candidate sentences for a Not found row. First the heading cues in
+# docs/field_schema.md, then broader body-text words for the same field.
+AUDIT_KEYWORDS = {
+    # schema cues, plus 締切/期限/日時 for body text like "期限までに提出すること"
+    "deadlines": (
+        "入札日時", "入札書の受領期限", "提出期限", "受付期間", "開札の日時",
+        "開札日時", "受領期限", "必着", "質問", "質疑", "入札説明会", "説明会",
+        "締切", "期限", "日時",
+    ),
+    # schema cues, plus spelling variants (問合せ) and phone/mail words
+    "contact": (
+        "問い合わせ先", "問合せ先", "問い合わせ", "問合せ", "連絡先", "担当",
+        "電話", "TEL", "FAX", "電子メール", "メールアドレス",
+    ),
+    # schema cue 入札保証金, plus the short form 保証金 used in body text
+    "bid_bond": ("入札保証金", "保証金"),
+    # schema cues, plus 納入先/納品先/履行地 used in specifications
+    "delivery_location": ("納入場所", "履行場所", "納入先", "納品先", "履行地"),
+}  # fmt: skip
+NOT_FOUND_ANSWER = "Not found"
+NOT_FOUND_Q = "Does any sentence in D answer this field?" + " (Yes / No / Unsure)"
+NOT_FOUND_WHICH = "Which number? (1-4, or none)"
+AUTO_CONFIRMED = "auto_confirmed_no_keyword_hit"
+AUTO_NOTE = (
+    "no keyword match in the document's sentences; this means no keyword match, "
+    "not proof of absence"
+)
 YNU = " (Yes / No / Unsure)"
 HEADERS = [
     "No",
@@ -55,7 +90,6 @@ HEADERS = [
     "Correct English (if wrong)",
     "Correct Japanese (if wrong)",
     "Comment",
-    "Where (page or section)?",
 ]
 
 # internal prefix -> plain English
@@ -90,6 +124,10 @@ class Sentences(Protocol):
 
     def next_of(self, doc: str, sid: str) -> tuple[str, str] | None:
         """(id, text) of the sentence after sid."""
+
+    def all_of(self, doc: str) -> list[tuple[str, str, str]]:
+        """(id, section, original text) of every sentence, in document order."""
+        ...
 
 
 def plain_json(obj: object) -> str | None:
@@ -220,6 +258,20 @@ def add_section(row: dict, lookup: Sentences) -> None:
         row["src"] = f"Section: {found[0]}\n{row['src']}"
 
 
+def candidates(
+    doc: str, field: str, lookup: Sentences, limit: int = MAX_CANDIDATES
+) -> list[tuple[str, str, str]]:
+    """Sentences whose original text contains a keyword of the field, best first:
+    most distinct keywords, then document order. (id, section, text)."""
+    words = AUDIT_KEYWORDS[field]
+    scored = []
+    for i, (sid, section, text) in enumerate(lookup.all_of(doc)):
+        hits = sum(w in text for w in words)
+        if hits:
+            scored.append((-hits, i, (sid, section, text)))
+    return [c for _, _, c in sorted(scored)[:limit]]
+
+
 def read_absent(
     docs: set[str], labels_dir: Path = LABELS_DIR
 ) -> dict[str, dict[str, str]]:
@@ -268,7 +320,8 @@ def not_found_rows(
 
 def build_rows(
     raw: list[dict], lookup: Sentences, absent: dict[str, dict[str, str]]
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
+    """(rows for the sheet, Not found rows dropped for having no keyword hit)."""
     prepared = []
     for r in raw:
         if is_empty_answer(r["en"]):
@@ -281,13 +334,15 @@ def build_rows(
     for r in chosen:
         finish_sentence(r, lookup)
         add_section(r, lookup)
-    nf = not_found_rows(absent, Counter(r["doc"] for r in chosen))
-    for r in nf:
+    nf, auto = [], []
+    for r in not_found_rows(absent, Counter(r["doc"] for r in chosen)):
         r["audit_no"] = None
+        r["candidates"] = candidates(r["doc"], r["field"], lookup)
+        (nf if r["candidates"] else auto).append(r)
     rows = sorted(chosen + nf, key=lambda r: (r["doc"], r["field"], r["no"]))
     for i, r in enumerate(rows, 1):
         r["no"] = i
-    return rows
+    return rows, auto
 
 
 class RealSentences:
@@ -307,15 +362,21 @@ class RealSentences:
             self.cache[doc] = [s for s in load_sentences(row) if s.language == "ja"]
         return self.cache[doc]
 
+    @staticmethod
+    def _section(s: Any) -> str:
+        titles = [
+            t or p for p, t in zip(s.section_path, s.section_titles, strict=False)
+        ]
+        return " > ".join(titles)
+
     def get(self, doc: str, sid: str) -> tuple[str, str] | None:
         for s in self._doc(doc):
             if s.id == sid:
-                titles = [
-                    t or p
-                    for p, t in zip(s.section_path, s.section_titles, strict=False)
-                ]
-                return " > ".join(titles), s.text_orig
+                return self._section(s), s.text_orig
         return None
+
+    def all_of(self, doc: str) -> list[tuple[str, str, str]]:
+        return [(s.id, self._section(s), s.text_orig) for s in self._doc(doc)]
 
     def next_of(self, doc: str, sid: str) -> tuple[str, str] | None:
         ss = self._doc(doc)
@@ -340,12 +401,24 @@ def open_docs(raw: list[dict]) -> tuple[dict[str, Any], list[tuple[str, str]]]:
     return keep, dropped
 
 
+def candidate_lines(r: dict) -> str:
+    """1) [p3_s15] section > text, one per line; the text is the original."""
+    return "\n".join(
+        f"{i}) [{sid}] {section + ' > ' if section else ''}{text}"
+        for i, (sid, section, text) in enumerate(r["candidates"], 1)
+    )
+
+
 def sheet_values(r: dict, docs: dict[str, Any]) -> list[str]:
     title = docs[r["doc"]].title_ja
-    base = [str(r["no"]), f"{title} [{r['doc']}]", r["field_label"]]
+    base = [str(r["no"]), f"{title} [{r['doc']}]"]
     if r.get("_not_found"):
-        return base + ["", "", NOT_FOUND_Q, "", "", "", "", ""]
-    return base + [r["src"], r["en"], "", "", "", "", "", ""]
+        field = f"{r['field_label']}\n{FIELD_MEANING[r['field']]}"
+        return base + [
+            field, candidate_lines(r), NOT_FOUND_ANSWER, NOT_FOUND_Q,
+            NOT_FOUND_WHICH, "", "", "",
+        ]  # fmt: skip
+    return base + [r["field_label"], r["src"], r["en"], "", "", "", "", ""]
 
 
 def item_ids(r: dict, registry: dict) -> list[str]:
@@ -386,57 +459,173 @@ def write_csv(rows: list[dict], docs: dict[str, Any], path: Path = CSV_OUT) -> N
             w.writerow(sheet_values(r, docs))
 
 
+NAVY, GREEN, SAND, WHITE = "2B4263", "2F6B4F", "F6EFE0", "FFFFFF"
+ANSWER_FILL, NF_FILL, LINE = "EEF5F0", "FFF3D6", "CFC8B4"
+WIDTHS = (6, 30, 18, 64, 38, 22, 22, 32, 32, 30)  # columns A to J
+
+
 def write_xlsx(rows: list[dict], docs: dict[str, Any], path: Path = XLSX_OUT) -> None:
+    """Colored sheet: navy question columns, green answer columns, rows shaded by
+    document, Not found rows in yellow. A 'Start here' tab holds the instructions."""
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.formatting.rule import CellIsRule
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.worksheet.datavalidation import DataValidation
 
-    font = "Yu Gothic"  # has Japanese glyphs on Windows and in Office on Mac
+    def fill(rgb: str) -> PatternFill:
+        return PatternFill("solid", fgColor=rgb)
+
+    thin = Side(style="thin", color=LINE)
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    jp = "Noto Sans JP"  # Excel and Sheets fall back to a Japanese font if missing
     wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.title = "Readers audit"
+    start = wb.active
+    assert start is not None
+    start.title = "Start here"
+    start.sheet_view.showGridLines = False
+    start.column_dimensions["A"].width = 3
+    start.column_dimensions["B"].width = 110
+    start.column_dimensions["C"].width = 90
+    start["B2"] = "Shiori: reader check"
+    start["B2"].font = Font(name="Arial", size=20, bold=True, color=NAVY)
+    start["B3"] = "Thank you for helping. This takes about 30 to 45 minutes."
+    start["B3"].font = Font(name="Arial", size=12, color="5A5446")
+    n_last = len(rows) + 1
+    guide = [
+        ("What this is", "A computer program read public Japanese procurement "
+         'documents and wrote short English answers. Each row on the "Audit" tab '
+         "shows the Japanese sentence and the English answer."),
+        ("What to do", "For each row, pick Yes, No or Unsure from the dropdowns in the "
+         "green columns. If the English is wrong, type the correct English (and "
+         "Japanese, if you can) in the next columns."),
+        ("Not found rows", 'Rows with a yellow cell say "Not found": the program found '
+         "nothing for that field. Column D lists up to 4 Japanese sentences from the "
+         "same document that might be about it. Pick Yes, No or Unsure in the first "
+         "green column for the whole group. In the next column type the number of the "
+         "sentence that answers it (1 to 4), or none. No need to search the PDF. The "
+         "sentences are picked by keyword, so No means none of these 4."),
+        ("If you are not sure", "Choose Unsure. That is a fine answer."),
+        ("Is this graded?", "No. Nothing here is graded and you are not being tested. "
+         "The program is."),
+        ("The documents", "All the documents are public."),
+    ]  # fmt: skip
+    for i, (label, text) in enumerate(guide, 5):
+        for col, val, bold in (("B", label, True), ("C", text, False)):
+            c = start[f"{col}{i}"]
+            c.value = val
+            c.font = Font(
+                name="Arial", size=11, bold=bold, color=NAVY if bold else None
+            )
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+            c.border = Border(bottom=thin)
+        start.row_dimensions[i].height = 96 if label == "Not found rows" else 48
+    start["B12"] = "Colour key"
+    start["B12"].font = Font(name="Arial", size=11, bold=True, color=NAVY)
+    key = [
+        ("Left columns (navy headers)", SAND,
+         "What the program produced. Please do not edit."),
+        ("Right columns (green headers)", ANSWER_FILL, "Your answers go here."),
+        ("Yellow cells", NF_FILL,
+         "Not found: the program found nothing for this field."),
+    ]  # fmt: skip
+    for i, (label, rgb, text) in enumerate(key, 13):
+        start[f"B{i}"] = label
+        start[f"B{i}"].fill = fill(rgb)
+        start[f"C{i}"] = text
+        for col in "BC":
+            start[f"{col}{i}"].font = Font(name="Arial", size=10)
+            start[f"{col}{i}"].border = box
+    start["B17"] = "Rows answered"
+    start["B17"].font = Font(name="Arial", size=11, bold=True, color=NAVY)
+    start["C17"] = f'=COUNTA(Audit!F2:F{n_last})&" of {len(rows)}"'
+    start["C17"].font = Font(name="Arial", size=11, bold=True)
+    ws = wb.create_sheet("Audit")
     ws.append(HEADERS)
     for r in rows:
         ws.append(sheet_values(r, docs))
-    for c in ws[1]:
-        c.font = Font(name=font, bold=True)
-        c.fill = PatternFill("solid", fgColor="DDDDDD")
-        c.alignment = Alignment(wrap_text=True, vertical="center")
-    for col, w in zip(
-        "ABCDEFGHIJK", (5, 30, 18, 60, 38, 15, 18, 30, 30, 30, 24), strict=True
-    ):
+    for j, c in enumerate(ws[1]):
+        c.font = Font(name="Arial", size=11, bold=True, color=WHITE)
+        c.fill = fill(NAVY if j < 5 else GREEN)
+        c.border = box
+        c.alignment = Alignment(
+            wrap_text=True,
+            vertical="center",
+            horizontal="center" if j in (0, 5, 6) else "left",
+        )
+    for col, w in zip("ABCDEFGHIJ", WIDTHS, strict=True):
         ws.column_dimensions[col].width = w
-    ws.row_dimensions[1].height = 48
+    ws.row_dimensions[1].height = 54
     ws.freeze_panes = "A2"
     dv = DataValidation(type="list", formula1='"Yes,No,Unsure"', allow_blank=True)
     ws.add_data_validation(dv)
+    shade, prev = SAND, None
     for i, r in enumerate(rows, 2):
-        for c in ws[i]:
-            c.font = Font(name=font)
-            c.alignment = Alignment(wrap_text=True, vertical="top")
-        if r.get("_not_found"):
-            ws.merge_cells(f"F{i}:G{i}")  # the question sits over both columns
-            ws.row_dimensions[i].height = 32
-        else:
-            dv.add(f"F{i}:G{i}")
+        if prev is not None and r["doc"] != prev:
+            shade = WHITE if shade == SAND else SAND
+        new_doc = r["doc"] != prev
+        prev = r["doc"]
+        nf = bool(r.get("_not_found"))
+        for j, c in enumerate(ws[i]):
+            answer = j >= 5
+            c.fill = fill(ANSWER_FILL if answer else shade)
+            if nf and j in (3, 4):
+                c.fill = fill(NF_FILL)
+            top = Side(style="medium", color=NAVY) if new_doc and i > 2 else thin
+            c.border = Border(left=thin, right=thin, top=top, bottom=thin)
+            c.font = Font(
+                name=jp if j in (1, 3) else "Arial",
+                size=10,
+                bold=j == 2,
+                italic=nf and j == 6,
+                color="9A9486" if nf and j == 6 else None,
+            )
+            c.alignment = Alignment(
+                wrap_text=True,
+                vertical="top",
+                horizontal="center" if j in (0, 5, 6) else "left",
+            )
+        dv.add(f"F{i}" if nf else f"F{i}:G{i}")
+    # Colored dropdown answers: Yes green, No red, Unsure amber.
+    for word, bg, fg in (
+        ("Yes", "CFE8D5", "1E5B33"),
+        ("No", "F6CFCB", "8A1F14"),
+        ("Unsure", "FBE7B5", "7A5300"),
+    ):
+        ws.conditional_formatting.add(
+            f"F2:G{n_last}",
+            CellIsRule(
+                operator="equal",
+                formula=[f'"{word}"'],
+                fill=PatternFill(bgColor=bg, fill_type="solid"),
+                font=Font(color=fg),
+            ),
+        )
+    wb.active = 1
     wb.save(path)
 
 
 INSTRUCTIONS = """\
 Reader's audit: instructions
 
-This sheet checks 45 short English answers that a computer program wrote after reading
-Japanese public tender documents. Each row shows the Japanese sentence, the English
-answer, and a question. Please tell us whether the English matches the Japanese.
+This sheet checks about 45 short English answers that a computer program wrote after
+reading Japanese public tender documents. Most rows show a Japanese sentence, the
+English answer, and a question. Please tell us whether the English matches the Japanese.
 
 It should take 30 to 45 minutes. If you cannot tell, write Unsure. That is fine.
 Nothing here is graded, and we are not testing you. We are testing the program.
 
 All the documents are public.
 
-Some rows ask "Does this document state this anywhere?" For those, write the page or
-section in the Where column, or "Not stated".
+A few rows say "Not found" in the English column. The program found nothing for that
+field, so there is no English to check. Column D lists up to 4 Japanese sentences from
+the same document that might be about the field (the field is explained in plain
+English in column C). Read them and answer:
+  - Column F: does any of those sentences answer the field? Yes, No or Unsure.
+  - Column G: if yes, type its number (1 to 4) over the printed text. If none,
+    type none.
+You do not need to search the PDF. If none of the sentences fit, "No" is the answer.
+The sentences are picked by keyword, so a "No" means none of these 4, not that the
+document never says it.
 
 Write your answer and any short note in the empty columns at the right.
 """
@@ -445,7 +634,7 @@ Write your answer and any short note in the empty columns at the right.
 def build() -> None:
     raw = json.loads(ROWS_IN.read_text())
     docs, dropped = open_docs(raw)
-    rows = build_rows(
+    rows, auto = build_rows(
         [r for r in raw if r["doc"] in docs],
         RealSentences(),
         read_absent(set(docs)),
@@ -453,6 +642,17 @@ def build() -> None:
     if len({r["doc"] for r in rows}) < MIN_DOCS:
         sys.exit(f"fewer than {MIN_DOCS} documents in the sheet")
     key = key_rows(rows, docs)
+    key += [
+        {
+            "no": None,
+            "doc": r["doc"],
+            "doc_id": r["doc_id"],
+            "field": r["field"],
+            "kind": AUTO_CONFIRMED,
+            "note": AUTO_NOTE,
+        }
+        for r in auto
+    ]
     write_csv(rows, docs)
     KEY_OUT.write_text(json.dumps(key, ensure_ascii=False, indent=1))
     INSTRUCTIONS_OUT.write_text(INSTRUCTIONS)
@@ -465,9 +665,16 @@ def build() -> None:
     print("xlsx:", xlsx)
     print("per field:", dict(Counter(r["field"] for r in rows)))
     print("per doc:", dict(Counter(r["doc"] for r in rows)))
-    print(
-        "Not found rows:", [(r["field"], r["doc"]) for r in rows if r.get("_not_found")]
-    )
+    ids = json.loads(ID_REGISTRY.read_text()) if ID_REGISTRY.exists() else {}
+    for r in rows + auto:
+        if r.get("_not_found"):
+            kept = r in rows
+            print(
+                f"Not found: item_ids={item_ids(r, ids)} doc={r['doc']} "
+                f"field={r['field']} keywords={AUDIT_KEYWORDS[r['field']]} "
+                f"candidates={len(r['candidates'])} "
+                f"{'kept' if kept else AUTO_CONFIRMED}"
+            )
 
 
 if __name__ == "__main__":

@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { daysLeft, deadlineOf, issuerOf, titleOf } from "./fields";
-import type { State } from "./status";
+import { issuerOf, titleOf } from "./fields";
+import { stateOf, type State } from "./status";
+import { bidDeadline, type Due } from "./summary";
 import type { Fixture } from "./types";
 
 type Sort = "deadline" | "recent";
 export type Doc = { fx: Fixture; counts: Record<State, number> };
+
+// Soonest upcoming deadline first, then closed ones (most recent first), then documents with none.
+const dueKey = (due: Due | null) => (!due ? 1e9 : due.days >= 0 ? due.days : 1e6 - due.days);
 
 export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => void }) {
   const [sort, setSort] = useState<Sort>("deadline");
@@ -12,10 +16,10 @@ export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => voi
   const [note, setNote] = useState("");
 
   const rows = docs
-    .map((d, i) => ({ d, i, t: titleOf(d.fx), issuer: issuerOf(d.fx), due: deadlineOf(d.fx) }))
+    .map((d, i) => ({ d, i, t: titleOf(d.fx), issuer: issuerOf(d.fx), due: bidDeadline(d.fx, (f) => stateOf(f, d.fx.sentences)) }))
     .filter((r) => `${r.t.en ?? ""} ${r.t.ja ?? ""} ${r.issuer ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))
     .sort((a, b) =>
-      sort === "recent" ? b.i - a.i : (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.i - b.i,
+      sort === "recent" ? b.i - a.i : dueKey(a.due) - dueKey(b.due) || a.i - b.i,
     );
 
   // Importing needs the pipeline, which this window does not run yet.
@@ -58,7 +62,7 @@ export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => voi
         </thead>
         <tbody>
           {rows.map(({ d, t, issuer, due }) => {
-            const n = due ? daysLeft(due) : null;
+            const n = due ? due.days : null;
             return (
               <tr key={d.fx.doc_id}>
                 <td>
@@ -69,8 +73,8 @@ export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => voi
                 <td className="num">
                   {due ? (
                     <>
-                      {due}
-                      <div className="meta">{n === null ? "" : n < 0 ? "Closed" : n === 0 ? "Due today" : `${n} days left`}</div>
+                      {due.when}
+                      <div className="meta">{n === null ? "" : n < 0 ? "Closed" : n === 0 ? "Due today" : n === 1 ? "1 day left" : `${n} days left`}</div>
                     </>
                   ) : (
                     "—"

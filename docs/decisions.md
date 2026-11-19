@@ -784,6 +784,24 @@ Context: the native-reader audit sheet (`eval/audit_trim.py`) is easier to fill 
 Decision: add `openpyxl` to the `dev` dependency group. License: MIT (its one dependency, `et-xmlfile`, is MIT too). Dev-time only: `eval/` imports it lazily and nothing in `core/`, `sidecar/` or `app/` does. The CSV and the key file are written without it.
 Note: added to `pyproject.toml` on 2026-11-19 from a session with no network, so `uv.lock` was not refreshed. Run `uv sync` once online to install it and update the lock.
 
+## D-80: The app fixture carries datetime, kind and polarity on list items
+
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: D-77 left two gaps. Deadline items had no English text, so the Summary showed no deadline lines and the Library had no date. Eligibility items had no polarity, so a disqualification read like a requirement ("Eligibility item: ...").
+Decision: `scripts/export_app_fixture.py` now copies `datetime`, `kind` and `polarity` from each label item, only when the label has them. Nothing is parsed from text; the values are the label's own normalized fields (stand-ins for model output, as before). The Summary builds deadline lines from `kind` and `datetime`, and eligibility lines read "Must: ..." or "Cannot bid if: ...". The Library deadline is the earliest upcoming bid deadline (`bid_in_person`, `mail_arrival`, `electronic`) of a Verified `deadlines` field. Why: the Summary has to show when bids are due and say requirement versus exclusion, or a reader could take "persons under suspension" as a thing they must be.
+Known limits: `kind` is the label's code, mapped to wording in the app. Items with a relative rule instead of a date (`relative_text`, e.g. a document-request period) are not exported and give no line. Flags such as `arrival_required` are not exported, so mail reads "(by mail)" with no "must arrive". A requirement whose English text already starts with "Must not ..." reads "Must: Must not ...". The dev fixture document has no bid-kind deadline (its items are question and other), so its Library deadline is a dash.
+Consequences: no change to `status.ts`, `core/`, `sidecar/`, `eval/` or `data/`. `deadlineOf` and `daysLeft` moved from `fields.ts` to `summary.ts` so the node tests can import them.
+
+## D-81: Not found rows in the readers' audit show keyword candidates
+
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: the first audit sheet asked the native reader to search the PDF for a field our labels mark `absent`. That is slow and the reader may not know where to look.
+Decision: `eval/audit_trim.py` now picks up to 4 candidate sentences per Not found row. A sentence is a candidate when its original text (never the normalized text) contains a keyword from `AUDIT_KEYWORDS` (heading cues from `docs/field_schema.md` plus broader body-text words, one comment per field). Ranking is the number of distinct keywords in the sentence, then document order. The reader answers Yes / No / Unsure for the group and gives the sentence number. A row whose document has zero keyword hits is dropped from the sheet and written to the key as `auto_confirmed_no_keyword_hit`. The "Where" column is gone.
+Known limits: a keyword match is not understanding. A document can state the field in words the list misses (a different spelling, a table, a scanned page read badly), so "no keyword hit" means no keyword match, not proof of absence, and "No" from the reader means none of these 4, not that the document never says it. Overlapping keywords (問い合わせ and 問い合わせ先) count twice and favor sentences that use the longer form. Broad words such as 担当 and 期限 give weak candidates; the 4-sentence cap can push the real one out. Auto-confirmed rows are not checked by anyone, so they count as a weaker kind of agreement with the label than a reader's No.
+Consequences: the sheet has fewer rows when a Not found row is auto-confirmed (43 instead of 45 on the first build). No change to labels, `core/`, `sidecar/`, `app/` or the test split.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

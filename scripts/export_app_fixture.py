@@ -42,8 +42,11 @@ def main(prefix: str) -> None:
     for line in labels[0].read_text().splitlines():
         lab = json.loads(line)
         items = (lab["normalized"] or {}).get("items") if isinstance(lab["normalized"], dict) else None
+        # datetime (deadlines), kind (deadlines, eligibility) and polarity (eligibility) are copied
+        # as the label stores them, only when it has them (D-80); nothing is parsed from text here.
         items = [
             {"text_ja": i.get("text_ja"), "text_en": i.get("text_en"), "citations": i.get("citations", [])}
+            | {k: i[k] for k in ("datetime", "kind", "polarity") if i.get(k) is not None}
             for i in items or []
         ]
         ids = list(dict.fromkeys(lab["citations"] + [c for i in items for c in i["citations"]]))

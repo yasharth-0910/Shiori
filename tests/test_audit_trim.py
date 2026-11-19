@@ -7,9 +7,13 @@ from types import SimpleNamespace
 import pytest
 
 from eval.audit_trim import (
+    AUDIT_KEYWORDS,
+    AUTO_CONFIRMED,
     HEADERS,
+    NOT_FOUND_ANSWER,
     NOT_FOUND_Q,
     build_rows,
+    candidates,
     clean_en,
     drop_duplicates,
     finish_sentence,
@@ -30,8 +34,16 @@ def row(no: int, doc: str, field: str, ja: str, en: str = "ok", src: str = "") -
 class Fake:
     """Stands in for the extractor cache."""
 
-    def __init__(self, nxt: tuple[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        nxt: tuple[str, str] | None = None,
+        sents: dict[str, list[tuple[str, str, str]]] | None = None,
+    ) -> None:
         self.nxt = nxt
+        self.sents = sents or {}
+
+    def all_of(self, doc: str) -> list[tuple[str, str, str]]:
+        return self.sents.get(doc, [])
 
     def get(self, doc: str, sid: str) -> tuple[str, str] | None:
         return ("1 > (2)", "text")
@@ -109,7 +121,7 @@ def labels(tmp_path, doc: str, absent: list[str]) -> None:
     )
 
 
-def test_not_found_rows_hide_the_marker(tmp_path):
+def test_not_found_rows_one_per_doc(tmp_path):
     labels(tmp_path, "aaaaaaaa", ["contact", "deadlines"])
     labels(tmp_path, "bbbbbbbb", ["contact"])
     labels(tmp_path, "dddddddd", ["bid_bond"])
@@ -118,25 +130,71 @@ def test_not_found_rows_hide_the_marker(tmp_path):
     nf = not_found_rows(absent, Counter())
     assert {r["field"] for r in nf} >= {"deadlines", "contact", "bid_bond"}
     assert len({r["doc"] for r in nf}) == len(nf)  # each from a different document
-    docs = {
-        d: SimpleNamespace(title_ja="題") for d in ("aaaaaaaa", "bbbbbbbb", "cccccccc")
+
+
+S = {
+    "d0": [
+        ("p1_s1", "1 > 入札", "本件の連絡先は総務課。電話 03-0000-0000。"),
+        ("p1_s2", "1", "担当者は別途通知する。"),
+        ("p1_s3", "2", "関係のない文。"),
+        ("p1_s4", "2", "問い合わせ先はこちら。"),
+        ("p1_s5", "2", "担当へ電話すること。"),
+        ("p1_s6", "2", "連絡先を記入する。"),
+    ],
+    "d1": [("p1_s1", "1", "期限と関係ない文")],  # 期限 hits deadlines
+    "d2": [("p1_s1", "1", "何も関係がない")],
+}
+
+
+def test_candidates_rank_by_hits_then_order_and_stay_verbatim():
+    got = candidates("d0", "contact", Fake(sents=S))
+    assert len(got) == 4
+    assert got[0][0] == "p1_s1"  # 連絡先 + 電話 = 2 hits, first in order
+    # p1_s4 and p1_s5 also have 2 hits (問い合わせ先 contains 問い合わせ); p1_s2 has 1
+    assert [c[0] for c in got[1:]] == ["p1_s4", "p1_s5", "p1_s2"]
+    texts = {t for _, _, t in S["d0"]}
+    assert all(c[2] in texts for c in got)  # original text, not normalized
+    assert all(w for w in AUDIT_KEYWORDS["bid_bond"])
+    assert candidates("d2", "contact", Fake(sents=S)) == []
+
+
+def test_not_found_rows_show_candidates_and_zero_hits_are_auto_confirmed():
+    raw = [row(i, f"d{i % 9}", "eligibility", f"条件{i}。") for i in range(100, 130)]
+    absent = {
+        "contact": {"d0": "d0" + "x" * 62},
+        "deadlines": {"d1": "d1" + "x" * 62},
+        "bid_bond": {"d2": "d2" + "x" * 62},
     }
-    vals = sheet_values(nf[0], docs)
-    assert vals[5] == NOT_FOUND_Q and vals[4] == ""
-    assert "not found" not in " ".join(vals).lower()
+    rows, auto = build_rows(raw, Fake(sents=S), absent)
+    nf = [r for r in rows if r.get("_not_found")]
+    assert {r["doc"] for r in nf} == {"d0", "d1"}
+    assert all(r["candidates"] for r in nf)  # none left with an empty list
+    assert [(r["doc"], r["field"]) for r in auto] == [("d2", "bid_bond")]
+    assert [r["no"] for r in rows] == list(range(1, len(rows) + 1))
+    docs = {d: SimpleNamespace(title_ja="題") for d in ("d0", "d1")}
+    vals = sheet_values(next(r for r in nf if r["doc"] == "d0"), docs)
     assert len(vals) == len(HEADERS)
+    assert vals[3].startswith("1) [p1_s1] 1 > 入札 > 本件の連絡先は総務課")
+    assert vals[3].count("\n") == 3  # 4 candidates
+    assert vals[4] == NOT_FOUND_ANSWER and vals[5] == NOT_FOUND_Q
+    assert vals[6].startswith("Which number?")
+    assert AUTO_CONFIRMED == "auto_confirmed_no_keyword_hit"
 
 
 def test_build_rows_numbers_and_counts():
     raw = [row(i, f"d{i % 9}", "eligibility", f"条件{i}。") for i in range(100, 130)]
     raw += [row(i, f"d{i % 9}", "deadlines", f"期限{i}。") for i in range(200, 215)]
-    absent = {"contact": {"d0": "d0" + "x" * 62}, "deadlines": {"d1": "d1" + "x" * 62}}
-    rows = build_rows(raw, Fake(), absent)
+    absent = {"contact": {"d0": "d0" + "x" * 62}}
+    rows, _ = build_rows(raw, Fake(sents=S), absent)
     assert [r["no"] for r in rows] == list(range(1, len(rows) + 1))
-    assert sum(1 for r in rows if r.get("_not_found")) == 2
+    assert sum(1 for r in rows if r.get("_not_found")) == 1
     assert all(
         r["src"].startswith("Section: ") for r in rows if not r.get("_not_found")
     )
+    # the sentence rows keep their ten columns, minus the removed Where column
+    docs = {f"d{i}": SimpleNamespace(title_ja="題") for i in range(9)}
+    plain = next(r for r in rows if not r.get("_not_found"))
+    assert len(sheet_values(plain, docs)) == len(HEADERS) == 10
 
 
 def test_xlsx_dropdowns_and_freeze(tmp_path):
@@ -144,12 +202,18 @@ def test_xlsx_dropdowns_and_freeze(tmp_path):
     docs = {"d1": SimpleNamespace(title_ja="題")}
     rows = [
         {**row(1, "d1", "eligibility", "あ。"), "no": 1},
-        {**row(2, "d1", "contact", ""), "no": 2, "_not_found": True},
+        {
+            **row(2, "d1", "contact", ""),
+            "no": 2,
+            "_not_found": True,
+            "candidates": [("p1_s1", "1", "連絡先")],
+        },
     ]
     p = tmp_path / "a.xlsx"
     write_xlsx(rows, docs, p)
     ws = openpyxl.load_workbook(p).active
     assert ws.freeze_panes == "A2"
     assert [c.value for c in ws[1]] == HEADERS
-    assert "F2:G2" in str(ws.data_validations.dataValidation[0].sqref)
-    assert "F3:G3" in [str(m) for m in ws.merged_cells.ranges]
+    sqref = str(ws.data_validations.dataValidation[0].sqref)
+    assert "F2:G2" in sqref and "F3" in sqref
+    assert not ws.merged_cells.ranges
