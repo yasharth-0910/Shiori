@@ -579,9 +579,12 @@ def extract_lists(
     sentences: list[Sentence],
     complete: Complete,
     stats: list[CallStat] | None = None,
+    on_field: Callable[[Extracted], None] | None = None,
 ) -> dict[str, Extracted]:
     """The list fields the model found and the checks kept. A field with no retrieved
-    sentence makes no call; a failed call or an answer with nothing left is not found."""
+    sentence makes no call; a failed call or an answer with nothing left is not found.
+    `on_field`, when given, is called with each answer as soon as its field is done (a progress
+    hook for the app; it changes nothing)."""
     ss = [s for s in sentences if s.language == "ja"]
     by_id = {s.id: s for s in ss}
     out: dict[str, Extracted] = {}
@@ -626,4 +629,6 @@ def extract_lists(
             continue
         ids = list(dict.fromkeys(i for it in items for i in it["citations"]))
         out[fld] = Extracted(field=fld, value_ja=_value_ja(fld, items, by_id), normalized=normalized, citations=ids)  # fmt: skip
+        if on_field is not None:
+            on_field(out[fld])
     return out

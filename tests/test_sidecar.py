@@ -675,20 +675,39 @@ def test_status_events_and_cursor(tmp_path):
             e for e in evs if e["kind"] == "answer" and e["field"] == "eligibility"
         )
         assert ans["value_ja"].startswith("指名停止") and ans["page"] == 1
-        chk = next(
-            e for e in evs if e["kind"] == "check" and e["field"] == "eligibility"
-        )
-        assert chk["exact"] is True  # value_in_citation really passed
+        assert (
+            ans["exact"] is True
+        )  # the stored value_in_citation check, on the answer card itself
+        assert {e["kind"] for e in evs} <= {
+            "answer",
+            "reading",
+            "none",
+        }  # no separate check events
+        assert (
+            len(
+                [
+                    e
+                    for e in evs
+                    if e["kind"] == "answer" and e["field"] == "eligibility"
+                ]
+            )
+            == 1
+        )  # one card per field
         assert not any(
-            e["kind"] == "check" and e["field"] == "title" for e in evs
-        )  # an absent field has no check
+            e["field"] == "title" for e in evs
+        )  # an absent field has no card
+        fields = srv.call("GET", f"/documents/{doc_id}/fields")[1]["fields"]
+        for e in (
+            e for e in evs if e["kind"] == "answer"
+        ):  # the card says what the stored check says
+            f = next(f for f in fields if f["field"] == e["field"])
+            assert e["exact"] == next(
+                (c["passed"] for c in f["checks"] if c["name"] == "value_in_citation"),
+                None,
+            )
         # measured per-step seconds and counts
         assert {"ingest", "segment", "retrieve", "extract"} <= set(got["seconds"])
-        assert (
-            got["sentences"]
-            and got["fields_total"] == 23 - 0
-            or got["fields_total"] > 0
-        )
+        assert got["sentences"] and got["fields_total"] > 0
         assert got["answered"] >= 1 and got["stage_elapsed"] is None
         # the cursor: only newer events, none when nothing is new
         assert events_of(srv, doc_id, cursor)[0] == []
@@ -785,12 +804,14 @@ def test_cancel_check_comes_before_each_model_call(monkeypatch):
     m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
     first = FakeClient.calls
     assert first >= 1
-    cands = [e for e in job.events if e["kind"] == "candidates"]
-    assert (
-        cands and cands[0]["field"] == "eligibility" and cands[0]["count"] == 1
-    )  # one event per field
-    assert cands[0]["text"] == "競争参加資格" and cands[0]["page"] == 0
-    assert len([e for e in cands if e["field"] == "eligibility"]) == 1
+    cands = [e for e in job.events if e["kind"] == "reading"]
+    assert [e["field"] for e in cands] == [
+        "eligibility"
+    ]  # one reading event per field, however many calls
+    assert cands[0]["count"] == 1 and cands[0]["sentences"] == [{"page": 0, "section": "競争参加資格", "text": "競争参加資格"}]  # fmt: skip
+    assert [e["field"] for e in job.events if e["kind"] == "none"] == [
+        "eligibility"
+    ]  # read, nothing answered
     job.cancel = True
     with pytest.raises(server.Cancelled):
         m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
@@ -810,6 +831,58 @@ def test_no_event_text_reaches_the_logs(tmp_path, caplog):
     assert any(e["kind"] == "answer" for e in evs)
     text = "\n".join(r.getMessage() for r in caplog.records)
     for e in evs:
-        for v in (e.get("value_ja"), e.get("text")):
+        for v in (e.get("value_ja"), *(x["text"] for x in e.get("sentences", []))):
             assert not v or v not in text
     assert "指名停止" not in text and "invented.pdf" not in text
+
+
+def test_each_group_answer_arrives_as_the_group_finishes(monkeypatch):
+    """The answer card of eligibility is in the stream before the model is asked about deadlines."""
+    from shiori_core.models import Sentence
+    from shiori_core.normalize import normalize
+
+    from sidecar import __main__ as m
+    from sidecar import server
+
+    ok = "予算決算及び会計令第71条の規定に該当しない者であること。"
+    texts = [("h_s1", "競争参加資格", ["競争参加資格"]), ("h_s2", ok, ["競争参加資格"]), ("h_s3", "入札書の受領期限　令和８年10月21日17時00分", ["入札書の受領期限"])]  # fmt: skip
+    ss = []
+    for i, t, titles in texts:
+        norm, mp = normalize(t)
+        ss.append(Sentence(id=i, page=1, section_path=[], section_titles=titles, text_orig=t, text_norm=norm, norm_to_orig=mp, boxes=[]))  # fmt: skip
+    job = server.Job("x", Path("x.pdf"), "notice")
+    job.ja = {s.id: s for s in ss}
+    monkeypatch.setattr(server, "_running", job)
+    seen: dict[str, list[str]] = {}
+
+    class FakeClient:
+        def complete(self, system, user, schema, max_out):
+            f = user.split("Field: ", 1)[1].split("\n", 1)[0]
+            seen[f] = [
+                e["kind"] + ":" + e["field"] for e in job.events
+            ]  # the stream when this call began
+            if f == "eligibility":
+                it = {
+                    "kind": "legal",
+                    "polarity": "requirement",
+                    "text_ja": ok,
+                    "citations": ["h_s2"],
+                }
+                return json.dumps({"items": [it]}, ensure_ascii=False)
+            return '{"items": []}'
+
+    out = m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
+    assert "eligibility" in out
+    assert (
+        "answer:eligibility" in seen["deadlines"]
+    )  # shown before the next group is asked
+    assert (
+        "reading:eligibility" in seen["eligibility"]
+        and "reading:deadlines" not in seen["eligibility"]
+    )
+    ans = next(e for e in job.events if e["kind"] == "answer")
+    assert ans["value_ja"] == ok and ans["page"] == 1 and ans["exact"] is True
+    assert [e["field"] for e in job.events if e["kind"] == "none"] == [
+        "deadlines",
+        "required_documents",
+    ]  # read, nothing: one card each

@@ -540,3 +540,33 @@ def test_client_sends_the_api_key_as_a_bearer_token(key, want) -> None:
     finally:
         srv.server_close()
     assert out == "{}" and seen == [want]
+
+
+def test_on_field_is_optional_and_changes_nothing() -> None:
+    ok = {"kind": "legal", "polarity": "requirement", "text_ja": "予算決算及び会計令第71条の規定に該当しない者であること。", "citations": ["h_s3"]}  # fmt: skip
+    answers = {
+        "eligibility": {"items": [ok]},
+        "deadlines": {"items": []},
+        "required_documents": {"items": []},
+    }
+    order: list[str] = []
+
+    def complete(system: str, user: str, schema: dict, max_out: int) -> str:
+        f = user.split("Field: ")[1].split("\n")[0]
+        order.append("call:" + f)
+        return json.dumps(answers[f], ensure_ascii=False)
+
+    plain = llm.extract_lists("notice", DOC, complete)
+    order.clear()
+    seen = []
+
+    def on_field(x) -> None:
+        seen.append(x.field)
+        order.append("done:" + x.field)
+
+    hooked = llm.extract_lists("notice", DOC, complete, on_field=on_field)
+    assert hooked == plain  # the same answers, field by field
+    assert seen == ["eligibility"]
+    assert order.index("done:eligibility") < order.index(
+        "call:deadlines"
+    )  # called as the field finishes

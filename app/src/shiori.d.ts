@@ -6,9 +6,9 @@ export type Translated =
 
 // A live event from the pipeline (D-90). Text fields are Japanese from the document; they go to the screen only.
 export type ProcEvent =
-  | { n: number; kind: "candidates"; field: string; count: number; page: number; section: string; text: string }
-  | { n: number; kind: "answer"; field: string; value_ja: string; page: number | null }
-  | { n: number; kind: "check"; field: string; exact: boolean | null };
+  | { n: number; kind: "reading"; field: string; count: number; sentences: { page: number; section: string; text: string }[] }
+  | { n: number; kind: "answer"; field: string; value_ja: string; page: number | null; exact: boolean | null }
+  | { n: number; kind: "none"; field: string };
 
 // Everything past `error` is what the sidecar measured or counted; absent while the model loads.
 export type Status = {

@@ -52,7 +52,8 @@ STAGES = (
     "cancelled",
 )
 MAX_EVENTS = 200  # the live stream keeps this many, newest last (D-90)
-SHOWN_CHARS = 200  # a sentence or value in an event is cut to this
+SHOWN_CHARS = 200  # a sentence in an event is cut to this
+VALUE_CHARS = 400  # an answer value in an event is cut to this
 DOC_TYPES = {t for s in SPECS for t in s.applies_to}
 
 # (doc_type, Japanese sentences) -> {field: Extracted}. `rules.extract` and, when a
@@ -137,6 +138,11 @@ def _item(raw: dict) -> Item:
     )
 
 
+def _prepared(fid: str, x: Extracted) -> Extracted:
+    """A text field (title, issuer_org) has no normalized value: rules write {}, the schema wants null."""
+    return x.model_copy(update={"normalized": x.normalized or None}) if BY_ID[fid].model is None else x  # fmt: skip
+
+
 def build_fields(
     doc_id: str,
     filename: str,
@@ -155,8 +161,7 @@ def build_fields(
             out.append(Field(field=fid, status="absent", value_en=None, value_ja=None, normalized=None,
                              items=[], citations=[], checks=[], ))  # fmt: skip
             continue
-        # a text field (title, issuer_org) has no normalized value: rules write {}, the schema wants null
-        x = x.model_copy(update={"normalized": x.normalized or None}) if BY_ID[fid].model is None else x  # fmt: skip
+        x = _prepared(fid, x)
         items = [_item(i) for i in ((x.normalized or {}).get("items") or [])] if x.status == "present" else []  # fmt: skip
         ids = list(
             dict.fromkeys([*x.citations, *(c for i in items for c in i.citations)])
@@ -227,6 +232,12 @@ class Job:
     seconds: dict[str, float] = field(
         default_factory=dict
     )  # measured, per finished stage
+    ja: dict[str, Sentence] = field(
+        default_factory=dict
+    )  # Japanese sentences, for the answer cards' checks
+    emitted: set[str] = field(
+        default_factory=set
+    )  # fields that already have an answer card
     t0: float = field(default_factory=time.monotonic)  # when the current stage began
     sentences: int | None = None  # Japanese sentences after segmentation
     answered: int = 0  # fields with an answer so far
@@ -277,8 +288,22 @@ def check_cancel() -> None:
         _running.check_cancel()
 
 
-def _cut(text: str) -> str:
-    return text if len(text) <= SHOWN_CHARS else text[:SHOWN_CHARS] + "…"
+def _cut(text: str, n: int = SHOWN_CHARS) -> str:
+    return text if len(text) <= n else text[:n] + "…"
+
+
+def emit_answer(x: Extracted) -> None:
+    """One answer card for a field, as soon as it is known: the Japanese value, its page and
+    `exact` = the stored value_in_citation check (the same run_checks the fields use), null when
+    none is stored. Once per field. Called by the rules stage and the model wrapper (D-90)."""
+    j = _running
+    if j is None or x.field in j.emitted:
+        return
+    j.emitted.add(x.field)
+    j.answered = len(j.emitted)
+    checks = dict(run_checks(_prepared(x.field, x), j.doc_type, j.ja))
+    first = j.ja.get(x.citations[0]) if x.citations else None
+    j.emit("answer", field=x.field, value_ja=_cut(x.value_ja, VALUE_CHARS), page=first.page if first else None, exact=checks.get("value_in_citation"))  # fmt: skip
 
 
 class Worker:
@@ -349,7 +374,7 @@ class Worker:
         job.go("segment")
         doc.sentences = segment(doc.pages)
         sents = doc.sentences
-        ja = {s.id: s for s in sents if s.language == "ja"}
+        ja = job.ja = {s.id: s for s in sents if s.language == "ja"}
         job.sentences = len(ja)
         job.abbreviations = find_abbreviations(s.text_norm for s in ja.values())
         log.info("segmented doc=%s sentences=%d", job.doc_id[:8], len(sents))
@@ -362,17 +387,12 @@ class Worker:
             got = extract(job.doc_type, sents)
             found |= got
             job.answered = len(found)
-            for fid, x in got.items():
-                first = ja.get(x.citations[0]) if x.citations else None
-                job.emit("answer", field=fid, value_ja=_cut(x.value_ja), page=first.page if first else None)  # fmt: skip
+            for fid in FIELD_IDS:  # one card per field, in field order; those the model wrapper sent already are skipped
+                if fid in got:
+                    emit_answer(got[fid])
         job.check_cancel()
         job.go("verify")
         job.result = build_fields(job.doc_id, doc.filename, job.doc_type, sents, found)
-        for f in job.result.fields:
-            if f.status == "absent":
-                continue
-            exact = next((c.passed for c in f.checks if c.name == "value_in_citation"), None)  # fmt: skip
-            job.emit("check", field=f.field, exact=exact)
         log.info("verified doc=%s fields=%d", job.doc_id[:8], len(found))
         off = found.get(
             "contracting_officer"

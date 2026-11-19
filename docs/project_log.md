@@ -223,6 +223,7 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 
 ### Achieved
 - Step 1 (2026-11-19, D-75): Electron + React + Vite shell in `app/`, PDF.js viewer, fields panel from a fixture of one open dev document, citation chip jumps to the page and draws the box. `tests/test_app_no_network.py`. Checked by screenshot at devicePixelRatio 2 (p1 title line, p4 issuer line).
+- Live Processing screen (2026-11-20, D-90): events with a cursor in the status call, per-group "Now reading" cards with the sentences given to the model, one answer card per field as its group finishes (`on_field`, an optional callback in `llm.extract_lists`), cooperative cancel. Check on notice-2aa7506a with the real Qwen3.5-9B model, run through the sidecar before and after the callback: the fields JSON (23 fields: status, value_ja, citations, items, normalized, checks) is byte-identical (`cmp`), 14 fields answered both times. Real-app checks: mid-extraction cards, Cancel (Library back after 125 s: the model call in progress had to finish; sidecar logged cancel_asked then job_cancelled, no later model call), 640 px window (one column, no sideways scroll), prefers-reduced-motion (computed animation none).
 ### Changed from the plan (what, why, decision number)
 ### Fallbacks taken
 ### Missed or still open

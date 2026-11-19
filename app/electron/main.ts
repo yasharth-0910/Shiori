@@ -83,10 +83,13 @@ function serve(request: Request): Response {
   return new Response(new Uint8Array(fs.readFileSync(file)), { headers: { "content-type": type } });
 }
 
+// Dev checks only (off in a packaged app, like SHIORI_SHOT): SHIORI_SHOT_SIZE=640x860 sets the window size.
+const devSize = (app.isPackaged ? undefined : process.env.SHIORI_SHOT_SIZE)?.split("x").map(Number) as [number, number] | undefined;
+
 async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    width: devSize?.[0] ?? 1280,
+    height: devSize?.[1] ?? 860,
     show: !process.env.SHIORI_SHOT,
     titleBarStyle: "hiddenInset",
     webPreferences: {
@@ -109,9 +112,20 @@ async function createWindow(): Promise<void> {
   // opens that field and then saves the usual shot.
   const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE;
   const shotOpen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_OPEN;
+  // SHIORI_SHOT_WHEN="label::<js expression>|||label2::<expr>": saves <shot>-<label>.png the first time each expression is
+  // true in the page, in order, logs a layout and animation probe, then quits. SHIORI_SHOT_CANCEL=1: clicks Cancel once the
+  // first "Now reading" card shows, logs how long the Library takes to come back, saves <shot>-cancelled.png, waits 25 s, quits.
+  // SHIORI_SHOT_MEDIA=reduce emulates prefers-reduced-motion.
+  const shotWhen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_WHEN;
+  const shotCancel = app.isPackaged ? undefined : process.env.SHIORI_SHOT_CANCEL;
+  const shotMedia = app.isPackaged ? undefined : process.env.SHIORI_SHOT_MEDIA;
   if (shot) {
     win.webContents.on("console-message", (e) => console.log("renderer:", e.message));
     setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, process.env.SHIORI_MODEL ? 900000 : 30000);
+    if (shotMedia === "reduce") {
+      win.webContents.debugger.attach("1.3");
+      await win.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    }
     if (PICK) {
       // With SHIORI_PICK also set: click "Add document", log the stage shown on the Processing screen each time it changes.
       await win.webContents.executeJavaScript(
@@ -131,6 +145,35 @@ async function createWindow(): Promise<void> {
           console.log("stage shot saved: " + stg);
         });
       }, 300);
+    }
+    const waitFor = (expr: string) =>
+      win.webContents.executeJavaScript(`new Promise(r => { const t = setInterval(() => { if (${expr}) { clearInterval(t); r(true); } }, 200); })`);
+    const probe = `JSON.stringify({ width: innerWidth, columns: getComputedStyle(document.querySelector(".processing")).gridTemplateColumns, ` +
+      `reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches, evAnimation: document.querySelector(".ev:not(.scan)") && getComputedStyle(document.querySelector(".ev:not(.scan)")).animationName, ` +
+      `skeletonAnimation: document.querySelector(".sk") && getComputedStyle(document.querySelector(".sk")).animationName, ` +
+      `nameLines: document.querySelector(".pname") && Math.round(document.querySelector(".pname").getBoundingClientRect().height / parseFloat(getComputedStyle(document.querySelector(".pname")).lineHeight)), ` +
+      `cards: [...document.querySelectorAll(".evlist > .ev")].map(c => c.className + ":" + (c.dataset.field ?? "")), pageScrollsSideways: document.documentElement.scrollWidth > innerWidth })`;
+    for (const item of shotWhen ? shotWhen.split("|||") : []) {
+      const [label, expr] = item.split("::") as [string, string];
+      await waitFor(expr);
+      await new Promise((r) => setTimeout(r, 600)); // let the card finish arriving
+      fs.writeFileSync(shot.replace(/(\.png)?$/, "-" + label + ".png"), (await win.webContents.capturePage()).toPNG());
+      console.log("when shot saved: " + label + " " + (await win.webContents.executeJavaScript(probe)));
+    }
+    if (shotWhen) return app.quit(); // quit, not exit: will-quit stops the llama-server and the sidecar
+    if (shotCancel) {
+      await waitFor(`document.querySelector(".ev.read.now")`);
+      const t0 = Date.now();
+      console.log("cancel: clicking, screen shows: " + (await win.webContents.executeJavaScript(`document.querySelector(".stepper .step.active")?.textContent`)));
+      await win.webContents.executeJavaScript(`[...document.querySelectorAll("button")].find((b) => b.textContent === "Cancel")?.click()`);
+      await new Promise((r) => setTimeout(r, 1000));
+      console.log("cancel: 1 s later the button says: " + (await win.webContents.executeJavaScript(`[...document.querySelectorAll(".pfoot button")].map((b) => b.textContent).join()`)));
+      await waitFor(`[...document.querySelectorAll("button")].some((b) => b.textContent === "Add document")`);
+      console.log(`cancel: Library is back after ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      fs.writeFileSync(shot.replace(/(\.png)?$/, "-cancelled.png"), (await win.webContents.capturePage()).toPNG());
+      await new Promise((r) => setTimeout(r, 25000));
+      console.log("cancel: 25 s later the screen shows: " + (await win.webContents.executeJavaScript(`document.body.innerText.slice(0, 120).replace(/\\n/g, " | ")`)));
+      return app.quit();
     }
     const chip = Number(process.env.SHIORI_CHIP ?? 0);
     await win.webContents.executeJavaScript(

@@ -27,6 +27,7 @@ from sidecar.server import (
     bind_loopback,
     check_cancel,
     create_app,
+    emit_answer,
     emit_event,
     report,
 )
@@ -40,34 +41,47 @@ def watch_stdin(stop) -> None:
 
 
 def extract_with_progress(client: llm.Client, doc_type: str, ss) -> dict:
-    """llm.extract_lists, reporting "<field> (n of m)" before each model call, adding a
-    "candidates" event the first time a field is asked (D-90), and stopping before a model call
-    when the user cancelled."""
+    """llm.extract_lists, reporting "<field> (n of m)" before each model call, and for the live
+    screen (D-90): a "reading" event with the sentences the model is given, the first time a field
+    is asked; an answer card as soon as that field is done (`on_field`); a "none" event for a
+    field that was read and gave no answer. Stops before a model call when the user cancelled."""
     fields = [f for f in llm.LIST_FIELDS if doc_type in BY_ID[f].applies_to]
     ja = [s for s in ss if s.language == "ja"]
-    announced: set[str] = set()
+    read: list[str] = []  # fields announced, in order
+    answered: set[str] = set()
+
+    def settle() -> (
+        None
+    ):  # the group before this one is over: say so if it gave nothing
+        for f in read:
+            if f not in answered:
+                answered.add(f)
+                emit_event("none", field=f)
+
+    def got(x) -> None:
+        answered.add(x.field)
+        emit_answer(x)
 
     def complete(system: str, user: str, schema: dict, max_out: int) -> str:
         check_cancel()
         f = user.split("Field: ", 1)[1].split("\n", 1)[0]
         if f in fields:
             report(f"{f} ({fields.index(f) + 1} of {len(fields)})")
-            if (
-                f not in announced
-            ):  # the retry asks again; the same candidates are not news
-                announced.add(f)
+            if f not in read:  # the retry asks again; the same sentences are not news
+                settle()
+                read.append(f)
                 cand = llm.retrieve(
                     f, ja
                 )  # the same call extract_lists made for this prompt
-                if cand:
-                    s = cand[0]
-                    emit_event(
-                        "candidates", field=f, count=len(cand), page=s.page,
-                        section=" > ".join(s.section_titles[:2]), text=s.text_orig[:SHOWN_CHARS],
-                    )  # fmt: skip
+                emit_event(
+                    "reading", field=f, count=len(cand),
+                    sentences=[{"page": s.page, "section": " > ".join(s.section_titles[:2]), "text": s.text_orig[:SHOWN_CHARS]} for s in cand],
+                )  # fmt: skip
         return client.complete(system, user, schema, max_out)
 
-    return llm.extract_lists(doc_type, ss, complete)
+    out = llm.extract_lists(doc_type, ss, complete, on_field=got)
+    settle()
+    return out
 
 
 def main() -> None:

@@ -28,40 +28,49 @@ const progressOf = (detail: string | null): { n: number; m: number } | null => {
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-function EventCard({ e }: { e: ProcEvent }) {
-  if (e.kind === "candidates")
+// `live` is the field the model is working on right now (from the sidecar's detail line), so a reading card
+// says "Now reading" only while that is true.
+function EventCard({ e, live }: { e: ProcEvent; live: string | null }) {
+  if (e.kind === "reading") {
+    const now = live === e.field;
     return (
-      <li className="ev">
+      <li className={`ev read${now ? " now" : ""}`} data-field={e.field}>
         <div className="evhead">
-          <b>Candidates</b>
+          <b>{now ? "Now reading" : "Read"}</b>
           <span className="meta">{label(e.field)}</span>
         </div>
         <p className="meta evsub">
-          {e.count} {e.count === 1 ? "sentence" : "sentences"} found · first one: page {e.page}
-          {e.section ? ` · ${e.section}` : ""}
+          {e.count} {e.count === 1 ? "sentence" : "sentences"} given to the model
         </p>
-        <p className="evja" lang="ja">{e.text}</p>
+        <ul className="sents">
+          {e.sentences.map((s, i) => (
+            <li key={i}>
+              <span className="meta">page {s.page}{s.section ? ` · ${s.section}` : ""}</span>
+              <p className="evja" lang="ja">{s.text}</p>
+            </li>
+          ))}
+        </ul>
       </li>
     );
-  if (e.kind === "answer")
+  }
+  if (e.kind === "none")
     return (
-      <li className="ev">
+      <li className="ev none" data-field={e.field}>
         <div className="evhead">
-          <b>Answer</b>
-          <span className="meta">{label(e.field)}</span>
+          <b>{label(e.field)}</b>
+          <span className="evbadge none">No answer found</span>
         </div>
-        <p className="evja" lang="ja">{e.value_ja}</p>
-        {e.page != null && <p className="meta evsub">page {e.page}</p>}
       </li>
     );
   const [cls, text] = e.exact === true ? ["ok", "Exact span match"] : e.exact === false ? ["warn", "Not an exact match"] : ["none", "No span check"];
   return (
-    <li className="ev">
+    <li className="ev ans" data-field={e.field}>
       <div className="evhead">
-        <b>Check</b>
-        <span className="meta">{label(e.field)}</span>
+        <b>{label(e.field)}</b>
         <span className={`evbadge ${cls}`}>{text}</span>
       </div>
+      <p className="evja" lang="ja">{e.value_ja}</p>
+      {e.page != null && <p className="meta evsub">page {e.page}</p>}
     </li>
   );
 }
@@ -133,13 +142,13 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
     void tick();
     const t0 = Date.now();
     const clock = setInterval(() => setSecs(Math.floor((Date.now() - t0) / 1000)), 500);
-    // Reveal queued events one at a time (two at a time when many wait). When the run is over and the
+    // Reveal queued events one at a time, every 300 ms. When the run is over and the
     // queue is empty, hold the screen a moment so the last results can be read, then open the document.
     let hold: ReturnType<typeof setTimeout> | undefined;
     const reveal = setInterval(() => {
       const q = queue.current;
       if (q.length) {
-        const next = q.splice(0, q.length > 8 ? 2 : 1);
+        const next = q.splice(0, 1);
         setEvents((e) => [...e, ...next].slice(-STORED));
       } else if (finished.current && hold === undefined) {
         const fx = finished.current;
@@ -168,6 +177,7 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
   const running = stage !== "done" && !finished.current;
   const issuer = [...events].reverse().find((e) => e.kind === "answer" && e.field === "issuer_org");
   const shown = events.slice(-VISIBLE).reverse(); // newest on top
+  const liveField = stage === "extract" && detail ? detail.split(" ")[0] ?? null : null;
 
   if (error)
     return (
@@ -183,7 +193,7 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
   return (
     <div className="processing">
       <div className="pcard">
-        <h2 className="pname">{name}</h2>
+        <h2 className="pname" title={name}>{name}</h2>
         <p className="meta">
           {pages ? `${pages} ${pages === 1 ? "page" : "pages"}` : "Starting"}
           {sentences != null && ` · ${sentences} sentences`}
@@ -236,7 +246,7 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
             </li>
           )}
           {shown.map((e) => (
-            <EventCard key={e.n} e={e} />
+            <EventCard key={e.n} e={e} live={liveField} />
           ))}
         </ul>
       </section>
