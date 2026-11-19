@@ -802,6 +802,15 @@ Decision: `eval/audit_trim.py` now picks up to 4 candidate sentences per Not fou
 Known limits: a keyword match is not understanding. A document can state the field in words the list misses (a different spelling, a table, a scanned page read badly), so "no keyword hit" means no keyword match, not proof of absence, and "No" from the reader means none of these 4, not that the document never says it. Overlapping keywords (問い合わせ and 問い合わせ先) count twice and favor sentences that use the longer form. Broad words such as 担当 and 期限 give weak candidates; the 4-sentence cap can push the real one out. Auto-confirmed rows are not checked by anyone, so they count as a weaker kind of agreement with the label than a reader's No.
 Consequences: the sheet has fewer rows when a Not found row is auto-confirmed (43 instead of 45 on the first build). No change to labels, `core/`, `sidecar/`, `app/` or the test split.
 
+## D-82: FastAPI (MIT) and uvicorn (BSD-3-Clause) as runtime dependencies for the sidecar
+
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: Phase 7 needs the sidecar (`sidecar/`): a local HTTP server the Electron main process starts, so the app can process a real PDF instead of reading a fixture.
+Decision: add `fastapi` and `uvicorn` to the runtime dependencies. Licenses read from each package's PyPI metadata on 2026-11-19: FastAPI MIT, uvicorn BSD-3-Clause, Starlette (FastAPI's web layer, pulled in with it) BSD-3-Clause. Their other new dependencies, read from the installed metadata: anyio MIT, h11 MIT, click BSD-3-Clause, idna BSD-3-Clause, annotated-doc MIT, opentelemetry-api Apache-2.0. opentelemetry-api is a hard requirement of FastAPI 0.165 but is only the API: no SDK or exporter is installed, so it sends nothing anywhere (the no-telemetry rule holds; `uv.lock` has no opentelemetry-sdk or exporter). Pydantic (MIT) was already a dependency. All three allow shipping inside the app. The server binds 127.0.0.1 only, on a random free port, and every request needs a random per-session token (docs/privacy.md). No docs or OpenAPI pages are served.
+Also in this change: the pipeline checks (`citations_exist`, `value_in_citation`, `schema_valid`, `values_roundtrip`, `weekday_consistent`, `heading_cue`, `field_applicable`) used to live only in `eval/` (dev-time). The app must show the pipeline's own checks, so their code moved to `core/shiori_core/checks.py`; `eval/silver/checks.py` and `eval/validate_labels.py` import it from there and behave as before. `era_plausible` stays in eval: it needs the manifest's notice date, which a bare PDF does not have, so the sidecar does not store it.
+Consequences: `uv.lock` changes; PyInstaller packaging (Phase 9) must bundle uvicorn and starlette.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

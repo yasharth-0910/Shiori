@@ -20,23 +20,13 @@ Dev-time only. Prints doc ids, fields and rule names, never document text.
 """
 
 import json
-import re
 import sys
-from collections.abc import Callable
-from datetime import date, time
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
+from shiori_core.checks import check_values
 from shiori_core.fields import BY_ID, FIELD_IDS, validate_normalized
 from shiori_core.models import EXTRACTOR_VERSION, Sentence
-from shiori_core.value_normalize import (
-    find_dates,
-    find_deadline_flags,
-    find_fiscal_years,
-    find_tax_basis,
-    find_times,
-)
 
 from collector.manifest import ManifestRow, read_rows
 from eval.documents import load_sentences
@@ -46,114 +36,9 @@ EVAL_DIR = Path("data/eval")
 PRIVATE_DIR = Path("data/eval_private")
 SPLITS_PATH = EVAL_DIR / "splits.json"
 
-_PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|パーセント)")
-_PER_HUNDRED = re.compile(r"100分の(\d+(?:\.\d+)?)")
-_ONE_IN_N = re.compile(r"(\d+)分の1(?!\d)")
-
 
 def _texts(sentences: dict[str, Sentence], ids: list[str]) -> list[Sentence]:
     return [sentences[i] for i in ids if i in sentences]
-
-
-def _dates(ss: list[Sentence]) -> set[date]:
-    out: set[date] = set()
-    for s in ss:
-        out |= {f.value for f in find_dates(s.text_norm) if f.value}
-        for fy in find_fiscal_years(s.text_norm):
-            if fy.value:
-                out |= {fy.value.start, fy.value.end}
-    return out
-
-
-def _times(ss: list[Sentence]) -> set[time]:
-    return {f.value for s in ss for f in find_times(s.text_norm) if f.value}
-
-
-def _rates(ss: list[Sentence]) -> set[float]:
-    out: set[float] = set()
-    for s in ss:
-        t = s.text_norm
-        out |= {float(m.group(1)) for m in _PERCENT.finditer(t)}
-        out |= {float(m.group(1)) for m in _PER_HUNDRED.finditer(t)}
-        out |= {100 / int(m.group(1)) for m in _ONE_IN_N.finditer(t)}
-    return out
-
-
-def _has(ss: list[Sentence], needle: str) -> bool:
-    n = re.sub(r"\s+", "", needle)
-    return any(
-        n in re.sub(r"\s+", "", t) for s in ss for t in (s.text_orig, s.text_norm)
-    )
-
-
-def check_deadline_item(item, ss: list[Sentence]) -> list[str]:
-    errs: list[str] = []
-    if item.datetime:
-        if date.fromisoformat(item.datetime[:10]) not in _dates(ss):
-            errs.append(
-                f"deadline {item.kind}: date {item.datetime[:10]} not read in citations"
-            )
-        if len(item.datetime) > 10:
-            hh, mm = int(item.datetime[11:13]), int(item.datetime[14:16])
-            if time(hh, mm) not in _times(ss):
-                errs.append(
-                    f"deadline {item.kind}: time {item.datetime[11:16]} not read"
-                )
-    found = {f.value for s in ss for f in find_deadline_flags(s.text_norm)}
-    for flag in item.flags:
-        if flag not in found:
-            errs.append(f"deadline {item.kind}: flag {flag} not read in citations")
-    return errs
-
-
-def check_values(
-    field: str,
-    model: Any,
-    ss_of: Callable[[list[str]], list[Sentence]],
-    cites: list[str],
-) -> list[str]:
-    """Re-run the converters on the cited sentences. `ss_of` maps ids to sentences."""
-    ss = ss_of(cites)
-    errs: list[str] = []
-    if field in ("notice_date", "delivery_deadline"):
-        d = model.date
-        if d not in _dates(ss):
-            errs.append(f"{field}: {d} not read in citations")
-    elif field == "performance_period":
-        for part in ("start", "end"):
-            d = getattr(model, part)
-            if d and d not in _dates(ss):
-                errs.append(f"performance_period.{part}: {d} not read in citations")
-    elif field == "deadlines":
-        for item in model.items:
-            errs += check_deadline_item(item, ss_of(item.citations))
-    elif field in ("bid_bond", "performance_bond"):
-        rate = model.rate_percent
-        if rate is not None and not any(abs(rate - r) < 1e-9 for r in _rates(ss)):
-            errs.append(f"{field}: rate {rate}% not read in citations")
-    elif field == "tax_basis":
-        want = "tax_excluded" if model.basis == "bid_excludes_tax" else "tax_included"
-        if want not in {f.value for s in ss for f in find_tax_basis(s.text_norm)}:
-            errs.append(f"tax_basis: {model.basis} not read in citations")
-    elif field == "item_category":
-        digits = {m for s in ss for m in re.findall(r"\d+", s.text_norm)}
-        errs += [
-            f"item_category: code {c} not in citations"
-            for c in model.codes
-            if c not in digits
-        ]
-    elif field == "unified_qualification":
-        errs += [
-            f"unified_qualification: grade {g} not in citations"
-            for g in model.grades
-            if not any(g in s.text_norm for s in ss)
-        ]
-    elif field == "contact":
-        for part in ("phone", "email"):
-            v = getattr(model, part)
-            if v and not _has(ss, v):
-                errs.append(f"contact.{part} not copied exactly from citations")
-    return errs
 
 
 def validate_lines(

@@ -5,6 +5,7 @@ description = "Offline reader for Japanese public tender documents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastapi>=0.165.0",
     "lxml>=5.4",
     "networkx>=3.3",
     "numpy>=2.2",
@@ -15,6 +16,7 @@ dependencies = [
     "pymupdf>=1.28.2",
     "pyyaml>=6",
     "tqdm>=4.66",
+    "uvicorn>=0.54.0",
 ]  # pymupdf: AGPL (D-08, D-28). The rest is for OCR (D-36): onnxruntime is pinned
 # to the version NDLOCR-Lite pins for macOS; lxml, networkx, tqdm, pyyaml are its imports.
 

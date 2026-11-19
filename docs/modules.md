@@ -179,6 +179,7 @@ One entry per module. Keep the status and interface lines current. Status values
 ### verify
 - **Status:** planned (Phase 4)
 - **Purpose:** confirm each FieldResult against its cited sentences.
+- **Code (D-82):** the checks run by `eval/` and the sidecar live in `core/shiori_core/checks.py` (`run_checks`, `citations_exist`, `value_in_citation`, `values_roundtrip`, `schema_valid`, `weekday_consistent`, `heading_cue`, `check_values`); `eval/silver/checks.py` and `eval/validate_labels.py` import them. `era_plausible` stays in eval (needs the manifest notice date).
 - **Checks:** for dates/amounts, the normalized value must be found in a cited sentence after running the same converters on it. For text fields, `value_ja` must appear (fuzzy, after normalization) in a cited sentence. Cited IDs must exist and belong to a plausible section.
 - **On failure:** status `not_found`, reason kept for debugging.
 
@@ -207,10 +208,12 @@ One entry per module. Keep the status and interface lines current. Status values
 
 ## Sidecar (`sidecar/`, shipped)
 
-- **Status:** planned (Phase 7)
-- **Purpose:** FastAPI wrapper around core. Job queue (one document at a time to start), progress events, token auth, bound to 127.0.0.1.
-- **Endpoints (draft):** `POST /documents` (path from main process), `GET /documents/{id}/status`, `GET /documents/{id}/fields`, `GET /documents/{id}/sentences/{sid}`, `POST /translate`, `DELETE /documents/{id}`.
-- **Progress:** server-sent events or polling, stage names matching the pipeline steps.
+- **Status:** working (Phase 7 step 2, D-82). Tests: `tests/test_sidecar.py` (real loopback server, invented PDF, fake list extractor, no llama-server).
+- **Purpose:** FastAPI wrapper around core. `uv run python -m sidecar [--llama-url http://127.0.0.1:PORT]` binds 127.0.0.1 on a random free port (`server.bind_loopback`), makes a random session token, prints one JSON line on stdout (`{"port": ..., "token": ...}`; logs go to stderr) and serves. Without `--llama-url` only the rules extractor runs; with it, `llm.extract_lists` runs too (the URL must be `http://127.0.0.1:<port>`, `llm.Client` refuses anything else). The llama-server `--api-key` from architecture.md is not sent yet: `llm.Client` has no header for it.
+- **Auth:** every request, any path, needs `Authorization: Bearer <token>` or gets 401 (middleware, constant-time compare). No `/docs` or OpenAPI page.
+- **Endpoints:** `POST /documents` body `{"path": "<pdf>", "doc_type": "notice"}` (doc_type defaults to `notice`; a bare PDF has no manifest row) returns `{"doc_id"}`, the SHA-256 of the file, so the same bytes twice share one job; a bad path or doc_type is 400 and the path is never echoed. `GET /documents/{id}/status` returns `{"doc_id", "stage", "pages", "error"}` (`error` is an exception type name only). `GET /documents/{id}/fields` returns the fixture shape (`doc_id`, `pdf` = base name, `fields`, `sentences` for cited ids only), validated by pydantic models that mirror `app/src/types.ts`; 409 until done. Every v1 field is listed: found ones carry their stored checks, the rest are `absent` with no checks. `text_en` and `value_en` are null (translation is a later stage).
+- **Progress (polling):** one worker thread, one document at a time, jobs queued. Stages: `queued`, `ingest` (`ingest.read_pages`), `segment`, `retrieve` (the rules extractor: cue and heading lookups), `extract` (the model list extractor, only with `--llama-url`), `verify` (stored checks via `shiori_core.checks.run_checks`), `done` or `failed`.
+- **Not built:** `GET /documents/{id}/sentences/{sid}`, `POST /translate`, `DELETE /documents/{id}`, job persistence (jobs live in memory), `era_plausible` and `en_summary_agrees` checks, the llama-server API key.
 
 ## Store (`core/shiori_core/store/`, shipped)
 

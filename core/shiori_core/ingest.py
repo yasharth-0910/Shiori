@@ -113,20 +113,23 @@ def _page(pdf: PdfFile, index: int, ocr: OcrEngine | bool) -> Page:
     )
 
 
-def load_document(path: Path, ocr: OcrEngine | bool = True) -> Document:
-    """Read a PDF into a Document with its sentences (pipeline steps 1 to 5).
-    `ocr`: True reads scanned and outlined pages with the default engine (loaded on
-    the first such page), an engine instance uses that one, False leaves them empty.
-    Raises PasswordProtectedError for locked files, which callers skip."""
+def read_pages(path: Path, ocr: OcrEngine | bool = True) -> Document:
+    """Pipeline steps 1 to 4: lines, page kinds, furniture. No sentences yet (the
+    sidecar reports ingest and segment as two stages, D-82). Same arguments and errors
+    as `load_document`."""
     doc_id = hashlib.sha256(path.read_bytes()).hexdigest()
     with PdfFile(path) as pdf:
         pages = [_page(pdf, i, ocr) for i in range(pdf.page_count)]
         producer = pdf.producer
     flag_furniture(pages)
-    return Document(
-        id=doc_id,
-        filename=path.name,
-        producer=producer,
-        pages=pages,
-        sentences=segment(pages),
-    )
+    return Document(id=doc_id, filename=path.name, producer=producer, pages=pages)
+
+
+def load_document(path: Path, ocr: OcrEngine | bool = True) -> Document:
+    """Read a PDF into a Document with its sentences (pipeline steps 1 to 5).
+    `ocr`: True reads scanned and outlined pages with the default engine (loaded on
+    the first such page), an engine instance uses that one, False leaves them empty.
+    Raises PasswordProtectedError for locked files, which callers skip."""
+    doc = read_pages(path, ocr)
+    doc.sentences = segment(doc.pages)
+    return doc
