@@ -1,10 +1,24 @@
 import { useEffect, useState } from "react";
 import type { Fixture } from "./types";
 
-// What the sidecar reports, in pipeline order. `extract` is the model; without one it stays idle.
-const STAGES = ["ingest", "segment", "retrieve", "extract", "verify"] as const;
+// The stage keys the sidecar (and main, for loading_model) send, in order, with their plain-English names.
+// The keys are not changed here; this map is the only place the names live.
+const STEPS: [key: string, name: string][] = [
+  ["loading_model", "Loading the model"],
+  ["ingest", "Reading the PDF"],
+  ["segment", "Splitting it into sentences"],
+  ["retrieve", "Finding candidate sentences"],
+  ["extract", "Extracting fields"],
+  ["verify", "Checking every citation"],
+];
 
 type Props = { docId: string; name: string; onDone: (fx: Fixture) => void; onBack: () => void };
+
+// "eligibility (2 of 3)" -> { n: 2, m: 3 }; null when the detail has no count.
+const progressOf = (detail: string | null): { n: number; m: number } | null => {
+  const r = detail && /\((\d+) of (\d+)\)/.exec(detail);
+  return r && Number(r[2]) > 0 ? { n: Number(r[1]), m: Number(r[2]) } : null;
+};
 
 export function Processing({ docId, name, onDone, onBack }: Props) {
   const [stage, setStage] = useState("queued");
@@ -47,36 +61,51 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
     };
   }, [docId, onDone]);
 
-  // "Loading model", then "Extracting eligibility (1 of 3)"; other stages show their name and any detail.
-  const line =
-    stage === "loading_model"
-      ? "Loading model"
-      : stage === "extract" && detail
-        ? `Extracting ${detail}`
-        : `Stage: ${stage}${detail ? ` (${detail})` : ""}`;
-  const at = STAGES.indexOf(stage as (typeof STAGES)[number]);
+  // main puts "Model not set up" / "Model failed to start (code)" in the detail while the model is missing.
+  const noModel = !!detail && /^Model (not set up|failed to start)/.test(detail);
+  const steps = STEPS.filter(([k]) => k !== "loading_model" || (model && !noModel));
+  const at = steps.findIndex(([k]) => k === stage);
+  const prog = stage === "extract" ? progressOf(detail) : null;
+  const sub = noModel ? null : stage === "extract" && detail ? `Extracting ${detail}` : detail;
+  const mmss = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+
   return (
     <div className="processing">
-      <h2>{name}</h2>
-      {error ? (
-        <>
-          <p className="err">Processing failed ({error}).</p>
-          <button className="btn" onClick={onBack}>Back to Library</button>
-        </>
-      ) : (
-        <>
-          <p className="meta">{pages ? `${pages} pages` : "Starting"}</p>
-          <ol className="stages">
-            {model && <li className={stage === "loading_model" ? "now" : "past"}>model</li>}
-            {STAGES.map((s, i) => (
-              <li key={s} className={stage === s ? "now" : at > i || stage === "done" ? "past" : ""}>
-                {s}
-              </li>
-            ))}
-          </ol>
-          <p className="meta">{line} · {secs} s</p>
-        </>
-      )}
+      <div className="pcard">
+        <h2 className="pname">{name}</h2>
+        {error ? (
+          <>
+            <p className="err">Processing failed ({error}).</p>
+            <button className="btn" onClick={onBack}>Back to Library</button>
+          </>
+        ) : (
+          <>
+            <p className="meta">{pages ? `${pages} ${pages === 1 ? "page" : "pages"}` : "Starting"}</p>
+            {noModel && <p className="pnotice">Running without the model. Some fields will show Not found.</p>}
+            <ol className="stepper" data-stage={stage}>
+              {steps.map(([k, label], i) => {
+                const st = stage === "done" || (at >= 0 && at > i) ? "done" : at === i ? "active" : "pending";
+                return (
+                  <li key={k} className={`step ${st}`} data-step={k} aria-current={st === "active" ? "step" : undefined}>
+                    <span className="mark" aria-hidden="true">{st === "done" ? "✓" : ""}</span>
+                    <div className="stepbody">
+                      <span className="steplabel">{label}</span>
+                      {st === "active" && sub && <span className="meta">{sub}</span>}
+                      {st === "active" && prog && (
+                        <div className="bar2" role="progressbar" aria-valuemin={0} aria-valuemax={prog.m} aria-valuenow={prog.n}>
+                          <div style={{ width: `${Math.min(100, (prog.n / prog.m) * 100)}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="meta pfoot">Elapsed {mmss}</p>
+            <p className="meta">Everything stays on this computer.</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

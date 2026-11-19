@@ -103,6 +103,12 @@ async function createWindow(): Promise<void> {
 
   // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
   const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;
+  // Two more dev checks, off in a packaged app like SHIORI_PICK and SHIORI_SHOT:
+  // SHIORI_SHOT_STAGE=extract also saves <shot>-extract.png when the Processing screen first reaches that stage;
+  // SHIORI_SHOT_OPEN=<field label or id> waits until the translation queue is empty (or 400 s), saves <shot>-list.png,
+  // opens that field and then saves the usual shot.
+  const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE;
+  const shotOpen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_OPEN;
   if (shot) {
     win.webContents.on("console-message", (e) => console.log("renderer:", e.message));
     setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, process.env.SHIORI_MODEL ? 900000 : 30000);
@@ -110,9 +116,20 @@ async function createWindow(): Promise<void> {
       // With SHIORI_PICK also set: click "Add document", log the stage shown on the Processing screen each time it changes.
       await win.webContents.executeJavaScript(
         `new Promise(r => { const t = setInterval(() => { const b = [...document.querySelectorAll("button")].find(x => x.textContent === "Add document"); if (b) { clearInterval(t); b.click(); r(); } }, 100); }); ` +
-          `window.__seen = []; setInterval(() => { const m = document.querySelector(".processing .meta:last-of-type"); ` +
-          `const t = m && m.textContent.replace(/ · \\d+ s$/, ""); if (t && window.__seen.at(-1) !== t) { window.__seen.push(t); console.log("screen: " + t); } }, 20);`,
+          `window.__seen = []; setInterval(() => { const m = document.querySelector(".stepper .step.active"); ` +
+          `const t = m && m.textContent; if (t && window.__seen.at(-1) !== t) { window.__seen.push(t); console.log("screen: " + t); } }, 20);`,
       );
+    }
+    if (shotStage) {
+      const png = shot.replace(/(\.png)?$/, "-" + shotStage + ".png");
+      const t = setInterval(() => {
+        void win.webContents.executeJavaScript(`document.querySelector(".stepper")?.dataset.stage`).then(async (st) => {
+          if (st !== shotStage) return;
+          clearInterval(t);
+          fs.writeFileSync(png, (await win.webContents.capturePage()).toPNG());
+          console.log("stage shot saved");
+        });
+      }, 300);
     }
     const chip = Number(process.env.SHIORI_CHIP ?? 0);
     await win.webContents.executeJavaScript(
@@ -120,6 +137,20 @@ async function createWindow(): Promise<void> {
         `if ((c.length || ${!!PICK}) && document.querySelectorAll("canvas").length) { clearInterval(t); c[${chip}]?.click(); ` +
         `console.log("rows: " + document.querySelectorAll(".field").length + " | " + [...document.querySelectorAll(".counts button")].map(b => b.textContent).join(" / ") + " pills: " + document.querySelectorAll(".pill").length); setTimeout(r, 1500); } }, 200); })`,
     );
+    if (shotOpen) {
+      // Wait for "English: n of m sentences" to appear and then go (a finished queue shows nothing), at most 400 s.
+      await win.webContents.executeJavaScript(
+        `new Promise(r => { const t0 = Date.now(); let seen = false; const t = setInterval(() => { const on = document.body.innerText.includes("English: "); seen = seen || on; ` +
+          `if ((seen && !on) || (!seen && Date.now() - t0 > 20000) || Date.now() - t0 > 400000) { clearInterval(t); r(); } }, 1000); })`,
+      );
+      fs.writeFileSync(shot.replace(/(\.png)?$/, "-list.png"), (await win.webContents.capturePage()).toPNG());
+      const want = JSON.stringify(shotOpen.toLowerCase().replace(/_/g, " "));
+      await win.webContents.executeJavaScript(
+        `(() => { const h = [...document.querySelectorAll(".fhead")].find(x => x.querySelector(".flabel")?.textContent.toLowerCase() === ${want}); ` +
+          `console.log("open: " + (h ? "found" : "no such field")); h?.click(); setTimeout(() => h?.scrollIntoView({ block: "start" }), 100); })()`,
+      );
+      await new Promise((r) => setTimeout(r, 1500));
+    }
     fs.writeFileSync(shot, (await win.webContents.capturePage()).toPNG());
     app.quit();
   }

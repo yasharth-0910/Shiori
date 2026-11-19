@@ -1,8 +1,10 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
+import { collapsedLine, scalarAnswer, worthShowing, type En } from "./fieldview";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
+import { deadlineLine } from "./summary";
 import { STATE_TEXT, stateOf, unusualSection, type State } from "./status";
 import { enLine, idsOf, progressNote, unavailableText, working, type TrState } from "./translate";
 import type { Field, Fixture } from "./types";
@@ -21,6 +23,9 @@ function summaryOf(f: Field): string {
   if (f.value_en) return f.value_en;
   return f.items.length ? `${f.items.length} ${f.items.length === 1 ? "entry" : "entries"}` : "";
 }
+
+// A quiet bar while a sentence waits for its English. Never the word "Translating".
+const Wait = () => <div className="enwait" aria-hidden="true" />;
 
 export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, number> }) {
   const [tab, setTab] = useState<Tab>("fields");
@@ -63,12 +68,30 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fx.doc_id]);
 
+  // Why English will not come, or null. Waiting is not an error: that is drawn as a placeholder bar.
   const trNote = (f: Field) => {
     if (tr.status === "unavailable") return <p className="meta">{unavailableText(tr.reason)}</p>;
-    if (tr.status === "ok" && idsOf(f, fx).some((id) => !(id in tr.items))) {
-      return tr.failed.some((id) => idsOf(f, fx).includes(id)) && !working(tr) ? <p className="meta">{unavailableText("failed")}</p> : <p className="meta">Translating</p>;
-    }
+    if (tr.status === "ok" && !working(tr) && tr.failed.some((id) => idsOf(f, fx).includes(id))) return <p className="meta">{unavailableText("failed")}</p>;
     return null;
+  };
+  const waiting = (ids: string[]) => tr.status === "loading" || (tr.status === "ok" && ids.some((id) => !(id in tr.items)) && working(tr));
+  const trItems = tr.status === "ok" ? tr.items : null;
+
+  // One English line: model text carries the label (and the numbers/name note), code-made text does not.
+  const enView = (e: En, big: boolean) =>
+    e.mt ? <MachineEn text={e.text} note={e.tr ? (enLine(e.tr)?.note ?? null) : null} big={big} /> : <div className={big ? "answer big" : "answer"}>{e.text}</div>;
+
+  // The collapsed card's one line: the entry count (lists) and the English answer, or a placeholder while it is coming.
+  const collapsed = (f: Field) => {
+    const l = collapsedLine(f, trItems, deadlineLine);
+    if (l.en && !worthShowing(l.en.text, labelOf(f), null)) l.en = null; // an English line that is just the field name says nothing
+    const ids = f.items.length ? (f.items[0]?.citations ?? []) : f.citations;
+    return (
+      <div className="fvalue">
+        {l.count && <span className="count">{l.count}</span>}
+        {l.en ? enView(l.en, true) : ids.length > 0 && waiting(ids) ? <Wait /> : null}
+      </div>
+    );
   };
 
   const toggle = (f: Field) => {
@@ -101,31 +124,43 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     );
   };
 
-  // The Japanese sentences behind a field, grouped by list item when the field is a list.
+  // An opened card: a deterministic answer on top when it adds something, then one block per cited sentence:
+  // its own English line (labelled) directly above its Japanese, then the page chip and section path.
+  // The block is a button that jumps the PDF to the highlight.
+  const block = (id: string) => {
+    const s = fx.sentences[id];
+    const line = trItems?.[id] ? enLine(trItems[id]) : null;
+    return (
+      <button key={id} className={`src${sid === id ? " on" : ""}`} onClick={() => s && setSid(id)} disabled={!s}>
+        {line ? <MachineEn text={line.text} note={line.note} /> : s && waiting([id]) ? <Wait /> : null}
+        <span className="ja" lang="ja">{s?.text_orig ?? "Sentence missing from this export."}</span>
+        {s && (
+          <span className="srcmeta">
+            <span className="pgchip">p. {s.page}</span>
+            <span className="meta">{s.section_path.map((p, i) => `${p} ${s.section_titles[i] ?? ""}`.trim()).join(" > ") || "No section"}</span>
+          </span>
+        )}
+      </button>
+    );
+  };
   const sources = (f: Field) => {
-    const groups = f.items.length ? f.items.map((i) => ({ en: i.text_en, ids: i.citations })) : [{ en: null, ids: f.citations }];
-    return groups.map((g, n) => (
-      <div className="srcgroup" key={n}>
-        {g.en && <MachineEn text={g.en} note={null} />}
-        {g.ids.map((id) => {
-          const s = fx.sentences[id];
-          const line = tr.status === "ok" ? enLine(tr.items[id]) : null;
-          return (
-            <Fragment key={id}>
-            {line && <MachineEn text={line.text} note={line.note} />}
-            <button className={`src${sid === id ? " on" : ""}`} onClick={() => s && setSid(id)} disabled={!s}>
-              <span className="ja" lang="ja">{s?.text_orig ?? "Sentence missing from this export."}</span>
-              {s && (
-                <span className="meta">
-                  Section {s.section_path.map((p, i) => `${p} ${s.section_titles[i] ?? ""}`.trim()).join(" > ") || "none"} · page {s.page}
-                </span>
-              )}
-            </button>
-            </Fragment>
-          );
-        })}
-      </div>
-    ));
+    const label = labelOf(f);
+    const firstEn = (ids: string[]) => ids.map((id) => trItems?.[id]?.en).find((x) => x) ?? null;
+    // Scalar: one group, its answer is value_en or the enum label. List: one group per item, its answer is
+    // the code-made line (deadlines) or the item's own English.
+    const groups = f.items.length
+      ? f.items.map((i) => ({ ans: ((m) => (m ? { text: m, mt: false } : i.text_en ? { text: i.text_en, mt: true } : null))(deadlineLine(i)), ids: i.citations }))
+      : [{ ans: scalarAnswer(f), ids: f.citations }];
+    return groups.map((g, n) => {
+      const ids = g.ids.filter((id) => id in fx.sentences);
+      const top = g.ans && worthShowing(g.ans.text, label, firstEn(ids)) ? g.ans : null;
+      return (
+        <div className="srcgroup" key={n}>
+          {top && enView(top, true)}
+          {g.ids.map(block)}
+        </div>
+      );
+    });
   };
 
   const sentence = sid ? (fx.sentences[sid] ?? null) : null;
@@ -183,7 +218,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
                         <button className="fhead" aria-expanded={isOpen} onClick={() => toggle(f)}>
                           <span className="flabel">{labelOf(f)}</span>
                           <Pill s={st} />
-                          <span className="fvalue">{summaryOf(f)}</span>
+                          {!isOpen && st !== "not_found" && collapsed(f)}
                         </button>
                         {isOpen && (
                           <div className="fbody">
