@@ -777,6 +777,13 @@ Context: D-02 chose extraction with citations over full translation and said tra
 Decision: full, sentence-aligned translation is now a final goal, planned as Phase 10 in `docs/roadmap.md`. D-02's "single sentences on demand" stays true until Phase 10 starts. Why it comes last: it needs a quality measure first (the p-portal English Summaries cover only part of a notice, so they are a partial reference) and a native Japanese reader to review output, since Yasharth cannot check Japanese meaning yet. Field extraction does not change: it stays Japanese-first, and every value still cites source sentences verified by code. Translated text is a reading aid, labelled as machine translation, with the Japanese always visible, and is never used as evidence for a field.
 Model: not chosen. The choice and its license go in a later decision before anything enters `core/`.
 
+## D-79: openpyxl (MIT) in the dev group for the readers' audit sheet
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: the native-reader audit sheet (`eval/audit_trim.py`) is easier to fill in as an .xlsx with dropdowns (Yes / No / Unsure), a frozen header and a Japanese font than as a CSV.
+Decision: add `openpyxl` to the `dev` dependency group. License: MIT (its one dependency, `et-xmlfile`, is MIT too). Dev-time only: `eval/` imports it lazily and nothing in `core/`, `sidecar/` or `app/` does. The CSV and the key file are written without it.
+Note: added to `pyproject.toml` on 2026-11-19 from a session with no network, so `uv.lock` was not refreshed. Run `uv sync` once online to install it and update the lock.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.
