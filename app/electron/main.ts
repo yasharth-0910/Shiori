@@ -1,6 +1,6 @@
 // Main process. Serves the built renderer from a local shiori:// scheme (PDF.js needs
 // fetch, which file:// blocks) and cancels every request that is not shiori://.
-// The renderer gets three IPC functions (preload.ts); main owns the file picker, the
+// The renderer gets five IPC functions (preload.ts); main owns the file picker, the
 // sidecar and its token (D-83).
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
@@ -37,7 +37,7 @@ const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
 // and the sidecar. Started on the first Add document, stopped when the app quits.
 type Backend = { state: "starting" | "ready" | "failed"; model: boolean; note: string | null; error: string | null };
 let backend: Backend | null = null;
-const jobs = new Map<string, { posted: boolean; error: string | null }>();
+const jobs = new Map<string, { posted: boolean; error: string | null; cancelled: boolean }>();
 
 function ensureBackend(): Backend {
   if (backend) return backend;
@@ -104,7 +104,7 @@ async function createWindow(): Promise<void> {
   // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
   const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;
   // Two more dev checks, off in a packaged app like SHIORI_PICK and SHIORI_SHOT:
-  // SHIORI_SHOT_STAGE=extract also saves <shot>-extract.png when the Processing screen first reaches that stage;
+  // SHIORI_SHOT_STAGE=extract (or a comma list) also saves <shot>-extract.png when the Processing screen first reaches that stage;
   // SHIORI_SHOT_OPEN=<field label or id> waits until the translation queue is empty (or 400 s), saves <shot>-list.png,
   // opens that field and then saves the usual shot.
   const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE;
@@ -120,14 +120,15 @@ async function createWindow(): Promise<void> {
           `const t = m && m.textContent; if (t && window.__seen.at(-1) !== t) { window.__seen.push(t); console.log("screen: " + t); } }, 20);`,
       );
     }
-    if (shotStage) {
-      const png = shot.replace(/(\.png)?$/, "-" + shotStage + ".png");
+    // A comma list works too (loading_model,extract,done): one shot per stage, each saved the first time it shows.
+    for (const stg of shotStage?.split(",") ?? []) {
+      const png = shot.replace(/(\.png)?$/, "-" + stg + ".png");
       const t = setInterval(() => {
         void win.webContents.executeJavaScript(`document.querySelector(".stepper")?.dataset.stage`).then(async (st) => {
-          if (st !== shotStage) return;
+          if (st !== stg) return;
           clearInterval(t);
           fs.writeFileSync(png, (await win.webContents.capturePage()).toPNG());
-          console.log("stage shot saved");
+          console.log("stage shot saved: " + stg);
         });
       }, 300);
     }
@@ -182,36 +183,51 @@ function registerIpc(): void {
     // before the model and the sidecar are up.
     const doc_id = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
     picked.set(doc_id, file);
-    jobs.set(doc_id, { posted: false, error: null });
+    jobs.set(doc_id, { posted: false, error: null, cancelled: false });
     const b = ensureBackend();
     void (async () => {
       while (b.state === "starting") await new Promise((r) => setTimeout(r, 200));
       const job = jobs.get(doc_id);
-      if (!job || b.state === "failed") return;
+      if (!job || job.cancelled || b.state === "failed") return;
       try {
         await sidecar.call("POST", "/documents", { path: file });
         job.posted = true;
+        if (job.cancelled) await sidecar.call("POST", `/documents/${doc_id}/cancel`); // cancelled while the post was in flight
       } catch (err) {
         job.error = (err as Error).message;
       }
     })();
     return { doc_id, name: path.basename(file) };
   });
-  ipcMain.handle("shiori:status", async (e, id: unknown) => {
+  // `since` is the event cursor from the last call (D-90); the sidecar returns only newer events.
+  ipcMain.handle("shiori:status", async (e, id: unknown, since: unknown) => {
+    own(e);
+    const doc = docId(id);
+    const cursor = typeof since === "number" && Number.isInteger(since) && since >= 0 ? since : 0;
+    const job = jobs.get(doc);
+    if (!job) throw new Error("unknown_document");
+    // No backend means the sidecar died (it is only cleared then); the next Add document starts a new one.
+    if (!backend) return { doc_id: doc, pages: null, detail: null, stage: "failed", error: "sidecar_exited", events: [], cursor };
+    const b = backend;
+    // The model's file name, read from the path the user configured. Nothing else about the model is known here.
+    const model = b.model ? path.basename(process.env.SHIORI_MODEL ?? "") : null;
+    const base = { doc_id: doc, pages: null, detail: b.note, error: null, model, events: [], cursor };
+    if (job.cancelled && !job.posted) return { ...base, stage: "cancelled" };
+    if (b.state === "starting") return { ...base, stage: b.model ? "loading_model" : "queued" };
+    if (b.state === "failed" || job.error) return { ...base, stage: "failed", error: b.error ?? job.error };
+    if (!job.posted) return { ...base, stage: "queued" };
+    const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status?since=${cursor}`);
+    const running = s.stage !== "done" && s.stage !== "failed" && s.stage !== "cancelled";
+    return { ...s, model, detail: s.detail ?? (running ? b.note : null) };
+  });
+  // Cancel (D-90): a flag. Before the post it stops the post; after it the sidecar stops at its next stage or model call.
+  ipcMain.handle("shiori:cancel", async (e, id: unknown) => {
     own(e);
     const doc = docId(id);
     const job = jobs.get(doc);
     if (!job) throw new Error("unknown_document");
-    // No backend means the sidecar died (it is only cleared then); the next Add document starts a new one.
-    if (!backend) return { doc_id: doc, pages: null, detail: null, stage: "failed", error: "sidecar_exited" };
-    const b = backend;
-    const base = { doc_id: doc, pages: null, detail: b.note, error: null };
-    if (b.state === "starting") return { ...base, stage: b.model ? "loading_model" : "queued" };
-    if (b.state === "failed" || job.error) return { ...base, stage: "failed", error: b.error ?? job.error };
-    if (!job.posted) return { ...base, stage: "queued" };
-    const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status`);
-    const running = s.stage !== "done" && s.stage !== "failed";
-    return { ...s, detail: s.detail ?? (running ? b.note : null) };
+    job.cancelled = true;
+    if (job.posted) await sidecar.call("POST", `/documents/${doc}/cancel`);
   });
   // The translation queue (D-85, D-88): `ids` are the sentences of the field just opened, moved to the front; an empty
   // list is a plain poll. Returns what is ready and the counts. Never throws for "no model".

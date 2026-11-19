@@ -2,7 +2,10 @@
 """The sidecar: a loopback HTTP server that runs the core pipeline on one PDF at a time.
 
     POST /documents            {"path": ..., "doc_type": "notice"} -> {"doc_id": ...}
-    GET  /documents/{id}/status -> {"doc_id", "stage", "pages", "detail", "error"}
+    GET  /documents/{id}/status?since=N -> {"doc_id", "stage", "pages", "detail", "error",
+                                            "seconds", "stage_elapsed", "sentences", "fields_total",
+                                            "answered", "events", "cursor"} (D-90)
+    POST /documents/{id}/cancel -> {"stage"}; the worker stops at the next stage or model call
     GET  /documents/{id}/fields -> the shape of app/public/fixture.json (app/src/types.ts)
 
 Every request needs `Authorization: Bearer <token>`. The server binds 127.0.0.1 only
@@ -46,7 +49,10 @@ STAGES = (
     "verify",
     "done",
     "failed",
+    "cancelled",
 )
+MAX_EVENTS = 200  # the live stream keeps this many, newest last (D-90)
+SHOWN_CHARS = 200  # a sentence or value in an event is cut to this
 DOC_TYPES = {t for s in SPECS for t in s.applies_to}
 
 # (doc_type, Japanese sentences) -> {field: Extracted}. `rules.extract` and, when a
@@ -209,11 +215,45 @@ class Job:
     inflight: str | None = None  # the sentence being translated right now
     failed: set[str] = field(default_factory=set)
     total: int = 0  # cited sentences
+    # The live view (D-90). Memory only; event text is Japanese from the document, sent to the UI
+    # through the status call and never logged.
+    cancel: bool = (
+        False  # asked to stop; checked between stages and before each model call
+    )
+    events: list[dict] = field(
+        default_factory=list
+    )  # capped at MAX_EVENTS, each with a number n
+    n_events: int = 0
+    seconds: dict[str, float] = field(
+        default_factory=dict
+    )  # measured, per finished stage
+    t0: float = field(default_factory=time.monotonic)  # when the current stage began
+    sentences: int | None = None  # Japanese sentences after segmentation
+    answered: int = 0  # fields with an answer so far
 
     def go(self, stage: str) -> None:
+        now = time.monotonic()
+        if self.stage not in ("queued", "done", "failed", "cancelled"):
+            self.seconds[self.stage] = round(now - self.t0, 1)
+        self.t0 = now
         self.stage = stage
         self.detail = None
         self.history.append(stage)
+
+    def emit(self, kind: str, **data: object) -> None:
+        self.n_events += 1
+        self.events.append({"n": self.n_events, "kind": kind, **data})
+        if len(self.events) > MAX_EVENTS:
+            del self.events[0]
+
+    def check_cancel(self) -> None:
+        if self.cancel:
+            raise Cancelled
+
+
+class Cancelled(Exception):
+    """Raised between stages and before a model call when the user cancelled. Not a ValueError
+    or OSError, so the extractor's own error handling does not swallow it."""
 
 
 _running: Job | None = None  # the job the worker is on (one at a time), for `report`
@@ -223,6 +263,22 @@ def report(detail: str) -> None:
     """Say what the running job is doing inside its stage. Called by an extractor."""
     if _running is not None:
         _running.detail = detail
+
+
+def emit_event(kind: str, **data: object) -> None:
+    """Add an event to the running job's live stream. Called by an extractor wrapper."""
+    if _running is not None:
+        _running.emit(kind, **data)
+
+
+def check_cancel() -> None:
+    """Raise Cancelled when the running job was cancelled. Called before each model call."""
+    if _running is not None:
+        _running.check_cancel()
+
+
+def _cut(text: str) -> str:
+    return text if len(text) <= SHOWN_CHARS else text[:SHOWN_CHARS] + "…"
 
 
 class Worker:
@@ -247,7 +303,7 @@ class Worker:
     def submit(self, path: Path, doc_type: str) -> Job:
         h = hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
         old = self.jobs.get(h)
-        if old is not None and old.stage != "failed":
+        if old is not None and old.stage != "failed" and not old.cancel:
             return old  # same bytes: already done or on its way
         job = self.jobs[h] = Job(h, path, doc_type)
         self.outstanding += 1
@@ -263,6 +319,9 @@ class Worker:
             try:
                 with self.model_lock:
                     self._run(job)
+            except Cancelled:
+                job.go("cancelled")
+                log.info("job_cancelled doc=%s", job.doc_id[:8])
             except Exception as e:  # noqa: BLE001  any failure ends this job, not the server
                 job.error = type(e).__name__
                 job.go("failed")
@@ -281,25 +340,39 @@ class Worker:
     def _run(self, job: Job) -> None:
         global _running
         _running = job
+        job.check_cancel()
         job.go("ingest")
         doc = read_pages(job.path)
         job.pages = len(doc.pages)
         log.info("ingested doc=%s pages=%d", job.doc_id[:8], job.pages)
+        job.check_cancel()
         job.go("segment")
         doc.sentences = segment(doc.pages)
         sents = doc.sentences
-        job.abbreviations = find_abbreviations(
-            s.text_norm for s in sents if s.language == "ja"
-        )
+        ja = {s.id: s for s in sents if s.language == "ja"}
+        job.sentences = len(ja)
+        job.abbreviations = find_abbreviations(s.text_norm for s in ja.values())
         log.info("segmented doc=%s sentences=%d", job.doc_id[:8], len(sents))
         found: dict[str, Extracted] = {}
         for stage, extract in zip(
             ("retrieve", "extract"), self.extractors, strict=False
         ):
+            job.check_cancel()
             job.go(stage)
-            found |= extract(job.doc_type, sents)
+            got = extract(job.doc_type, sents)
+            found |= got
+            job.answered = len(found)
+            for fid, x in got.items():
+                first = ja.get(x.citations[0]) if x.citations else None
+                job.emit("answer", field=fid, value_ja=_cut(x.value_ja), page=first.page if first else None)  # fmt: skip
+        job.check_cancel()
         job.go("verify")
         job.result = build_fields(job.doc_id, doc.filename, job.doc_type, sents, found)
+        for f in job.result.fields:
+            if f.status == "absent":
+                continue
+            exact = next((c.passed for c in f.checks if c.name == "value_in_citation"), None)  # fmt: skip
+            job.emit("check", field=f.field, exact=exact)
         log.info("verified doc=%s fields=%d", job.doc_id[:8], len(found))
         off = found.get(
             "contracting_officer"
@@ -488,15 +561,34 @@ def create_app(
         return {"doc_id": worker.submit(path, body.doc_type).doc_id}
 
     @app.get("/documents/{doc_id}/status")
-    def status(doc_id: str) -> dict:
+    def status(doc_id: str, since: int = 0) -> dict:
+        """`since` is the cursor from the last call: only newer events come back."""
         j = job_of(doc_id)
+        running = j.stage not in ("done", "failed", "cancelled")
         return {
             "doc_id": j.doc_id,
             "stage": j.stage,
             "pages": j.pages,
             "detail": j.detail,
             "error": j.error,
+            "seconds": dict(j.seconds),
+            "stage_elapsed": round(time.monotonic() - j.t0, 1) if running else None,
+            "sentences": j.sentences,
+            "fields_total": sum(j.doc_type in BY_ID[f].applies_to for f in FIELD_IDS),
+            "answered": j.answered,
+            "events": [e for e in list(j.events) if e["n"] > since],
+            "cursor": j.n_events,
         }
+
+    @app.post("/documents/{doc_id}/cancel")
+    def cancel(doc_id: str) -> dict:
+        """Ask the job to stop. It stops at the next stage or before the next model call; a
+        page read or a model call already running finishes first. No effect once it is over."""
+        j = job_of(doc_id)
+        if j.stage not in ("done", "failed", "cancelled"):
+            j.cancel = True
+            log.info("cancel_asked doc=%s stage=%s", j.doc_id[:8], j.stage)
+        return {"stage": j.stage}
 
     @app.get(
         "/documents/{doc_id}/fields",

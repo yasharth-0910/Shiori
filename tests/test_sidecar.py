@@ -25,7 +25,16 @@ LINES = [
     "2 入札書の提出期限 令和８年10月15日13時30分",
 ]
 FIXTURE_KEYS = {"doc_id", "pdf", "fields", "sentences"}  # app/public/fixture.json
-FIELD_KEYS = {"field", "status", "value_en", "value_ja", "normalized", "items", "citations", "checks"}
+FIELD_KEYS = {
+    "field",
+    "status",
+    "value_en",
+    "value_ja",
+    "normalized",
+    "items",
+    "citations",
+    "checks",
+}
 
 
 def make_pdf(path: Path, lines: list[str] = LINES) -> Path:
@@ -165,7 +174,9 @@ def test_pdf_through_every_stage_to_fields(tmp_path):
         # a field nobody found is absent, with no checks
         title = next(f for f in fields["fields"] if f["field"] == "title")
         assert title["status"] == "absent" and title["checks"] == []
-        assert title["normalized"] is None and isinstance(elig["normalized"], dict)  # the stored value, as written
+        assert title["normalized"] is None and isinstance(
+            elig["normalized"], dict
+        )  # the stored value, as written
 
         # the same bytes again: same id, no second run
         assert srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"] == doc_id
@@ -558,7 +569,9 @@ def test_opening_a_field_retries_its_failed_sentence(tmp_path):
         doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
         wait_for(srv, doc_id, "done")
         until(lambda: ask(srv, doc_id)[1]["failed"] == ["p1_s1"] or None, "failed")
-        ask(srv, doc_id, ["p1_s1"])  # the field is opened: the failed sentence goes back in
+        ask(
+            srv, doc_id, ["p1_s1"]
+        )  # the field is opened: the failed sentence goes back in
         got = until(lambda: (g := ask(srv, doc_id)[1])["done"] == 4 and g, "retried")
         assert got["failed"] == []
 
@@ -615,17 +628,188 @@ def test_the_officer_name_is_passed_to_the_translator_for_its_cited_sentences(tm
     ]  # both cited sentences carry the structured name
 
 
-def test_text_field_comes_back_with_null_normalized_and_a_passing_schema_check(tmp_path):
+def test_text_field_comes_back_with_null_normalized_and_a_passing_schema_check(
+    tmp_path,
+):
     # rules write {} for title and issuer_org; the schema wants null, so schema_valid used to fail
     pdf = make_pdf(tmp_path / "invented.pdf")
 
     def title_only(doc_type, sentences):
         s = next(s for s in sentences if "指名停止" in s.text_orig)
-        return {"title": Extracted(field="title", value_ja="指名停止", normalized={}, citations=[s.id])}
+        return {
+            "title": Extracted(
+                field="title", value_ja="指名停止", normalized={}, citations=[s.id]
+            )
+        }
 
     with Server(create_app(TOKEN, None, title_only)) as srv:
-        doc_id = srv.call("POST", "/documents", {"path": str(pdf), "doc_type": "notice"})[1]["doc_id"]
+        doc_id = srv.call(
+            "POST", "/documents", {"path": str(pdf), "doc_type": "notice"}
+        )[1]["doc_id"]
         wait_for(srv, doc_id, "done")
-        f = next(x for x in srv.call("GET", f"/documents/{doc_id}/fields")[1]["fields"] if x["field"] == "title")
+        f = next(
+            x
+            for x in srv.call("GET", f"/documents/{doc_id}/fields")[1]["fields"]
+            if x["field"] == "title"
+        )
     assert f["status"] == "present" and f["normalized"] is None
     assert {"name": "schema_valid", "passed": True} in f["checks"]
+
+
+# --- the live view: events, cursor, cancel (D-90) ---------------------------------------------
+
+
+def events_of(srv, doc_id, since=0):
+    got = srv.call("GET", f"/documents/{doc_id}/status?since={since}")[1]
+    return got["events"], got["cursor"], got
+
+
+def test_status_events_and_cursor(tmp_path):
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    with Server(create_app(TOKEN, fake_lists)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        evs, cursor, got = events_of(srv, doc_id)
+        assert [e["n"] for e in evs] == list(range(1, cursor + 1))
+        ans = next(
+            e for e in evs if e["kind"] == "answer" and e["field"] == "eligibility"
+        )
+        assert ans["value_ja"].startswith("指名停止") and ans["page"] == 1
+        chk = next(
+            e for e in evs if e["kind"] == "check" and e["field"] == "eligibility"
+        )
+        assert chk["exact"] is True  # value_in_citation really passed
+        assert not any(
+            e["kind"] == "check" and e["field"] == "title" for e in evs
+        )  # an absent field has no check
+        # measured per-step seconds and counts
+        assert {"ingest", "segment", "retrieve", "extract"} <= set(got["seconds"])
+        assert (
+            got["sentences"]
+            and got["fields_total"] == 23 - 0
+            or got["fields_total"] > 0
+        )
+        assert got["answered"] >= 1 and got["stage_elapsed"] is None
+        # the cursor: only newer events, none when nothing is new
+        assert events_of(srv, doc_id, cursor)[0] == []
+        assert [e["n"] for e in events_of(srv, doc_id, cursor - 1)[0]] == [cursor]
+
+
+def test_events_are_capped_and_numbers_keep_counting():
+    from sidecar.server import MAX_EVENTS, Job
+
+    job = Job("x", Path("x.pdf"), "notice")
+    for _ in range(MAX_EVENTS + 50):
+        job.emit("check", field="title", exact=None)
+    assert len(job.events) == MAX_EVENTS
+    assert job.events[0]["n"] == 51 and job.events[-1]["n"] == MAX_EVENTS + 50
+
+
+def test_cancel_stops_the_run_before_the_next_model_call(tmp_path):
+    from sidecar import server
+
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    in_call, go = threading.Event(), threading.Event()
+    calls = []
+
+    def lists(doc_type, sentences):
+        calls.append(1)
+        in_call.set()
+        go.wait(5)
+        server.check_cancel()  # what the model wrapper does before each call
+        calls.append(2)  # must not be reached
+        return {}
+
+    app = create_app(TOKEN, lists)
+    with Server(app) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        assert in_call.wait(5)
+        assert srv.call("POST", f"/documents/{doc_id}/cancel")[1]["stage"] == "extract"
+        go.set()
+        done = wait_for(srv, doc_id, "cancelled")
+        assert calls == [1] and done["error"] is None
+        assert srv.call("GET", f"/documents/{doc_id}/fields")[0] == 409
+        # the same file can be added again after a cancel, and runs to the end
+        again = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        assert again == doc_id
+        # a new job object: its flag is clear, so it runs to the end
+        wait_for(srv, doc_id, "done")
+        assert app.state.worker.jobs[doc_id].history[-1] == "done"
+
+
+def test_cancel_before_the_run_starts_and_after_it_ends(tmp_path):
+    from sidecar import server
+
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    block = threading.Event()
+    other = make_pdf(tmp_path / "other.pdf", LINES[:2])
+
+    def slow(doc_type, sentences):
+        block.wait(5)
+        return {}
+
+    with Server(create_app(TOKEN, slow)) as srv:
+        first = srv.call("POST", "/documents", {"path": str(other)})[1]["doc_id"]
+        wait_for(srv, first, "extract")
+        queued = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        assert srv.call("POST", f"/documents/{queued}/cancel")[1]["stage"] == "queued"
+        block.set()
+        wait_for(srv, first, "done")
+        assert wait_for(srv, queued, "cancelled")["pages"] is None  # never read
+        assert (
+            srv.call("POST", f"/documents/{first}/cancel")[1]["stage"] == "done"
+        )  # no effect once over
+        assert srv.call("GET", f"/documents/{first}/status")[1]["stage"] == "done"
+        assert srv.call("POST", "/documents/nope/cancel")[0] == 404
+    assert server.STAGES[-1] == "cancelled"
+
+
+def test_cancel_check_comes_before_each_model_call(monkeypatch):
+    from shiori_core.models import Sentence
+    from shiori_core.normalize import normalize
+
+    from sidecar import __main__ as m
+    from sidecar import server
+
+    class FakeClient:
+        calls = 0
+
+        def complete(self, system, user, schema, max_out):
+            FakeClient.calls += 1
+            return '{"items": []}'
+
+    norm, mp = normalize("競争参加資格")
+    ss = [Sentence(id="h_s1", page=0, section_path=[], section_titles=["競争参加資格"], text_orig="競争参加資格", text_norm=norm, norm_to_orig=mp, boxes=[])]  # fmt: skip
+    job = server.Job("x", Path("x.pdf"), "notice")
+    monkeypatch.setattr(server, "_running", job)
+    m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
+    first = FakeClient.calls
+    assert first >= 1
+    cands = [e for e in job.events if e["kind"] == "candidates"]
+    assert (
+        cands and cands[0]["field"] == "eligibility" and cands[0]["count"] == 1
+    )  # one event per field
+    assert cands[0]["text"] == "競争参加資格" and cands[0]["page"] == 0
+    assert len([e for e in cands if e["field"] == "eligibility"]) == 1
+    job.cancel = True
+    with pytest.raises(server.Cancelled):
+        m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
+    assert FakeClient.calls == first  # no model call after the flag
+
+
+def test_no_event_text_reaches_the_logs(tmp_path, caplog):
+    import logging
+
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    with caplog.at_level(logging.DEBUG):
+        with Server(create_app(TOKEN, fake_lists)) as srv:
+            doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+            wait_for(srv, doc_id, "done")
+            evs = events_of(srv, doc_id)[0]
+            srv.call("POST", f"/documents/{doc_id}/cancel")
+    assert any(e["kind"] == "answer" for e in evs)
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    for e in evs:
+        for v in (e.get("value_ja"), e.get("text")):
+            assert not v or v not in text
+    assert "指名停止" not in text and "invented.pdf" not in text

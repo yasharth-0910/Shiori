@@ -21,7 +21,15 @@ from shiori_core import translate as tr
 from shiori_core.extract import llm
 from shiori_core.fields import BY_ID
 
-from sidecar.server import HOST, bind_loopback, create_app, report
+from sidecar.server import (
+    HOST,
+    SHOWN_CHARS,
+    bind_loopback,
+    check_cancel,
+    create_app,
+    emit_event,
+    report,
+)
 
 
 def watch_stdin(stop) -> None:
@@ -32,13 +40,31 @@ def watch_stdin(stop) -> None:
 
 
 def extract_with_progress(client: llm.Client, doc_type: str, ss) -> dict:
-    """llm.extract_lists, reporting "<field> (n of m)" before each model call."""
+    """llm.extract_lists, reporting "<field> (n of m)" before each model call, adding a
+    "candidates" event the first time a field is asked (D-90), and stopping before a model call
+    when the user cancelled."""
     fields = [f for f in llm.LIST_FIELDS if doc_type in BY_ID[f].applies_to]
+    ja = [s for s in ss if s.language == "ja"]
+    announced: set[str] = set()
 
     def complete(system: str, user: str, schema: dict, max_out: int) -> str:
+        check_cancel()
         f = user.split("Field: ", 1)[1].split("\n", 1)[0]
         if f in fields:
             report(f"{f} ({fields.index(f) + 1} of {len(fields)})")
+            if (
+                f not in announced
+            ):  # the retry asks again; the same candidates are not news
+                announced.add(f)
+                cand = llm.retrieve(
+                    f, ja
+                )  # the same call extract_lists made for this prompt
+                if cand:
+                    s = cand[0]
+                    emit_event(
+                        "candidates", field=f, count=len(cand), page=s.page,
+                        section=" > ".join(s.section_titles[:2]), text=s.text_orig[:SHOWN_CHARS],
+                    )  # fmt: skip
         return client.complete(system, user, schema, max_out)
 
     return llm.extract_lists(doc_type, ss, complete)
