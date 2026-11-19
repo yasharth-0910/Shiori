@@ -1,4 +1,4 @@
-// On-demand English for cited sentences (D-85). Pure logic; the sidecar does the work.
+// English for cited sentences (D-85), translated in the background by the sidecar (D-88). Pure logic.
 import type { Field, Fixture } from "./types";
 
 export const MT_LABEL = "Machine translation";
@@ -7,7 +7,19 @@ export const PROTECTED_NOTE = "a name or term was changed, check the Japanese"; 
 
 export type Tr = { en: string; numbers_match: boolean; protected_lost?: boolean };
 export type Reason = "no_model" | "no_document" | "failed";
-export type TrState = { status: "loading" } | { status: "ok"; items: Record<string, Tr> } | { status: "unavailable"; reason: Reason };
+export type Queue = { done: number; total: number; failed: string[] };
+export type TrState = { status: "loading" } | ({ status: "ok"; items: Record<string, Tr> } & Queue) | { status: "unavailable"; reason: Reason };
+
+/** "English: 14 of 41 sentences" while the queue has work; with failures once it is empty; otherwise nothing. */
+export function progressNote(t: TrState): string | null {
+  if (t.status !== "ok" || t.total === 0) return null;
+  const left = t.total - t.done - t.failed.length;
+  if (left > 0) return `English: ${t.done} of ${t.total} sentences`;
+  return t.failed.length ? `English: ${t.done} of ${t.total} sentences (${t.failed.length} failed)` : null;
+}
+
+/** Is the queue still working? Polling goes on while it is. */
+export const working = (t: TrState): boolean => t.status === "ok" && t.total - t.done - t.failed.length > 0;
 
 /** What to show above one Japanese sentence: the English, its fixed label, and a note when the numbers check failed. */
 export function enLine(tr: Tr | undefined): { text: string; label: string; note: string | null } | null {

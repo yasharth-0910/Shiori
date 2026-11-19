@@ -1,10 +1,10 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
 import { STATE_TEXT, stateOf, unusualSection, type State } from "./status";
-import { enLine, idsOf, unavailableText, type TrState } from "./translate";
+import { enLine, idsOf, progressNote, unavailableText, working, type TrState } from "./translate";
 import type { Field, Fixture } from "./types";
 
 type Tab = "summary" | "fields" | "deadlines";
@@ -31,24 +31,44 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const [find, setFind] = useState<Find | null>(null);
   const [hitCount, setHitCount] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
-  const [tr, setTr] = useState<Record<string, TrState>>({}); // by field id; asked when a field is opened, never before
+  // English for the cited sentences comes from the sidecar's background queue (D-88). The Workspace opens
+  // without it, asks once on mount (which restarts a cancelled queue), polls while the queue works, and
+  // asks again with a field's sentence ids when that field is opened, which moves them to the front.
+  const [tr, setTr] = useState<TrState>({ status: "loading" });
 
-  const translateField = (f: Field) => {
-    const ids = idsOf(f, fx);
-    if (!ids.length || tr[f.field]) return;
-    const set = (v: TrState) => setTr((t) => ({ ...t, [f.field]: v }));
-    if (!window.shiori) return set({ status: "unavailable", reason: "no_document" });
-    set({ status: "loading" });
-    window.shiori.translate(fx.doc_id, ids).then(
-      (r) => set(r.ok ? { status: "ok", items: r.items } : { status: "unavailable", reason: r.reason }),
-      () => set({ status: "unavailable", reason: "failed" }),
+  const ask = (ids: string[]): Promise<TrState> => {
+    if (!window.shiori) return Promise.resolve({ status: "unavailable", reason: "no_document" });
+    return window.shiori.translate(fx.doc_id, ids).then(
+      (r): TrState => (r.ok ? { status: "ok", items: r.items, done: r.done, total: r.total, failed: r.failed } : { status: "unavailable", reason: r.reason }),
+      (): TrState => ({ status: "unavailable", reason: "failed" }),
     );
   };
+  // A slower, older answer never replaces a newer one.
+  const take = (n: TrState) => setTr((p) => (p.status === "ok" && n.status === "ok" && n.done < p.done ? p : n));
+
+  useEffect(() => {
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () =>
+      void ask([]).then((n) => {
+        if (!live) return;
+        take(n);
+        if (working(n)) timer = setTimeout(poll, 1500);
+      });
+    poll();
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fx.doc_id]);
 
   const trNote = (f: Field) => {
-    const t = tr[f.field];
-    if (t?.status === "loading") return <p className="meta">Translating</p>;
-    return t?.status === "unavailable" ? <p className="meta">{unavailableText(t.reason)}</p> : null;
+    if (tr.status === "unavailable") return <p className="meta">{unavailableText(tr.reason)}</p>;
+    if (tr.status === "ok" && idsOf(f, fx).some((id) => !(id in tr.items))) {
+      return tr.failed.some((id) => idsOf(f, fx).includes(id)) && !working(tr) ? <p className="meta">{unavailableText("failed")}</p> : <p className="meta">Translating</p>;
+    }
+    return null;
   };
 
   const toggle = (f: Field) => {
@@ -59,7 +79,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     } else {
       setOpen(f.field);
       setSid(f.citations.find((id) => id in fx.sentences) ?? null);
-      translateField(f);
+      if (tr.status !== "unavailable") void ask(idsOf(f, fx)).then(take);
     }
   };
 
@@ -89,8 +109,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
         {g.en && <MachineEn text={g.en} note={null} />}
         {g.ids.map((id) => {
           const s = fx.sentences[id];
-          const t = tr[f.field];
-          const line = t?.status === "ok" ? enLine(t.items[id]) : null;
+          const line = tr.status === "ok" ? enLine(tr.items[id]) : null;
           return (
             <Fragment key={id}>
             {line && <MachineEn text={line.text} note={line.note} />}
@@ -149,6 +168,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
                 </button>
               ))}
             </div>
+            {progressNote(tr) && <p className="meta">{progressNote(tr)}</p>}
             <input className="input" placeholder="Filter fields" aria-label="Filter fields" value={text} onChange={(e) => setText(e.target.value)} />
             <div className="list">
               {groups.length === 0 && <p className="empty">No fields match.</p>}
