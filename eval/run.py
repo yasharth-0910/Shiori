@@ -49,7 +49,7 @@ def rules_extractor(
     from shiori_core.extract.rules import extract
 
     return {
-        f: Candidate(f, x.status, x.value_ja, None, x.normalized, x.citations)
+        f: Candidate(f, x.status, x.value_ja, None, x.normalized or None, x.citations)
         for f, x in extract(row.doc_type, sentences).items()
     }
 

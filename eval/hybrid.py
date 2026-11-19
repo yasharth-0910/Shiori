@@ -114,7 +114,7 @@ def extract(row: ManifestRow, sentences: list[Sentence]) -> dict[str, Candidate]
     assert State.client is not None
     stats: list[llm.CallStat] = []
     found = {**rules_extract(row.doc_type, sentences), **llm.extract_lists(row.doc_type, sentences, State.client.complete, stats)}  # fmt: skip
-    out = {f: Candidate(f, x.status, x.value_ja, None, x.normalized, x.citations) for f, x in found.items()}  # fmt: skip
+    out = {f: Candidate(f, x.status, x.value_ja, None, x.normalized or None, x.citations) for f, x in found.items()}  # fmt: skip
     State.stats += [(row.doc_id[:12], s) for s in stats]
     State.doc_seconds[row.doc_id[:12]] = sum(s.seconds for s in stats)
     State.outputs[row.doc_id] = out

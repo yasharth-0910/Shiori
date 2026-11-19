@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from shiori_core.checks import run_checks
 from shiori_core.extract import rules
 from shiori_core.extract.rules import Extracted
-from shiori_core.fields import FIELD_IDS, SPECS, Status
+from shiori_core.fields import BY_ID, FIELD_IDS, SPECS, Status
 from shiori_core.ingest import read_pages
 from shiori_core.models import Sentence
 from shiori_core.segment import segment
@@ -149,7 +149,9 @@ def build_fields(
             out.append(Field(field=fid, status="absent", value_en=None, value_ja=None, normalized=None,
                              items=[], citations=[], checks=[], ))  # fmt: skip
             continue
-        items = [_item(i) for i in (x.normalized.get("items") or [])] if x.status == "present" else []  # fmt: skip
+        # a text field (title, issuer_org) has no normalized value: rules write {}, the schema wants null
+        x = x.model_copy(update={"normalized": x.normalized or None}) if BY_ID[fid].model is None else x  # fmt: skip
+        items = [_item(i) for i in ((x.normalized or {}).get("items") or [])] if x.status == "present" else []  # fmt: skip
         ids = list(
             dict.fromkeys([*x.citations, *(c for i in items for c in i.citations)])
         )

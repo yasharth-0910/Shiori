@@ -492,6 +492,147 @@ def test_officer_two_different_signers_answer_nothing() -> None:
 # --- the guard -------------------------------------------------------------------------
 
 
+# --- title -----------------------------------------------------------------------------
+
+
+def test_title_f19cddbd4cba_portal_header_label_then_the_title() -> None:
+    ss = sents("物品・役務", "調達案件名称", "オンライン在留申請処理促進対応に伴う外国人出入国情報システム用端末機器等の供給一式", "公開開始日")  # fmt: skip
+    a = got("notice", ss, "title")
+    assert a and a.normalized == {} and a.citations == ["h_s2", "h_s3"]
+    assert a.value_ja == "オンライン在留申請処理促進対応に伴う外国人出入国情報システム用端末機器等の供給一式"  # fmt: skip
+
+
+def test_title_a81e99fecea5_case_name_label_alone_on_its_line() -> None:
+    ss = sents("７１、２７", "（２）案件名", "ハローワークシステムの次々期更改に係る調査研究業務及び要件定義書案作成業務等一式", "（３）仕様")  # fmt: skip
+    a = got("notice", ss, "title")
+    assert a and a.citations == ["h_s2", "h_s3"] and a.value_ja.endswith("業務等一式")
+
+
+def test_title_a13baaac55c8_inline_after_the_number_and_label() -> None:
+    ss = sents("１　競争入札に付する事項", "（１）件名　　令和８年度特殊土壌地帯推進調査（データ収集・分析・変換等）業務", "（電子入札・電子契約方式対象案件）")  # fmt: skip
+    a = got("notice", ss, "title")
+    assert a and a.citations == ["h_s2"]
+    assert (
+        a.value_ja == "令和８年度特殊土壌地帯推進調査（データ収集・分析・変換等）業務"
+    )
+
+
+def test_title_594c3cb6e0ea_quantity_is_not_part_of_the_name_and_portal_line_agrees() -> (
+    None
+):
+    ss = sents("調達案件名称", "令和８年度国境離島の合理的・効果的な状況把握手法構築業務", "(2)\u3000購入等件名及び数量\u3000令和８年度国境離島の合理的・効果的な状況把握手法構築業務\u3000一式")  # fmt: skip
+    a = got("notice", ss, "title")
+    assert a and a.citations == ["h_s1", "h_s2", "h_s3"]
+    assert a.value_ja == "令和８年度国境離島の合理的・効果的な状況把握手法構築業務"
+
+
+def test_title_2aa7506a_quantity_and_flag_after_the_name_are_cut_off() -> None:
+    ss = sents("(２) 調達件名及び数量  インターネット等による静止気象衛星画像データ航空配信サービス構築等 １式（電子入札対象案件）")  # fmt: skip
+    a = got("notice", ss, "title")
+    assert (
+        a
+        and a.value_ja
+        == "インターネット等による静止気象衛星画像データ航空配信サービス構築等"
+    )
+
+
+def test_title_136dfba9ee59_a_line_wrap_that_cut_the_name_agrees_with_the_full_one() -> (
+    None
+):
+    full = "農林水産統計システム次期システム移行・構築に係る調達支援及び技術検討業務"
+    ss = sents(
+        "調達案件名称", full, "(2)\u3000購入等件名及び数量\u3000農林水産統計システ"
+    )
+    a = got("notice", ss, "title")
+    assert a and a.value_ja == full
+
+
+def test_title_4c40bbd831fe_spec_label_alone() -> None:
+    ss = sents("仕様書", "1. 業務名", "「きのくに県民カレッジ」・「出張まなび講座」ウェブサイト制作及び講座検索システム構築業務", "2. 業務目的", prefix="p1_s")  # fmt: skip
+    a = got("spec", ss, "title")
+    assert (
+        a and a.citations == ["p1_s2", "p1_s3"] and a.value_ja.startswith("「きのくに")
+    )
+
+
+def test_title_6b7142ab_special_features_line_is_not_a_title_label() -> None:
+    ss = sents("(3)\u3000調達件名の特質等\u3000入札説明書及び仕様書による。")
+    assert got("notice", ss, "title") is None
+
+
+def test_title_two_different_titles_answer_nothing() -> None:
+    # two names from collected notices (a81e99fecea5, 84e9d0c8325c) in one document: ambiguous, so not found
+    ss = sents("（２）案件名", "ハローワークシステムの次々期更改に係る調査研究業務及び要件定義書案作成業務等一式", "(2)\u3000調達件名及び数量\u3000公的個人認証サービスを用いた受付システムの運用・保守業務一式")  # fmt: skip
+    assert got("notice", ss, "title") is None
+
+
+def test_title_bf99e8ba_case_number_in_front_of_the_name_answers_nothing() -> None:
+    ss = sents(
+        "調達案件名称", "07-0049-0230\u3000令和７年度 国際データ取引市場創出事業の請負"
+    )
+    assert got("notice", ss, "title") is None
+
+
+def test_title_a_label_with_no_value_does_not_take_the_next_heading() -> None:
+    ss = sents("（２）案件名", "（３）仕様")
+    assert got("notice", ss, "title") is None
+
+
+def test_title_is_not_asked_of_other_document_types() -> None:
+    ss = sents(
+        "調達案件名称", "令和８年度国境離島の合理的・効果的な状況把握手法構築業務"
+    )
+    assert got("eligibility_list", ss, "title") is None
+
+
+# --- issuer_org ------------------------------------------------------------------------
+
+
+def test_issuer_58f13b9c878a_portal_line_under_procuring_body() -> None:
+    ss = sents("令和09年10月27日", "調達機関", "総務省", "調達機関所在地")
+    a = got("notice", ss, "issuer_org")
+    assert a and a.value_ja == "総務省" and a.citations == ["h_s3"]
+
+
+def test_issuer_58f13b9c878a_procuring_body_number_line_is_not_the_name() -> None:
+    ss = sents("◎調達機関番号　013　◎所在地番号　13")
+    assert got("notice", ss, "issuer_org") is None
+
+
+def test_issuer_6b7142ab_name_is_the_start_of_the_officers_post() -> None:
+    ss = sents("令和８年９月14日", "支出負担行為担当官", "法務省大臣官房会計課長\u3000藤田\u3000正人", "◎調達機関番号\u3000013\u3000◎所在地番号\u300013")  # fmt: skip
+    a = got("notice", ss, "issuer_org")
+    assert a and a.value_ja == "法務省" and a.citations == ["h_s3"]
+
+
+def test_issuer_f19cddbd4cba_agency_name_before_the_post() -> None:
+    ss = sents(
+        "令和８年８月28日", "支出負担行為担当官", "出入国在留管理庁次長\u3000内藤惣一郎"
+    )
+    a = got("notice", ss, "issuer_org")
+    assert a and a.value_ja == "出入国在留管理庁"
+
+
+def test_issuer_f19cddbd4cba_portal_ministry_and_signing_agency_differ_so_nothing() -> (
+    None
+):
+    ss = sents("調達機関", "法務省", "調達機関所在地", "令和８年８月28日", "支出負担行為担当官", "出入国在留管理庁次長\u3000内藤惣一郎")  # fmt: skip
+    assert got("notice", ss, "issuer_org") is None
+
+
+def test_issuer_portal_line_and_officer_line_that_agree_cite_both() -> None:
+    ss = sents("調達機関", "内閣府", "調達機関所在地", "令和８年７月28日", "支出負担行為担当官", "内閣府大臣官房会計担当参事官\u3000井出\u3000英次")  # fmt: skip
+    a = got("notice", ss, "issuer_org")
+    assert a and a.value_ja == "内閣府" and a.citations == ["h_s2", "h_s6"]
+
+
+def test_issuer_2aa7506a_a_post_that_does_not_start_with_a_ministry_answers_nothing() -> (
+    None
+):
+    ss = sents("支出負担行為担当官", "気象衛星センター所長 立川 英二")
+    assert got("notice", ss, "issuer_org") is None
+
+
 def test_an_answer_not_in_its_cited_sentence_is_dropped() -> None:
     ss = sents("令和８年８月28日")
     by_id = {s.id: s for s in ss}

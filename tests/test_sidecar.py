@@ -613,3 +613,19 @@ def test_the_officer_name_is_passed_to_the_translator_for_its_cited_sentences(tm
         ["鈴木 花子"],
         ["鈴木 花子"],
     ]  # both cited sentences carry the structured name
+
+
+def test_text_field_comes_back_with_null_normalized_and_a_passing_schema_check(tmp_path):
+    # rules write {} for title and issuer_org; the schema wants null, so schema_valid used to fail
+    pdf = make_pdf(tmp_path / "invented.pdf")
+
+    def title_only(doc_type, sentences):
+        s = next(s for s in sentences if "指名停止" in s.text_orig)
+        return {"title": Extracted(field="title", value_ja="指名停止", normalized={}, citations=[s.id])}
+
+    with Server(create_app(TOKEN, None, title_only)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf), "doc_type": "notice"})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        f = next(x for x in srv.call("GET", f"/documents/{doc_id}/fields")[1]["fields"] if x["field"] == "title")
+    assert f["status"] == "present" and f["normalized"] is None
+    assert {"name": "schema_valid", "passed": True} in f["checks"]

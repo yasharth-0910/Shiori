@@ -11,7 +11,7 @@ map, so `value_ja` is the original wording. A rule that finds two different answ
 one document answers nothing. Fields covered: notice_date, procurement_type, bid_bond,
 performance_bond, tax_basis, unified_qualification, language_currency, wto_covered, and
 (v4) award_method, spec_access, submission_modes, delivery_deadline, performance_period,
-contracting_officer. A pointer such as 仕様書のとおり is answered as see_other_document
+contracting_officer, and title and issuer_org (D-89). A pointer such as 仕様書のとおり is answered as see_other_document
 (normalized {"ref": {...}}), the same way a label writes it.
 """
 
@@ -474,6 +474,95 @@ def contracting_officer(ss: list[Sentence]) -> Hit | None:
     return one(hits)
 
 
+def agreed(hits: list[Hit]) -> Hit | None:
+    """A text field's answer when every hit says the same text (spaces and a trailing quantity such as 一式
+    ignored): the longest wording, citing every sentence any hit used. A hit that is only the
+    start of another (a line wrap cut it: 農林水産統計システ) agrees with it. Different
+    texts: nothing."""
+
+    def key(h: Hit) -> str:
+        return re.sub(r"[0-9一]+(?:式|台)$", "", _strip(normalize(h[1])[0]))
+
+    if not hits:
+        return None
+    best = max(hits, key=lambda h: len(key(h)))
+    if not all(key(best).startswith(key(h)) for h in hits):
+        return None
+    ids = list(dict.fromkeys(i for h in hits for i in h[2]))
+    return {}, best[1], ids
+
+
+# --- title -------------------------------------------------------------------------------
+
+# Labels in front of the title, as the dev scan found them (data/cache/rules_title_issuer_scan.txt):
+# the portal header 調達案件名称, 案件名, (n) 購入等/借入等件名及び数量, (1) 件名, and in spec and
+# bid-instruction documents 業務名, 委託業務名, 調達業務の名称. A label must end there: 調達件名の特質等
+# is a different line. 契約件名 (the cover sheet of a notice) is not listed: it can disagree with the notice.
+_TITLE_LABEL = r"(?:調達案件名称|案件名|(?:購入等|借入等|賃借等|調達)?件名(?:及び数量)?|(?:委託)?業務名|調達業務の名称)(?=\s|[:：]|$)"
+_QTY = re.compile(
+    r"[\s\u3000]+[0-9０-９一二三四五六七八九十]+(?:式|台)(?:[（(][^）)]*[）)])?$"
+)  # "<title>　一式", "<title> ２式（電子入札対象案件）" after 件名及び数量: the quantity, not the name
+_DEFINED = re.compile(
+    r"[（(]以下[^）)]*[）)]$"
+)  # "（以下「本整備業務」という。）" after a name
+_CASE_NO = re.compile(
+    r"^[0-9０-９]{2}-[0-9０-９]{3,}"
+)  # a portal case number in front of the name: where the name ends is unclear
+_NUMBERED = re.compile(r"^[(（]?[0-9一二三四五六七八九十]{1,2}[)）.．、]")
+
+
+def _title_ok(v: str) -> bool:
+    """A title is a name: not a numbered heading that follows an empty label, not a label."""
+    return (
+        len(v) >= 4
+        and not _NUMBERED.match(v)
+        and not _CASE_NO.match(v)
+        and not re.fullmatch(_TITLE_LABEL, v)
+    )
+
+
+def title(ss: list[Sentence]) -> Hit | None:
+    """The text after a title label (same line, or the next sentence when the label stands
+    alone). Every label in the document must give the same text (spaces ignored); two
+    different titles, such as a cover sheet and the notice itself, answer nothing."""
+    hits: list[Hit] = []
+    by = {s.id: s for s in ss}
+    for norm_v, orig_v, ids in headed(ss, _TITLE_LABEL):
+        if "及び数量" in by[ids[0]].text_norm and (m := _QTY.search(orig_v)):
+            orig_v, norm_v = orig_v[: m.start()], _QTY.sub("", norm_v)
+        if m := _DEFINED.search(orig_v):
+            orig_v, norm_v = orig_v[: m.start()], _DEFINED.sub("", norm_v)
+        if _title_ok(norm_v.strip()):
+            hits.append(({}, orig_v.strip(), ids))
+    return agreed(hits)
+
+
+# --- issuer_org --------------------------------------------------------------------------
+
+_ORG_END = r"(?:省|庁|府|院|委員会|県|都|道|市|区|町|村|機構)"
+_ORG_LINE = re.compile(rf"\S{{2,20}}{_ORG_END}")
+_ORG_PREFIX = re.compile(r"[^\s\u3000（(、。]{1,14}?(?:省|庁|府)")
+
+
+def issuer_org(ss: list[Sentence]) -> Hit | None:
+    """The body that issues the notice, from two places a national notice states it: the
+    portal line under 調達機関, a bare name (省, 庁, 府, ...); or the line under the officer's
+    title (支出負担行為担当官), where the name is the start of the post: 法務省大臣官房会計課長
+    -> 法務省 (up to the first 省, 庁 or 府). A post that does not start with one of those
+    names (気象衛星センター所長) answers nothing. Different names in one document: nothing."""
+    hits: list[Hit] = []
+    for norm_v, orig_v, ids in headed(ss, r"調達機関(?![番所])"):
+        if len(ids) == 2 and _ORG_LINE.fullmatch(norm_v.strip()):
+            hits.append(({}, orig_v.strip(), ids[1:]))
+    for i, s in enumerate(ss[:-1]):
+        if re.fullmatch(OFFICER.pattern, s.text_norm.strip()) and (m := _ORG_PREFIX.match(ss[i + 1].text_norm.strip())):  # fmt: skip
+            nxt = ss[i + 1]
+            off = len(nxt.text_norm) - len(nxt.text_norm.lstrip())
+            q, ids = Joined([nxt]).cut(off + m.start(), off + m.end())
+            hits.append(({}, q.strip(), ids))
+    return agreed(hits)
+
+
 # --- the extractor -----------------------------------------------------------------------
 
 RULES: dict[str, Callable[[list[Sentence]], Hit | None]] = {
@@ -491,6 +580,8 @@ RULES: dict[str, Callable[[list[Sentence]], Hit | None]] = {
     "delivery_deadline": delivery_deadline,
     "performance_period": performance_period,
     "contracting_officer": contracting_officer,
+    "title": title,
+    "issuer_org": issuer_org,
 }
 
 
@@ -523,7 +614,9 @@ def verified(field: str, hit: Hit, by_id: dict[str, Sentence]) -> Extracted | No
                 return None
             SeeOtherRef.model_validate(normalized["ref"])
         else:
-            validate_normalized(field, normalized)
+            validate_normalized(
+                field, normalized or None
+            )  # a text field has no normalized value: {}
     except ValidationError:
         return None
     return Extracted(
