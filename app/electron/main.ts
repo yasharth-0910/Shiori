@@ -5,6 +5,8 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
+import * as llama from "./llama";
 import * as sidecar from "./sidecar";
 
 const DIST = path.join(__dirname, "..", "dist");
@@ -24,6 +26,43 @@ protocol.registerSchemesAsPrivileged([
 
 const ID = /^[0-9a-f]{64}$/;
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
+// SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
+const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
+
+// One backend for the session: llama-server (when SHIORI_LLAMA_SERVER and SHIORI_MODEL are set)
+// and the sidecar. Started on the first Add document, stopped when the app quits.
+type Backend = { state: "starting" | "ready" | "failed"; model: boolean; note: string | null; error: string | null };
+let backend: Backend | null = null;
+const jobs = new Map<string, { posted: boolean; error: string | null }>();
+
+function ensureBackend(): Backend {
+  if (backend) return backend;
+  const b: Backend = { state: "starting", model: false, note: null, error: null };
+  backend = b;
+  void (async () => {
+    const cfg = llama.config();
+    let l: llama.Llama | null = null;
+    if (!cfg) b.note = "Model not set up";
+    else {
+      b.model = true;
+      try {
+        l = await llama.start(cfg);
+      } catch (e) {
+        b.model = false;
+        b.note = `Model failed to start (${(e as Error).message})`; // a short code, no path
+      }
+    }
+    try {
+      await sidecar.start(l);
+      b.state = "ready";
+    } catch (e) {
+      llama.stop();
+      b.state = "failed";
+      b.error = (e as Error).message;
+    }
+  })();
+  return b;
+}
 
 function serve(request: Request): Response {
   const rel = decodeURIComponent(new URL(request.url).pathname);
@@ -59,22 +98,22 @@ async function createWindow(): Promise<void> {
   await win.loadURL("shiori://app/");
 
   // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
-  const shot = process.env.SHIORI_SHOT;
+  const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;
   if (shot) {
     win.webContents.on("console-message", (e) => console.log("renderer:", e.message));
-    setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, 30000);
-    if (process.env.SHIORI_PICK) {
+    setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, process.env.SHIORI_MODEL ? 900000 : 30000);
+    if (PICK) {
       // With SHIORI_PICK also set: click "Add document", log the stage shown on the Processing screen each time it changes.
       await win.webContents.executeJavaScript(
         `new Promise(r => { const t = setInterval(() => { const b = [...document.querySelectorAll("button")].find(x => x.textContent === "Add document"); if (b) { clearInterval(t); b.click(); r(); } }, 100); }); ` +
           `window.__seen = []; setInterval(() => { const m = document.querySelector(".processing .meta:last-of-type"); ` +
-          `if (m && window.__seen.at(-1) !== m.textContent) { window.__seen.push(m.textContent); console.log("screen: " + m.textContent); } }, 20);`,
+          `const t = m && m.textContent.replace(/ · \\d+ s$/, ""); if (t && window.__seen.at(-1) !== t) { window.__seen.push(t); console.log("screen: " + t); } }, 20);`,
       );
     }
     const chip = Number(process.env.SHIORI_CHIP ?? 0);
     await win.webContents.executeJavaScript(
       `new Promise(r => { const t = setInterval(() => { const c = document.querySelectorAll(".chip"); ` +
-        `if ((c.length || ${!!process.env.SHIORI_PICK}) && document.querySelectorAll("canvas").length) { clearInterval(t); c[${chip}]?.click(); ` +
+        `if ((c.length || ${!!PICK}) && document.querySelectorAll("canvas").length) { clearInterval(t); c[${chip}]?.click(); ` +
         `console.log("rows: " + document.querySelectorAll(".field").length + " | " + [...document.querySelectorAll(".counts button")].map(b => b.textContent).join(" / ") + " pills: " + document.querySelectorAll(".pill").length); setTimeout(r, 1500); } }, 200); })`,
     );
     fs.writeFileSync(shot, (await win.webContents.capturePage()).toPNG());
@@ -96,7 +135,7 @@ function registerIpc(): void {
   // SHIORI_PICK=<pdf> stands in for the picker in dev checks (like SHIORI_SHOT); the renderer cannot set it.
   ipcMain.handle("shiori:start", async (e) => {
     own(e);
-    let file = process.env.SHIORI_PICK;
+    let file = PICK;
     if (!file) {
       const win = BrowserWindow.fromWebContents(e.sender);
       const opts = { properties: ["openFile" as const], filters: [{ name: "PDF", extensions: ["pdf"] }] };
@@ -104,13 +143,40 @@ function registerIpc(): void {
       file = r.canceled ? undefined : r.filePaths[0];
     }
     if (!file) return null;
-    const { doc_id } = await sidecar.call<{ doc_id: string }>("POST", "/documents", { path: file });
+    // The id is the file's SHA-256, the same one the sidecar makes, so the screen can start
+    // before the model and the sidecar are up.
+    const doc_id = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
     picked.set(doc_id, file);
+    jobs.set(doc_id, { posted: false, error: null });
+    const b = ensureBackend();
+    void (async () => {
+      while (b.state === "starting") await new Promise((r) => setTimeout(r, 200));
+      const job = jobs.get(doc_id);
+      if (!job || b.state === "failed") return;
+      try {
+        await sidecar.call("POST", "/documents", { path: file });
+        job.posted = true;
+      } catch (err) {
+        job.error = (err as Error).message;
+      }
+    })();
     return { doc_id, name: path.basename(file) };
   });
-  ipcMain.handle("shiori:status", (e, id: unknown) => {
+  ipcMain.handle("shiori:status", async (e, id: unknown) => {
     own(e);
-    return sidecar.call("GET", `/documents/${docId(id)}/status`);
+    const doc = docId(id);
+    const job = jobs.get(doc);
+    if (!job) throw new Error("unknown_document");
+    // No backend means the sidecar died (it is only cleared then); the next Add document starts a new one.
+    if (!backend) return { doc_id: doc, pages: null, detail: null, stage: "failed", error: "sidecar_exited" };
+    const b = backend;
+    const base = { doc_id: doc, pages: null, detail: b.note, error: null };
+    if (b.state === "starting") return { ...base, stage: b.model ? "loading_model" : "queued" };
+    if (b.state === "failed" || job.error) return { ...base, stage: "failed", error: b.error ?? job.error };
+    if (!job.posted) return { ...base, stage: "queued" };
+    const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status`);
+    const running = s.stage !== "done" && s.stage !== "failed";
+    return { ...s, detail: s.detail ?? (running ? b.note : null) };
   });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
@@ -130,6 +196,14 @@ void app.whenReady().then(() => {
 });
 app.on("window-all-closed", () => app.quit());
 // The sidecar ends with the app: quit, Ctrl+C in the terminal, or a terminate.
-app.on("will-quit", sidecar.stop);
-process.on("exit", sidecar.stop);
+const stopAll = () => {
+  sidecar.stop();
+  llama.stop();
+};
+sidecar.onDeath(() => {
+  llama.stop(); // no llama-server without the sidecar it serves
+  backend = null; // the next Add document starts both again
+});
+app.on("will-quit", stopAll);
+process.on("exit", stopAll);
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => app.quit());

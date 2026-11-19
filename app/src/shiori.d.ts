@@ -1,6 +1,6 @@
 import type { Fixture } from "./types";
 
-export type Status = { doc_id: string; stage: string; pages: number | null; error: string | null };
+export type Status = { doc_id: string; stage: string; pages: number | null; detail: string | null; error: string | null };
 
 // The three functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {

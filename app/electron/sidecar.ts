@@ -3,6 +3,7 @@
 // the sidecar's own 127.0.0.1 port. Nothing here logs a path or document text.
 import { spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
+import type { Llama } from "./llama";
 
 const ROOT = path.join(__dirname, "..", ".."); // repo root; dev only, packaging comes in Phase 9
 const HOST = "127.0.0.1";
@@ -11,12 +12,24 @@ type Hello = { port: number; token: string };
 
 let child: ChildProcess | null = null;
 let hello: Promise<Hello> | null = null;
+let died: (() => void) | null = null;
 
-/** Start `uv run python -m sidecar` once and read its first stdout line: {"port", "token"}. */
-function start(): Promise<Hello> {
+/** Called when the sidecar process ends, however it ends (main stops llama-server then). */
+export function onDeath(fn: () => void): void {
+  died = fn;
+}
+
+/**
+ * Start `uv run python -m sidecar` once and read its first stdout line: {"port", "token"}.
+ * With `llama`, it gets --llama-url (the port is not secret) and the API key in its
+ * environment (SHIORI_LLAMA_KEY), never argv.
+ */
+export function start(llama: Llama | null): Promise<void> {
   hello ??= new Promise<Hello>((resolve, reject) => {
+    const args = ["run", "python", "-m", "sidecar", ...(llama ? ["--llama-url", `http://${HOST}:${llama.port}`] : [])];
+    const env = llama ? { ...process.env, SHIORI_LLAMA_KEY: llama.key } : process.env;
     // stdin stays open (a pipe): when this process dies the sidecar sees EOF and exits.
-    const p = spawn("uv", ["run", "python", "-m", "sidecar"], { cwd: ROOT, stdio: ["pipe", "pipe", "inherit"] });
+    const p = spawn("uv", args, { cwd: ROOT, env, stdio: ["pipe", "pipe", "inherit"] });
     child = p;
     let buf = "";
     p.stdout?.on("data", (d: Buffer) => {
@@ -35,16 +48,18 @@ function start(): Promise<Hello> {
     p.on("error", () => reject(new Error("sidecar_start_failed")));
     p.on("exit", () => {
       child = null;
-      hello = null; // a later call starts a new one
+      hello = null; // a later start makes a new one
       reject(new Error("sidecar_exited"));
+      died?.();
     });
   });
-  return hello;
+  return hello.then(() => undefined);
 }
 
 /** One authenticated call to the sidecar. Returns the parsed JSON body; a non-2xx is an error. */
 export async function call<T>(method: "GET" | "POST", url: string, body?: unknown): Promise<T> {
-  const { port, token } = await start();
+  if (!hello) throw new Error("sidecar_not_started");
+  const { port, token } = await hello;
   const res = await fetch(`http://${HOST}:${port}${url}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
