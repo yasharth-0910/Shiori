@@ -239,12 +239,12 @@ Readings are included so Yasharth can learn them. English renderings here are th
 
 | Japanese | Reading | English in app | Notes |
 |---|---|---|---|
-| 入札公告 | にゅうさつこうこく | Tender notice | |
+| 入札公告 | にゅうさつこうこく | Bid notice | |
 | 公示 | こうじ | Public notice | used for WTO-covered procurements |
 | 調達 | ちょうたつ | Procurement | |
 | 件名 | けんめい | Title | |
-| 一般競争入札 | いっぱんきょうそうにゅうさつ | Open competitive tender | |
-| 指名競争入札 | しめいきょうそうにゅうさつ | Selective tender | only invited bidders |
+| 一般競争入札 | いっぱんきょうそうにゅうさつ | Open competitive bidding | |
+| 指名競争入札 | しめいきょうそうにゅうさつ | Selective bidding | only invited bidders |
 | 随意契約 | ずいいけいやく | Negotiated contract | no competition, or limited |
 | 企画競争 | きかくきょうそう | Proposal competition | closest to an RFP |
 | 公募 | こうぼ | Open call | |
@@ -252,6 +252,11 @@ Readings are included so Yasharth can learn them. English renderings here are th
 | 最低価格落札方式 | さいていかかくらくさつほうしき | Lowest-price award | |
 | 落札者 | らくさつしゃ | Winning bidder | |
 | 予定価格 | よていかかく | Ceiling price | usually undisclosed, see NUM-7 |
+| 予算決算及び会計令 | よさんけっさんおよびかいけいれい | Order for Budgets, Settlement of Accounts and Accounting | often abbreviated 予決令 in the document itself |
+| 関東・甲信越 | かんとう・こうしんえつ | Kanto-Koshinetsu | unified qualification region; also written 関東甲信越 |
+| 東海・北陸 | とうかい・ほくりく | Tokai-Hokuriku | region; also 東海北陸 |
+| 九州・沖縄 | きゅうしゅう・おきなわ | Kyushu-Okinawa | region; also 九州沖縄 |
+| 北海道 / 東北 / 近畿 / 四国 | ほっかいどう / とうほく / きんき / しこく | Hokkaido / Tohoku / Kinki / Shikoku | regions |
 | 入札説明書 | にゅうさつせつめいしょ | Bid instructions | |
 | 仕様書 | しようしょ | Specification | |
 | 提案書 | ていあんしょ | Proposal | |

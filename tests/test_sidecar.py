@@ -25,13 +25,13 @@ LINES = [
     "2 入札書の提出期限 令和８年10月15日13時30分",
 ]
 FIXTURE_KEYS = {"doc_id", "pdf", "fields", "sentences"}  # app/public/fixture.json
-FIELD_KEYS = {"field", "status", "value_en", "value_ja", "items", "citations", "checks"}
+FIELD_KEYS = {"field", "status", "value_en", "value_ja", "normalized", "items", "citations", "checks"}
 
 
-def make_pdf(path: Path) -> Path:
+def make_pdf(path: Path, lines: list[str] = LINES) -> Path:
     doc = pymupdf.open()
     page = doc.new_page()
-    for n, text in enumerate(LINES):
+    for n, text in enumerate(lines):
         page.insert_text((72, 100 + 24 * n), text, fontname="japan", fontsize=12)
     doc.save(path)
     return path
@@ -165,6 +165,7 @@ def test_pdf_through_every_stage_to_fields(tmp_path):
         # a field nobody found is absent, with no checks
         title = next(f for f in fields["fields"] if f["field"] == "title")
         assert title["status"] == "absent" and title["checks"] == []
+        assert title["normalized"] is None and isinstance(elig["normalized"], dict)  # the stored value, as written
 
         # the same bytes again: same id, no second run
         assert srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"] == doc_id
@@ -268,3 +269,347 @@ def test_exits_cleanly_on_a_signal(name):
     p.send_signal(getattr(signal, name))
     assert p.wait(10) == 0
     assert p.stderr and "Traceback" not in p.stderr.read()
+
+
+def test_status_carries_a_detail_while_the_model_stage_runs(tmp_path):
+    from sidecar import server
+
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    go = threading.Event()
+
+    def slow_lists(doc_type, sentences):
+        server.report("eligibility (1 of 3)")
+        go.wait(5)
+        return {}
+
+    with Server(create_app(TOKEN, slow_lists)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        for _ in range(500):
+            got = srv.call("GET", f"/documents/{doc_id}/status")[1]
+            if got["detail"]:
+                break
+            time.sleep(0.01)
+        assert (got["stage"], got["detail"]) == ("extract", "eligibility (1 of 3)")
+        go.set()
+        done = wait_for(srv, doc_id, "done")
+        assert done["detail"] is None  # a new stage clears it
+
+
+def test_extract_with_progress_reports_each_field(monkeypatch):
+    from shiori_core.models import Sentence
+    from shiori_core.normalize import normalize
+
+    from sidecar import __main__ as m
+
+    seen = []
+    monkeypatch.setattr(m, "report", seen.append)
+
+    class FakeClient:
+        def complete(self, system, user, schema, max_out):
+            return '{"items": []}'
+
+    def sent(i, t, titles):
+        norm, mp = normalize(t)
+        return Sentence(id=i, page=0, section_path=[], section_titles=titles, text_orig=t, text_norm=norm, norm_to_orig=mp, boxes=[])  # fmt: skip
+
+    ss = [
+        sent("h_s1", "競争参加資格", ["競争参加資格"]),
+        sent("h_s2", "入札書の受領期限　令和８年10月21日", ["入札書の受領期限"]),
+    ]
+    m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
+    assert seen[0] == "eligibility (1 of 3)" and all(d.endswith(" of 3)") for d in seen)
+
+
+def test_translate_endpoint_without_a_model_is_503(tmp_path):
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    with Server(create_app(TOKEN, fake_lists)) as srv:  # no translator: no llama-server
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        code, body = srv.call(
+            "POST", f"/documents/{doc_id}/translate", {"ids": ["p1_s3"]}
+        )
+        assert code == 503 and "No model" in body["detail"]
+        assert (
+            srv.call("POST", f"/documents/{doc_id}/translate", {"ids": []}, token=None)[
+                0
+            ]
+            == 401
+        )
+
+
+# --- background translation queue (D-88) -------------------------------------------------------
+
+
+def cite_all(doc_type, sentences):
+    """A fake extractor: one eligibility field citing every sentence, in order."""
+    items = [{"kind": "other", "polarity": "requirement", "text_ja": s.text_orig, "citations": [s.id]} for s in sentences]  # fmt: skip
+    ids = [s.id for s in sentences]
+    return {"eligibility": Extracted(field="eligibility", value_ja="\n".join(s.text_orig for s in sentences), normalized={"items": items}, citations=ids)}  # fmt: skip
+
+
+class Recorder:
+    """A translator that records every call and can be held, one sentence at a time."""
+
+    def __init__(self, hold: bool = False):
+        from shiori_core.translate import Translation
+
+        self.Translation = Translation
+        self.calls: list[str] = []
+        self.gate = threading.Semaphore(0)
+        self.hold = hold
+        self.started = threading.Event()
+
+    def __call__(self, text, abbreviations, names):
+        self.calls.append(text)
+        self.started.set()
+        if self.hold:
+            self.gate.acquire(timeout=10)
+        return self.Translation(en="EN " + text, numbers_match=True)
+
+
+def ask(srv, doc_id, ids=()):
+    return srv.call("POST", f"/documents/{doc_id}/translate", {"ids": list(ids)})
+
+
+def until(fn, what="condition"):
+    for _ in range(1000):
+        got = fn()
+        if got:
+            return got
+        time.sleep(0.01)
+    raise AssertionError(f"never: {what}")
+
+
+def test_the_queue_translates_every_cited_sentence_after_the_fields_are_ready(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    rec = Recorder()
+    with Server(create_app(TOKEN, cite_all, translator=rec)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        got = until(
+            lambda: (g := ask(srv, doc_id)[1])["done"] == g["total"] and g,
+            "queue empty",
+        )
+        assert got["total"] == 4 and got["failed"] == []
+        assert set(got["items"]) == {"p1_s1", "p1_s2", "p1_s3", "p1_s4"}
+        assert got["items"]["p1_s3"] == {"en": "EN (1) 指名停止を受けている期間中の者でないこと。", "numbers_match": True, "protected_lost": False}  # fmt: skip
+        assert len(rec.calls) == 4 and len(set(rec.calls)) == 4  # no sentence twice
+        ask(
+            srv, doc_id, ["p1_s1", "p1_s2"]
+        )  # opening a field later asks for nothing again
+        assert len(rec.calls) == 4
+
+
+def test_the_fields_are_ready_before_translation_is_done(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    rec = Recorder(hold=True)
+    with Server(create_app(TOKEN, cite_all, translator=rec)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        assert rec.started.wait(5)  # the first translation is running, held
+        code, fields = srv.call("GET", f"/documents/{doc_id}/fields")
+        assert code == 200 and fields["fields"]  # the Workspace can open
+        got = ask(srv, doc_id)[1]
+        assert (
+            got["done"] == 0 and got["total"] == 4
+        )  # nothing ready yet; counts are there
+        for _ in range(4):
+            rec.gate.release()
+        until(lambda: ask(srv, doc_id)[1]["done"] == 4, "all done")
+
+
+def test_opening_a_field_moves_its_sentences_to_the_front_without_duplicates(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    rec = Recorder(hold=True)
+    with Server(create_app(TOKEN, cite_all, translator=rec)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        assert rec.started.wait(5)  # p1_s1 is in flight
+        for _ in range(3):  # asking again and again, including for the one in flight
+            ask(srv, doc_id, ["p1_s4", "p1_s3", "p1_s1"])
+        for _ in range(4):
+            rec.gate.release()
+        until(lambda: ask(srv, doc_id)[1]["done"] == 4, "all done")
+    order = [
+        next(i for i, line in enumerate(LINES) if line in c or c in line)
+        for c in rec.calls
+    ]
+    assert order == [
+        0,
+        3,
+        2,
+        1,
+    ]  # in flight first, then the opened field's ids in the order asked, then the rest
+    assert len(rec.calls) == 4  # no duplicate request
+
+
+def test_without_a_model_nothing_is_queued(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    app = create_app(TOKEN, cite_all)  # no translator
+    with Server(app) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        assert ask(srv, doc_id)[0] == 503
+    assert app.state.queues is None
+
+
+def test_a_new_document_cancels_the_running_queue_and_opening_the_old_one_restarts_it(
+    tmp_path,
+):
+    a = make_pdf(tmp_path / "a.pdf")
+    b = make_pdf(
+        tmp_path / "b.pdf", ["別の入札公告", "(1) 別の資格を有する者であること。"]
+    )
+    rec = Recorder(hold=True)
+    app = create_app(TOKEN, cite_all, translator=rec)
+    with Server(app) as srv:
+        a_id = srv.call("POST", "/documents", {"path": str(a)})[1]["doc_id"]
+        wait_for(srv, a_id, "done")
+        assert rec.started.wait(5)  # a's first sentence is in flight
+        b_id = srv.call("POST", "/documents", {"path": str(b)})[1][
+            "doc_id"
+        ]  # another document is added
+        assert app.state.worker.jobs[a_id].tq == "cancelled"
+        assert app.state.worker.jobs[a_id].pending == []
+        for _ in range(10):
+            rec.gate.release()
+        wait_for(srv, b_id, "done")
+        until(lambda: ask(srv, b_id)[1]["done"] == 2, "b translated")
+        ask(srv, a_id)  # a is opened again
+        assert app.state.worker.jobs[a_id].tq in ("running", "complete")
+        until(lambda: ask(srv, a_id)[1]["done"] == 4, "a translated")
+    assert (
+        len(rec.calls) == 6 and len(set(rec.calls)) == 6
+    )  # 4 + 2 sentences, none twice, the in-flight one kept
+
+
+def test_translation_never_overlaps_extraction(tmp_path):
+    a = make_pdf(tmp_path / "a.pdf")
+    b = make_pdf(
+        tmp_path / "b.pdf", ["別の入札公告", "(1) 別の資格を有する者であること。"]
+    )
+    rec = Recorder(hold=True)
+    extracting, release = threading.Event(), threading.Event()
+    overlapped = []
+
+    def slow_cite(doc_type, sentences):
+        if any("別の" in s.text_orig for s in sentences):
+            extracting.set()
+            release.wait(10)
+        return cite_all(doc_type, sentences)
+
+    def watching(text, abbreviations, names):
+        if extracting.is_set() and not release.is_set():
+            overlapped.append(text)
+        return rec(text, abbreviations, names)
+
+    with Server(create_app(TOKEN, slow_cite, translator=watching)) as srv:
+        a_id = srv.call("POST", "/documents", {"path": str(a)})[1]["doc_id"]
+        wait_for(srv, a_id, "done")
+        assert rec.started.wait(5)  # a's first sentence is in flight, held
+        b_id = srv.call("POST", "/documents", {"path": str(b)})[1]["doc_id"]
+        rec.gate.release()  # let the in-flight sentence finish; b's extraction takes the model next
+        assert extracting.wait(5)
+        time.sleep(
+            0.5
+        )  # a second translation could have started here, and must not have
+        assert len(rec.calls) == 1
+        release.set()
+        for _ in range(10):
+            rec.gate.release()
+        wait_for(srv, b_id, "done")
+    assert overlapped == []
+
+
+def test_a_failed_translation_is_counted_and_the_queue_goes_on(tmp_path):
+    from shiori_core.translate import Translation
+
+    pdf = make_pdf(tmp_path / "a.pdf")
+
+    def flaky(text, abbreviations, names):
+        if "入札公告" == text:
+            raise OSError("connection refused for " + text)
+        return Translation(en="ok", numbers_match=True)
+
+    with Server(create_app(TOKEN, cite_all, translator=flaky)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        got = until(
+            lambda: (g := ask(srv, doc_id)[1])["done"] + len(g["failed"]) == 4 and g,
+            "queue empty",
+        )
+        assert got["failed"] == ["p1_s1"] and got["done"] == 3
+        assert "入札公告" not in json.dumps(got["failed"], ensure_ascii=False)
+
+
+def test_opening_a_field_retries_its_failed_sentence(tmp_path):
+    from shiori_core.translate import Translation
+
+    pdf = make_pdf(tmp_path / "a.pdf")
+    calls: list[str] = []
+
+    def once_bad(text, abbreviations, names):
+        calls.append(text)
+        if text == "入札公告" and calls.count(text) == 1:
+            raise OSError("down")
+        return Translation(en="ok", numbers_match=True)
+
+    with Server(create_app(TOKEN, cite_all, translator=once_bad)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        until(lambda: ask(srv, doc_id)[1]["failed"] == ["p1_s1"] or None, "failed")
+        ask(srv, doc_id, ["p1_s1"])  # the field is opened: the failed sentence goes back in
+        got = until(lambda: (g := ask(srv, doc_id)[1])["done"] == 4 and g, "retried")
+        assert got["failed"] == []
+
+
+def test_an_uncited_sentence_and_an_unknown_document_are_refused(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    with Server(create_app(TOKEN, fake_lists, translator=Recorder())) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        assert (
+            ask(srv, doc_id, ["p1_s1"])[0] == 400
+        )  # only p1_s3 is cited by fake_lists
+        assert ask(srv, "nope", ["p1_s3"])[0] == 404
+        assert (
+            srv.call("POST", f"/documents/{doc_id}/translate", {"ids": []}, token=None)[
+                0
+            ]
+            == 401
+        )
+
+
+def test_the_officer_name_is_passed_to_the_translator_for_its_cited_sentences(tmp_path):
+    from shiori_core.translate import Translation
+
+    pdf = make_pdf(
+        tmp_path / "officer.pdf",
+        [
+            "入札公告",
+            "支出負担行為担当官",
+            "気象衛星センター所長 鈴木 花子",
+            "無関係な文",
+        ],
+    )
+    seen = []
+
+    def base(doc_type, sentences):
+        a, b = (
+            next(s for s in sentences if "担当官" in s.text_orig),
+            next(s for s in sentences if "鈴木" in s.text_orig),
+        )
+        return {"contracting_officer": Extracted(field="contracting_officer", value_ja=a.text_orig + "\n" + b.text_orig, normalized={"title": "支出負担行為担当官", "name": "鈴木 花子"}, citations=[a.id, b.id])}  # fmt: skip
+
+    def translator(text, abbreviations, names):
+        seen.append((text, names))
+        return Translation(en="x", numbers_match=True)
+
+    with Server(create_app(TOKEN, None, base, translator)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        until(lambda: ask(srv, doc_id)[1]["done"] == 2, "translated")
+    assert sorted(n for _, n in seen) == [
+        ["鈴木 花子"],
+        ["鈴木 花子"],
+    ]  # both cited sentences carry the structured name

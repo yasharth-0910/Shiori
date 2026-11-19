@@ -19,8 +19,12 @@ SUFFIXES = {".ts", ".tsx", ".mts", ".js", ".mjs", ".cjs", ".json", ".html", ".cs
 
 URL = re.compile(r"""(?:https?|wss?|ftp)://[^\s"'`)<>]+""", re.I)
 PROTO_REL = re.compile(r"""(?:src|href)\s*=\s*["']//""", re.I)
-NET_API = re.compile(r"\b(?:XMLHttpRequest|WebSocket|EventSource|sendBeacon|autoUpdater)\b")
-NET_IMPORT = re.compile(r"""(?:from|require\()\s*["'](?:node:)?(?:https?|net|dgram|tls)["']|\bnet\s*[,}]\s*[^;]*from\s*["']electron["']""")
+NET_API = re.compile(
+    r"\b(?:XMLHttpRequest|WebSocket|EventSource|sendBeacon|autoUpdater)\b"
+)
+NET_IMPORT = re.compile(
+    r"""(?:from|require\()\s*["'](?:node:)?(?:https?|net|dgram|tls)["']|\bnet\s*[,}]\s*[^;]*from\s*["']electron["']"""
+)
 FETCH = re.compile(r"""\bfetch\(\s*([^)]*)\)""")
 
 
@@ -42,7 +46,10 @@ def problems(text: str) -> list[str]:
     out += [f"network import {m.group(0)}" for m in NET_IMPORT.finditer(text)]
     for m in FETCH.finditer(text):
         target = m.group(1).strip()
-        if not re.match(r"""["'`]\./|["'`]/[^/]|["']shiori://""", target) and "url" not in target.lower():
+        if (
+            not re.match(r"""["'`]\./|["'`]/[^/]|["']shiori://""", target)
+            and "url" not in target.lower()
+        ):
             out.append(f"fetch target {target}")
     return out
 
@@ -52,12 +59,20 @@ def test_app_has_sources_to_scan() -> None:
     assert {"main.ts", "App.tsx", "index.html"} <= names
 
 
-SIDECAR = "electron/sidecar.ts"  # the one file that may name a URL: the sidecar's loopback port (D-83)
+SIDECAR = "electron/sidecar.ts"  # may name a URL: the sidecar's loopback port (D-83)
+LLAMA = "electron/llama.ts"  # may name a URL (llama-server's loopback port, health check) and import net for a free port (D-84)
+LOOPBACK_FILES = {SIDECAR, LLAMA}
 
 
 def sidecar_problems(text: str) -> list[str]:
     """In electron/sidecar.ts a URL must start with the HOST constant, which must be 127.0.0.1."""
-    out = [p for p in problems(text) if not p.startswith(("URL http://${HOST}:", "fetch target"))]
+    out = [
+        p
+        for p in problems(text)
+        if not p.startswith(("URL http://${HOST}:", "fetch target", "network import"))
+    ]
+    if "node:net" in text.replace('"node:net"', "", 1):
+        out.append("net imported twice or used for more")
     if 'const HOST = "127.0.0.1";' not in text:
         out.append("HOST is not the 127.0.0.1 constant")
     out += [f"fetch target {m.group(1)}" for m in FETCH.finditer(text) if not m.group(1).strip().startswith("`http://${HOST}:")]  # fmt: skip
@@ -66,7 +81,11 @@ def sidecar_problems(text: str) -> list[str]:
 
 def test_app_makes_no_network_reference() -> None:
     found = {
-        str(p.relative_to(APP)): (sidecar_problems if p.relative_to(APP).as_posix() == SIDECAR else problems)(p.read_text())
+        str(p.relative_to(APP)): (
+            sidecar_problems
+            if p.relative_to(APP).as_posix() in LOOPBACK_FILES
+            else problems
+        )(p.read_text())
         for p in app_files()
     }
     found = {k: v for k, v in found.items() if v}
@@ -87,22 +106,40 @@ def test_renderer_cannot_reach_any_host() -> None:
     """The renderer (app/src, index.html) names no host and holds no token; the CSP lets it
     talk to itself only (shiori://); the only other fetch in the app is the main process's call
     to the sidecar. A page that can only reach 'self' cannot reach 127.0.0.1 either."""
-    csp = re.search(r'Content-Security-Policy"\s+content="([^"]+)"', (APP / "index.html").read_text())
+    csp = re.search(
+        r'Content-Security-Policy"\s+content="([^"]+)"',
+        (APP / "index.html").read_text(),
+    )
     assert csp
     assert re.search(r"connect-src 'self'(;|$)", csp.group(1))
     for p in [*(APP / "src").rglob("*"), APP / "index.html"]:
         if p.is_file():
             text = p.read_text().lower()
-            for word in ("127.0.0.1", "localhost", "token", "authorization", "child_process", "ipcrenderer"):
+            for word in (
+                "127.0.0.1",
+                "localhost",
+                "token",
+                "authorization",
+                "child_process",
+                "ipcrenderer",
+            ):
                 assert word not in text, f"{p.name} mentions {word}"
-    fetchers = {p.relative_to(APP).as_posix() for p in app_files() if "fetch(" in p.read_text()}
-    assert fetchers <= {SIDECAR, "src/App.tsx"}, fetchers  # App.tsx: ./fixture.json (relative, shiori://)
+    fetchers = {
+        p.relative_to(APP).as_posix() for p in app_files() if "fetch(" in p.read_text()
+    }
+    assert fetchers <= {SIDECAR, LLAMA, "src/App.tsx"}, (
+        fetchers
+    )  # App.tsx: ./fixture.json (relative, shiori://)
 
 
 def test_sidecar_checker_catches_a_remote_host() -> None:
-    assert sidecar_problems('const HOST = "127.0.0.1"; fetch(`http://example.com/${x}`)')
+    assert sidecar_problems(
+        'const HOST = "127.0.0.1"; fetch(`http://example.com/${x}`)'
+    )
     assert sidecar_problems('const HOST = "0.0.0.0"; fetch(`http://${HOST}:${port}/x`)')
-    assert not sidecar_problems('const HOST = "127.0.0.1"; fetch(`http://${HOST}:${port}/x`)')
+    assert not sidecar_problems(
+        'const HOST = "127.0.0.1"; fetch(`http://${HOST}:${port}/x`)'
+    )
 
 
 def test_window_flags() -> None:

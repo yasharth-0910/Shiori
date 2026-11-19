@@ -13,9 +13,8 @@ const firstTr = (ids: string[], tr: Items | null): En | null => {
   return t ? { text: t.en, mt: true, tr: t } : null;
 };
 
-// English labels for scalar enum fields, by code. The IPC sends no normalized value (only the Japanese quote in
-// value_ja), so the quote is matched against the wording the rules extractor itself looks for. The English
-// names are the ones in core/shiori_core/glossary.py. Anything else gets no label (docs/decisions.md, Open questions).
+// Fallback only, for a field with no normalized value: the Japanese quote in value_ja is matched against the wording
+// the rules extractor itself looks for. The English names are the ones in core/shiori_core/glossary.py.
 const ENUM_LABELS: Record<string, [RegExp, string][]> = {
   procurement_type: [
     [/一般競争入札/, "Open competitive bidding"],
@@ -38,12 +37,35 @@ export function enumLabel(f: Field): string | null {
   return hit ? hit[1] : null;
 }
 
-/** A deterministic answer for the top of a scalar card: the stored English value, else the enum label. */
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+// Enum answers by the extractor's stored code (docs/field_schema.md). Same English names as glossary.py.
+const ENUM_BY_CODE: Record<string, [key: string, labels: Record<string, string>]> = {
+  procurement_type: ["type", { open_competitive: "Open competitive bidding", designated_competitive: "Selective bidding", proposal_competition: "Proposal competition", open_counter: "Open counter" }],
+  award_method: ["method", { best_value: "Best-value award", lowest_price: "Lowest-price award" }],
+};
+
+/** "2024-06-05" -> "June 5, 2024"; null when the string is not a plain ISO date. */
+export function isoDateEn(iso: unknown): string | null {
+  const m = typeof iso === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${month} ${Number(m[3])}, ${m[1]}` : null;
+}
+
+/** An answer written by code from the stored normalized value: an ISO date or an enum code. Null when there is none. */
+function normalizedAnswer(f: Field): string | null {
+  const n = f.normalized;
+  if (!n) return null;
+  const e = ENUM_BY_CODE[f.field];
+  return e ? (e[1][String(n[e[0]])] ?? null) : isoDateEn(n.date);
+}
+
+/** A deterministic answer for the top of a scalar card: built from the normalized value, else the quote's enum label, else the stored English value. */
 export function scalarAnswer(f: Field): En | null {
   if (f.items.length) return null;
-  if (f.value_en) return { text: f.value_en, mt: true };
-  const l = enumLabel(f);
-  return l ? { text: l, mt: false } : null;
+  const made = normalizedAnswer(f) ?? (f.value_en ? null : enumLabel(f));
+  if (made) return { text: made, mt: false };
+  return f.value_en ? { text: f.value_en, mt: true } : null;
 }
 
 const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

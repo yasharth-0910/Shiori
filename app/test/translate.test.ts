@@ -47,7 +47,7 @@ test("the Workspace asks the queue on mount and when a field opens, and never wa
   assert.equal((w.match(/window\.shiori\.translate\(/g) ?? []).length, 1); // one call site: the helper `ask`
   assert.match(w, /useState<TrState>\(\{ status: "loading" \}\)/); // renders at once, English fills in later
   assert.equal((w.match(/ask\(idsOf\(f, fx\)\)/g) ?? []).length, 1); // the field's ids go to the front, from the open branch only
-  assert.match(w, /if \(working\(n\)\) timer = setTimeout\(poll, 1500\)/); // polls while the queue works, then stops
+  assert.match(w, /if \(!working\(tr\)\) return;\n\s+const t = setTimeout\(.*1500\)/); // polls while the queue works, then stops (also after a retry restarts it)
 });
 
 test("progress note: counts while the queue works, nothing when it is empty", () => {
@@ -55,7 +55,7 @@ test("progress note: counts while the queue works, nothing when it is empty", ()
   assert.equal(progressNote(ok(14, 41)), "English: 14 of 41 sentences");
   assert.equal(progressNote(ok(41, 41)), null);
   assert.equal(progressNote(ok(0, 0)), null);
-  assert.equal(progressNote(ok(40, 41, ["p1_s1"])), "English: 40 of 41 sentences (1 failed)"); // empty, but one failed
+  assert.equal(progressNote(ok(40, 41, ["p1_s1"])), "1 could not be translated"); // empty, but one failed
   assert.equal(progressNote(ok(30, 41, ["p1_s1"])), "English: 30 of 41 sentences"); // still working
   assert.equal(progressNote({ status: "unavailable", reason: "no_model" }), null); // no model: no note, nothing queued
   assert.equal(progressNote({ status: "loading" }), null);

@@ -42,3 +42,14 @@ test("an answer line is hidden when it repeats the field name or the sentence En
   assert.equal(worthShowing("The bid is due, May 5.", "Deadline", "the bid is due May 5"), false);
   assert.equal(worthShowing("Open competitive bidding", "Procurement type", "Bids are open."), true);
 });
+
+import { isoDateEn } from "../src/fieldview.ts";
+
+test("date and enum answers are built by code from the normalized value, with no machine label", () => {
+  assert.equal(isoDateEn("2024-06-05"), "June 5, 2024");
+  assert.equal(isoDateEn("2024-13-05"), null);
+  assert.deepEqual(scalarAnswer(field({ field: "notice_date", normalized: { date: "2024-06-05" } })), { text: "June 5, 2024", mt: false });
+  assert.deepEqual(scalarAnswer(field({ field: "award_method", normalized: { method: "lowest_price" }, value_ja: "x" })), { text: "Lowest-price award", mt: false });
+  assert.deepEqual(scalarAnswer(field({ field: "procurement_type", normalized: { type: "open_competitive" } })), { text: "Open competitive bidding", mt: false });
+  assert.equal(scalarAnswer(field({ field: "contracting_officer", normalized: { title: "x", name: "y" } })), null);
+});

@@ -502,3 +502,41 @@ def test_notice_is_electronic_only_when_the_rules_say_so_f19cddbd4cba() -> None:
 
     assert kind([*DOC, e]) == "electronic"
     assert kind(DOC) == "other"  # no sentence says the notice is electronic
+
+
+# --- api_key: llama-server started with --api-key needs a bearer token ----------------------
+
+
+def _serve_once():
+    """A loopback server that answers one chat request and keeps its Authorization header."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    seen: list[str | None] = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            seen.append(self.headers.get("Authorization"))
+            body = json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}).encode()  # fmt: skip
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a: object) -> None:
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.handle_request, daemon=True).start()
+    return srv, seen
+
+
+@pytest.mark.parametrize("key,want", [("k-123", "Bearer k-123"), (None, None)])
+def test_client_sends_the_api_key_as_a_bearer_token(key, want) -> None:
+    srv, seen = _serve_once()
+    try:
+        out = llm.Client(srv.server_port, api_key=key).complete("s", "u", {}, 8)
+    finally:
+        srv.server_close()
+    assert out == "{}" and seen == [want]

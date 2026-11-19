@@ -18,6 +18,7 @@ export type Field = {
   status: "present" | "absent" | "see_other_document";
   value_en: string | null;
   value_ja: string | null;
+  normalized?: Record<string, unknown> | null; // the stored normalized value; absent in older fixtures
   items: Item[];
   citations: string[];
   checks: Check[];

@@ -181,11 +181,20 @@ class Client:
     """llama-server's OpenAI-style chat endpoint on 127.0.0.1. Any other host is refused
     when the client is made, so no document can be sent anywhere else (privacy.md)."""
 
-    def __init__(self, port: int, host: str = HOST, timeout: float = TIMEOUT) -> None:
+    def __init__(
+        self,
+        port: int,
+        host: str = HOST,
+        timeout: float = TIMEOUT,
+        api_key: str | None = None,
+    ) -> None:
         if host != HOST:
             raise ValueError(f"only {HOST} is allowed, not {host!r}")
         self.url = f"http://{HOST}:{port}/v1/chat/completions"
         self.timeout = timeout
+        self.api_key = (
+            api_key  # llama-server's --api-key; sent as a bearer token, never logged
+        )
 
     def complete(self, system: str, user: str, schema: dict, max_out: int) -> str:
         body = {
@@ -195,9 +204,10 @@ class Client:
             "cache_prompt": True,
             "response_format": {"type": "json_schema", "json_schema": {"name": "answer", "strict": True, "schema": schema}},
         }  # fmt: skip
-        req = urllib.request.Request(
-            self.url, json.dumps(body).encode(), {"Content-Type": "application/json"}
-        )
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(self.url, json.dumps(body).encode(), headers)
         with urllib.request.urlopen(req, timeout=self.timeout) as r:
             choice = json.load(r)["choices"][0]
         if choice.get("finish_reason") == "length":

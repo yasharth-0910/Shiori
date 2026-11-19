@@ -10,12 +10,12 @@ export type Reason = "no_model" | "no_document" | "failed";
 export type Queue = { done: number; total: number; failed: string[] };
 export type TrState = { status: "loading" } | ({ status: "ok"; items: Record<string, Tr> } & Queue) | { status: "unavailable"; reason: Reason };
 
-/** "English: 14 of 41 sentences" while the queue has work; with failures once it is empty; otherwise nothing. */
+/** "English: 14 of 41 sentences" while the queue has work; "1 could not be translated" once it is empty and one failed; otherwise nothing. */
 export function progressNote(t: TrState): string | null {
   if (t.status !== "ok" || t.total === 0) return null;
   const left = t.total - t.done - t.failed.length;
   if (left > 0) return `English: ${t.done} of ${t.total} sentences`;
-  return t.failed.length ? `English: ${t.done} of ${t.total} sentences (${t.failed.length} failed)` : null;
+  return t.failed.length ? `${t.failed.length} could not be translated` : null;
 }
 
 /** Is the queue still working? Polling goes on while it is. */

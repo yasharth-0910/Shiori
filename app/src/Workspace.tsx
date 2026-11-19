@@ -52,21 +52,18 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const take = (n: TrState) => setTr((p) => (p.status === "ok" && n.status === "ok" && n.done < p.done ? p : n));
 
   useEffect(() => {
-    let live = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = () =>
-      void ask([]).then((n) => {
-        if (!live) return;
-        take(n);
-        if (working(n)) timer = setTimeout(poll, 1500);
-      });
-    poll();
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
+    void ask([]).then(take);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fx.doc_id]);
+
+  // Poll while the queue has work. Depends on `tick` too, so it keeps going after a field's retry restarts a finished queue.
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!working(tr)) return;
+    const t = setTimeout(() => void ask([]).then((n) => { take(n); setTick((x) => x + 1); }), 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tr, tick]);
 
   // Why English will not come, or null. Waiting is not an error: that is drawn as a placeholder bar.
   const trNote = (f: Field) => {

@@ -17,9 +17,11 @@ import threading
 from urllib.parse import urlparse
 
 import uvicorn
+from shiori_core import translate as tr
 from shiori_core.extract import llm
+from shiori_core.fields import BY_ID
 
-from sidecar.server import HOST, bind_loopback, create_app
+from sidecar.server import HOST, bind_loopback, create_app, report
 
 
 def watch_stdin(stop) -> None:
@@ -29,19 +31,34 @@ def watch_stdin(stop) -> None:
     stop()
 
 
+def extract_with_progress(client: llm.Client, doc_type: str, ss) -> dict:
+    """llm.extract_lists, reporting "<field> (n of m)" before each model call."""
+    fields = [f for f in llm.LIST_FIELDS if doc_type in BY_ID[f].applies_to]
+
+    def complete(system: str, user: str, schema: dict, max_out: int) -> str:
+        f = user.split("Field: ", 1)[1].split("\n", 1)[0]
+        if f in fields:
+            report(f"{f} ({fields.index(f) + 1} of {len(fields)})")
+        return client.complete(system, user, schema, max_out)
+
+    return llm.extract_lists(doc_type, ss, complete)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="sidecar")
     ap.add_argument(
         "--llama-url", help="llama-server on 127.0.0.1, e.g. http://127.0.0.1:8792"
     )
     a = ap.parse_args()
-    lists = None
+    lists = translator = None
     if a.llama_url:
         u = urlparse(a.llama_url)
         if u.scheme != "http" or u.hostname != HOST or u.port is None:
             sys.exit(f"--llama-url must be http://{HOST}:<port>")
-        client = llm.Client(u.port)
-        lists = lambda doc_type, ss: llm.extract_lists(doc_type, ss, client.complete)  # noqa: E731
+        # The key comes from the environment, not argv (argv shows in `ps`).
+        client = llm.Client(u.port, api_key=os.environ.get("SHIORI_LLAMA_KEY") or None)
+        lists = lambda doc_type, ss: extract_with_progress(client, doc_type, ss)  # noqa: E731
+        translator = lambda text, abbrs, names: tr.translate(client, text, abbrs, names)  # noqa: E731
     logging.basicConfig(
         level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(message)s"
     )
@@ -49,15 +66,23 @@ def main() -> None:
     sock = bind_loopback()
     print(json.dumps({"port": sock.getsockname()[1], "token": token}), flush=True)
     server = uvicorn.Server(
-        uvicorn.Config(create_app(token, lists), log_level="warning", access_log=False)
+        uvicorn.Config(
+            create_app(token, lists, translator=translator),
+            log_level="warning",
+            access_log=False,
+        )
     )
 
-    def stop(*_: object) -> None:  # Ctrl+C or terminate: leave the serve loop, no traceback
+    def stop(
+        *_: object,
+    ) -> None:  # Ctrl+C or terminate: leave the serve loop, no traceback
         server.should_exit = True
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, stop)
-    if not sys.stdin.isatty():  # the app holds our stdin open; when it quits or dies, so do we
+    if (
+        not sys.stdin.isatty()
+    ):  # the app holds our stdin open; when it quits or dies, so do we
         threading.Thread(target=watch_stdin, args=(stop,), daemon=True).start()
     server.run(sockets=[sock])
 
