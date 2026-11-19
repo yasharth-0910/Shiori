@@ -225,8 +225,13 @@ One entry per module. Keep the status and interface lines current. Status values
 ## App (`app/`, shipped)
 
 ### main
-- **Status:** started (Phase 7 step 1, D-75): window, `shiori://` scheme, request block, permission deny. Sidecar and llama-server spawning not built.
+- **Status:** working for the sidecar path (Phase 7 step 3, D-83): window, `shiori://` scheme, request block, permission deny, file picker, sidecar spawn, three IPC handlers. llama-server is not spawned yet (rules extractor only).
 - **Purpose:** window lifecycle, spawning sidecar and llama-server, IPC bridge, network block, keychain.
+- **Files:** `app/electron/main.ts` (window, scheme handler, IPC), `app/electron/sidecar.ts` (spawns `uv run python -m sidecar` from the repo root, dev only; reads the first stdout line `{port, token}`; the only HTTP client, to `http://127.0.0.1:<port>` with the bearer token; stops it on quit), `app/electron/preload.ts` (the bridge).
+- **IPC (D-83):** `window.shiori.startProcessing()` (main opens the PDF-only native picker, posts the path to `POST /documents`, returns `{doc_id, name}` or null), `getStatus(docId)`, `getFields(docId)`. Nothing else. Main checks the sender page is `shiori://app/` and the id is 64 hex characters. The chosen PDF is served at `shiori://app/doc/<doc_id>.pdf` from an in-memory id-to-path map; it is never copied into `app/public`.
+- **Shutdown:** `will-quit`, `exit`, SIGINT and SIGTERM stop the sidecar (stdin closed, then SIGTERM); the sidecar also exits when its stdin closes.
+- **Dev checks:** `SHIORI_PICK=<pdf>` replaces the picker; with `SHIORI_SHOT=<png>` the window clicks Add document, logs each stage text shown, saves a screenshot.
+- **Renderer:** `Library.tsx` (Add document button, disabled outside Electron), `Processing.tsx` (polls status every 400 ms; stage list ingest, segment, retrieve, extract, verify; `extract` stays idle until llama-server is wired), `App.tsx`. A missing fixture now gives an empty Library, not an error.
 
 ### viewer
 - **Status:** started (Phase 7 step 1, D-75): `app/src/PdfView.tsx`, one canvas per page at devicePixelRatio, highlight divs from `boxes` (PDF points x 1.4), jump scrolls the first box to centre. Boxes are already top-left origin (core/models.py), so no y flip is needed. Rotated pages not tested yet.

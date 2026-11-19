@@ -52,8 +52,23 @@ def test_app_has_sources_to_scan() -> None:
     assert {"main.ts", "App.tsx", "index.html"} <= names
 
 
+SIDECAR = "electron/sidecar.ts"  # the one file that may name a URL: the sidecar's loopback port (D-83)
+
+
+def sidecar_problems(text: str) -> list[str]:
+    """In electron/sidecar.ts a URL must start with the HOST constant, which must be 127.0.0.1."""
+    out = [p for p in problems(text) if not p.startswith(("URL http://${HOST}:", "fetch target"))]
+    if 'const HOST = "127.0.0.1";' not in text:
+        out.append("HOST is not the 127.0.0.1 constant")
+    out += [f"fetch target {m.group(1)}" for m in FETCH.finditer(text) if not m.group(1).strip().startswith("`http://${HOST}:")]  # fmt: skip
+    return out
+
+
 def test_app_makes_no_network_reference() -> None:
-    found = {str(p.relative_to(APP)): problems(p.read_text()) for p in app_files()}
+    found = {
+        str(p.relative_to(APP)): (sidecar_problems if p.relative_to(APP).as_posix() == SIDECAR else problems)(p.read_text())
+        for p in app_files()
+    }
     found = {k: v for k, v in found.items() if v}
     assert not found, found
 
@@ -68,10 +83,33 @@ def test_csp_present_and_local_only() -> None:
         assert bad not in csp.split(), f"CSP allows {bad}"
 
 
+def test_renderer_cannot_reach_any_host() -> None:
+    """The renderer (app/src, index.html) names no host and holds no token; the CSP lets it
+    talk to itself only (shiori://); the only other fetch in the app is the main process's call
+    to the sidecar. A page that can only reach 'self' cannot reach 127.0.0.1 either."""
+    csp = re.search(r'Content-Security-Policy"\s+content="([^"]+)"', (APP / "index.html").read_text())
+    assert csp
+    assert re.search(r"connect-src 'self'(;|$)", csp.group(1))
+    for p in [*(APP / "src").rglob("*"), APP / "index.html"]:
+        if p.is_file():
+            text = p.read_text().lower()
+            for word in ("127.0.0.1", "localhost", "token", "authorization", "child_process", "ipcrenderer"):
+                assert word not in text, f"{p.name} mentions {word}"
+    fetchers = {p.relative_to(APP).as_posix() for p in app_files() if "fetch(" in p.read_text()}
+    assert fetchers <= {SIDECAR, "src/App.tsx"}, fetchers  # App.tsx: ./fixture.json (relative, shiori://)
+
+
+def test_sidecar_checker_catches_a_remote_host() -> None:
+    assert sidecar_problems('const HOST = "127.0.0.1"; fetch(`http://example.com/${x}`)')
+    assert sidecar_problems('const HOST = "0.0.0.0"; fetch(`http://${HOST}:${port}/x`)')
+    assert not sidecar_problems('const HOST = "127.0.0.1"; fetch(`http://${HOST}:${port}/x`)')
+
+
 def test_window_flags() -> None:
     main = (APP / "electron" / "main.ts").read_text()
     assert "contextIsolation: true" in main
     assert "nodeIntegration: false" in main
+    assert "sandbox: true" in main
 
 
 def test_detector_catches_bad_code() -> None:

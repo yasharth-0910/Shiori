@@ -236,3 +236,35 @@ def test_main_refuses_a_llama_url_that_is_not_loopback_http(arg, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["sidecar", "--llama-url", arg])
     with pytest.raises(SystemExit):
         runpy.run_module("sidecar", run_name="__main__")
+
+
+def _start_sidecar():
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parent.parent
+    p = subprocess.Popen(
+        [sys.executable, "-m", "sidecar"], cwd=root, text=True,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )  # fmt: skip
+    assert p.stdout and json.loads(p.stdout.readline())["port"]
+    return p
+
+
+def test_exits_cleanly_when_the_parent_closes_stdin():
+    p = _start_sidecar()
+    assert p.stdin
+    p.stdin.close()
+    assert p.wait(10) == 0
+    assert p.stderr and "Traceback" not in p.stderr.read()
+
+
+@pytest.mark.parametrize("name", ["SIGINT", "SIGTERM"])
+def test_exits_cleanly_on_a_signal(name):
+    import signal
+
+    p = _start_sidecar()
+    time.sleep(1)  # let uvicorn start serving
+    p.send_signal(getattr(signal, name))
+    assert p.wait(10) == 0
+    assert p.stderr and "Traceback" not in p.stderr.read()

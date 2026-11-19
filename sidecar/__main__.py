@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """uv run python -m sidecar [--llama-url http://127.0.0.1:8792]
 
 Starts the server on 127.0.0.1 and a random free port with a random session token, and
@@ -8,14 +9,24 @@ only the rules extractor runs. Logs go to stderr.
 import argparse
 import json
 import logging
+import os
 import secrets
+import signal
 import sys
+import threading
 from urllib.parse import urlparse
 
 import uvicorn
 from shiori_core.extract import llm
 
 from sidecar.server import HOST, bind_loopback, create_app
+
+
+def watch_stdin(stop) -> None:
+    # raw fd read: a thread blocked in sys.stdin.buffer.read aborts the interpreter at exit
+    while os.read(0, 4096):
+        pass
+    stop()
 
 
 def main() -> None:
@@ -40,6 +51,14 @@ def main() -> None:
     server = uvicorn.Server(
         uvicorn.Config(create_app(token, lists), log_level="warning", access_log=False)
     )
+
+    def stop(*_: object) -> None:  # Ctrl+C or terminate: leave the serve loop, no traceback
+        server.should_exit = True
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, stop)
+    if not sys.stdin.isatty():  # the app holds our stdin open; when it quits or dies, so do we
+        threading.Thread(target=watch_stdin, args=(stop,), daemon=True).start()
     server.run(sockets=[sock])
 
 

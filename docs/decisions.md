@@ -811,6 +811,17 @@ Decision: add `fastapi` and `uvicorn` to the runtime dependencies. Licenses read
 Also in this change: the pipeline checks (`citations_exist`, `value_in_citation`, `schema_valid`, `values_roundtrip`, `weekday_consistent`, `heading_cue`, `field_applicable`) used to live only in `eval/` (dev-time). The app must show the pipeline's own checks, so their code moved to `core/shiori_core/checks.py`; `eval/silver/checks.py` and `eval/validate_labels.py` import it from there and behave as before. `era_plausible` stays in eval: it needs the manifest's notice date, which a bare PDF does not have, so the sidecar does not store it.
 Consequences: `uv.lock` changes; PyInstaller packaging (Phase 9) must bundle uvicorn and starlette.
 
+## D-83: The renderer talks to the sidecar through three IPC functions; main owns the token
+
+Date: 2026-11-19
+Status: accepted (Yasharth's task of 2026-11-19)
+Context: Phase 7 connects the app to the sidecar (D-82). The renderer is the part that shows document text, so it gets the least power.
+Decision: the main process spawns the sidecar, reads its `{port, token}` line, and makes every HTTP call. The renderer sees none of that: `preload.ts` exposes `window.shiori` with exactly `startProcessing()`, `getStatus(docId)` and `getFields(docId)` through `contextBridge`. `startProcessing` takes no path: main shows the native file picker, so a compromised renderer cannot make main read a file it names. Handlers refuse any sender page that is not `shiori://app/` and any id that is not 64 hex characters (no URL or path injection into the sidecar call). The chosen PDF is served to PDF.js at `shiori://app/doc/<id>.pdf` by the existing handler, from an in-memory id-to-path map. `contextIsolation` on, `nodeIntegration` off, `sandbox` on, CSP unchanged (`connect-src 'self'`). The only network target is 127.0.0.1 on the sidecar's port, from `electron/sidecar.ts`; `tests/test_app_no_network.py` pins that, and `tests/test_app_ipc.py` pins the three functions and three channels.
+Why not expose a generic `fetch` or the port: any such function lets renderer code reach the sidecar, or other hosts, with the token.
+Shutdown: the sidecar exits on SIGINT, SIGTERM or EOF on stdin (the app holds stdin open), so it also ends if the app is killed. `uv` must be on the PATH of the app (dev only; packaging is Phase 9).
+Known limits: the llama-server API key is still not sent (D-82); `SHIORI_PICK` is a dev hook set by whoever launches the app; the Processing screen polls every 400 ms, so fast stages can pass between polls.
+Consequences: no change to `core/`, `eval/`, `app/public/` or the test split.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

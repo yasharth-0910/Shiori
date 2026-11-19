@@ -10,7 +10,9 @@ export type Doc = { fx: Fixture; counts: Record<State, number> };
 // Soonest upcoming deadline first, then closed ones (most recent first), then documents with none.
 const dueKey = (due: Due | null) => (!due ? 1e9 : due.days >= 0 ? due.days : 1e6 - due.days);
 
-export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => void }) {
+type Props = { docs: Doc[]; onOpen: (d: Doc) => void; onAdd: () => Promise<void>; canAdd: boolean };
+
+export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
   const [sort, setSort] = useState<Sort>("deadline");
   const [q, setQ] = useState("");
   const [note, setNote] = useState("");
@@ -22,27 +24,21 @@ export function Library({ docs, onOpen }: { docs: Doc[]; onOpen: (d: Doc) => voi
       sort === "recent" ? b.i - a.i : dueKey(a.due) - dueKey(b.due) || a.i - b.i,
     );
 
-  // Importing needs the pipeline, which this window does not run yet.
-  const picked = (name: string) => setNote(`"${name}" was not opened. Adding documents is not connected yet.`);
+  const add = async () => {
+    try {
+      await onAdd();
+      setNote("");
+    } catch {
+      setNote("Could not start processing. Is the sidecar available?");
+    }
+  };
 
   return (
     <div className="library">
       <div className="toprow">
-        <div
-          className="drop"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            const f = e.dataTransfer.files[0];
-            if (f) picked(f.name);
-          }}
-        >
-          <span>Drop a Japanese RFP PDF or choose a file</span>
-          <label className="btn">
-            Browse
-            <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => e.target.files?.[0] && picked(e.target.files[0].name)} />
-          </label>
-        </div>
+        <button className="btn primary" disabled={!canAdd} title={canAdd ? "" : "Only available in the desktop app"} onClick={() => void add()}>
+          Add document
+        </button>
         <input className="input search" placeholder="Search documents" aria-label="Search documents" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="seg" role="group" aria-label="Sort">
           <button className={sort === "deadline" ? "on" : ""} onClick={() => setSort("deadline")}>Deadline</button>
