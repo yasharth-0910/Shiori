@@ -545,10 +545,12 @@ def create_app(
     lists: Extractor | None = None,
     base: Extractor = rules.extract,
     translator: Translator | None = None,
+    abort: Callable[[], None] | None = None,
 ) -> FastAPI:
     """`base` answers what rules can (stage retrieve); `lists`, when given, is the model
     extractor for the list fields (stage extract); `translator` is the sentence translator
-    (only with a llama-server). All injected so tests need no model."""
+    (only with a llama-server); `abort` closes the llama request in flight, called when a running job is
+    cancelled (D-90). All injected so tests need no model."""
     worker = Worker([base, *([lists] if lists else [])])
     # no /docs, /redoc or /openapi.json: nothing to browse, and they would sit behind the token anyway
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -602,12 +604,15 @@ def create_app(
 
     @app.post("/documents/{doc_id}/cancel")
     def cancel(doc_id: str) -> dict:
-        """Ask the job to stop. It stops at the next stage or before the next model call; a
-        page read or a model call already running finishes first. No effect once it is over."""
+        """Ask the job to stop. It stops at the next stage or before the next model call. A model
+        call in progress is aborted (its connection is closed); a page read finishes first. No
+        effect once the job is over."""
         j = job_of(doc_id)
         if j.stage not in ("done", "failed", "cancelled"):
             j.cancel = True
             log.info("cancel_asked doc=%s stage=%s", j.doc_id[:8], j.stage)
+            if abort is not None and j.stage == "extract":
+                abort()  # the model call in progress ends now; the worker then sees the flag
         return {"stage": j.stage}
 
     @app.get(

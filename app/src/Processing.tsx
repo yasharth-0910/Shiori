@@ -45,7 +45,7 @@ function EventCard({ e, live }: { e: ProcEvent; live: string | null }) {
         <ul className="sents">
           {e.sentences.map((s, i) => (
             <li key={i}>
-              <span className="meta">page {s.page}{s.section ? ` · ${s.section}` : ""}</span>
+              <span className="meta">page {s.page}</span>
               <p className="evja" lang="ja">{s.text}</p>
             </li>
           ))}
@@ -69,7 +69,7 @@ function EventCard({ e, live }: { e: ProcEvent; live: string | null }) {
         <b>{label(e.field)}</b>
         <span className={`evbadge ${cls}`}>{text}</span>
       </div>
-      <p className="evja" lang="ja">{e.value_ja}</p>
+      <p className="evja" lang="ja"><span className="clamp3">{e.value_ja}</span></p>
       {e.page != null && <p className="meta evsub">page {e.page}</p>}
     </li>
   );

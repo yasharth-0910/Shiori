@@ -90,13 +90,14 @@ def main() -> None:
         "--llama-url", help="llama-server on 127.0.0.1, e.g. http://127.0.0.1:8792"
     )
     a = ap.parse_args()
-    lists = translator = None
+    lists = translator = abort = None
     if a.llama_url:
         u = urlparse(a.llama_url)
         if u.scheme != "http" or u.hostname != HOST or u.port is None:
             sys.exit(f"--llama-url must be http://{HOST}:<port>")
         # The key comes from the environment, not argv (argv shows in `ps`).
         client = llm.Client(u.port, api_key=os.environ.get("SHIORI_LLAMA_KEY") or None)
+        abort = client.abort
         lists = lambda doc_type, ss: extract_with_progress(client, doc_type, ss)  # noqa: E731
         translator = lambda text, abbrs, names: tr.translate(client, text, abbrs, names)  # noqa: E731
     logging.basicConfig(
@@ -107,7 +108,7 @@ def main() -> None:
     print(json.dumps({"port": sock.getsockname()[1], "token": token}), flush=True)
     server = uvicorn.Server(
         uvicorn.Config(
-            create_app(token, lists, translator=translator),
+            create_app(token, lists, translator=translator, abort=abort),
             log_level="warning",
             access_log=False,
         )

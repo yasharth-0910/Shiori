@@ -17,10 +17,12 @@ Only the loopback address is accepted (`Client`); nothing else is ever contacted
 No document text is logged: `CallStat` holds counts and seconds only.
 """
 
+import http.client
 import json
 import re
+import socket
 import time
-import urllib.request
+import urllib.error
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as dc_field
@@ -190,8 +192,12 @@ class Client:
     ) -> None:
         if host != HOST:
             raise ValueError(f"only {HOST} is allowed, not {host!r}")
+        self.port = port
         self.url = f"http://{HOST}:{port}/v1/chat/completions"
         self.timeout = timeout
+        self._conn: http.client.HTTPConnection | None = (
+            None  # the request in flight, for abort()
+        )
         self.api_key = (
             api_key  # llama-server's --api-key; sent as a bearer token, never logged
         )
@@ -207,12 +213,36 @@ class Client:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        req = urllib.request.Request(self.url, json.dumps(body).encode(), headers)
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+        conn = self._conn = http.client.HTTPConnection(HOST, self.port, timeout=self.timeout)  # fmt: skip
+        try:
+            conn.request(
+                "POST", "/v1/chat/completions", json.dumps(body).encode(), headers
+            )
+            r = conn.getresponse()
+            if (
+                r.status >= 400
+            ):  # as urlopen raised it: an OSError, so the caller retries
+                raise urllib.error.HTTPError(
+                    self.url, r.status, r.reason, r.headers, None
+                )
             choice = json.load(r)["choices"][0]
+        finally:
+            conn.close()
+            self._conn = None
         if choice.get("finish_reason") == "length":
             raise Truncated("answer cut at the token cap")
         return choice["message"]["content"] or ""
+
+    def abort(self) -> None:
+        """Close the connection of the request in flight, from another thread (the user cancelled).
+        The blocked `complete` then raises an OSError, and llama-server stops generating when it sees
+        the connection close. No effect when nothing is in flight. Changes no request or answer."""
+        conn = self._conn
+        if conn is not None and conn.sock is not None:
+            try:
+                conn.sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass  # already closed
 
 
 Complete = Callable[[str, str, dict, int], str]

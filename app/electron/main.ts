@@ -113,7 +113,7 @@ async function createWindow(): Promise<void> {
   const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE;
   const shotOpen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_OPEN;
   // SHIORI_SHOT_WHEN="label::<js expression>|||label2::<expr>": saves <shot>-<label>.png the first time each expression is
-  // true in the page, in order, logs a layout and animation probe, then quits. SHIORI_SHOT_CANCEL=1: clicks Cancel once the
+  // true in the page, in order, logs a layout and animation probe, then quits (or, with SHIORI_SHOT_STAGE too, goes on to the end). SHIORI_SHOT_CANCEL=<seconds>: clicks Cancel that many seconds after the
   // first "Now reading" card shows, logs how long the Library takes to come back, saves <shot>-cancelled.png, waits 25 s, quits.
   // SHIORI_SHOT_MEDIA=reduce emulates prefers-reduced-motion.
   const shotWhen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_WHEN;
@@ -160,9 +160,10 @@ async function createWindow(): Promise<void> {
       fs.writeFileSync(shot.replace(/(\.png)?$/, "-" + label + ".png"), (await win.webContents.capturePage()).toPNG());
       console.log("when shot saved: " + label + " " + (await win.webContents.executeJavaScript(probe)));
     }
-    if (shotWhen) return app.quit(); // quit, not exit: will-quit stops the llama-server and the sidecar
+    if (shotWhen && !shotStage) return app.quit(); // quit, not exit: will-quit stops the llama-server and the sidecar; with SHIORI_SHOT_STAGE too the run goes on to the end
     if (shotCancel) {
       await waitFor(`document.querySelector(".ev.read.now")`);
+      await new Promise((r) => setTimeout(r, (Number(shotCancel) || 0) * 1000)); // SHIORI_SHOT_CANCEL=<seconds to wait into the model call>
       const t0 = Date.now();
       console.log("cancel: clicking, screen shows: " + (await win.webContents.executeJavaScript(`document.querySelector(".stepper .step.active")?.textContent`)));
       await win.webContents.executeJavaScript(`[...document.querySelectorAll("button")].find((b) => b.textContent === "Cancel")?.click()`);

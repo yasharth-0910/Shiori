@@ -3,6 +3,7 @@
 wording from collected open documents (doc id prefix in each test name)."""
 
 import json
+import threading
 
 import pytest
 from shiori_core.extract import llm
@@ -570,3 +571,93 @@ def test_on_field_is_optional_and_changes_nothing() -> None:
     assert order.index("done:eligibility") < order.index(
         "call:deadlines"
     )  # called as the field finishes
+
+
+def _slow_server(hold: float = 10.0):
+    """A llama-server stand-in that takes its time. Returns (server, requests seen, released event)."""
+    import http.server
+    import socketserver
+
+    got = threading.Event()
+    done = threading.Event()
+    n: list[int] = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            n.append(1)
+            got.set()
+            done.wait(hold)  # "generating"
+
+        def log_message(self, *a: object) -> None:
+            pass
+
+    class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+
+    srv = S(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, n, got, done
+
+
+def test_abort_ends_the_request_in_flight_within_a_second() -> None:
+    import time
+
+    srv, n, got, done = _slow_server()
+    client = llm.Client(srv.server_port)
+    out: list[BaseException] = []
+
+    def call() -> None:
+        try:
+            client.complete("s", "u", {}, 8)
+        except BaseException as e:  # noqa: BLE001
+            out.append(e)
+
+    t = threading.Thread(target=call)
+    t.start()
+    assert got.wait(5)  # the server has the request and is "generating"
+    t0 = time.monotonic()
+    client.abort()
+    t.join(5)
+    took = time.monotonic() - t0
+    done.set()
+    srv.shutdown()
+    srv.server_close()
+    assert not t.is_alive() and took < 1.0
+    assert len(out) == 1 and isinstance(
+        out[0], OSError
+    )  # the caller's own error handling (retry, then not found) applies
+    assert len(n) == 1
+    client.abort()  # nothing in flight: no effect, no error
+
+
+def test_a_request_after_an_abort_works_and_the_answer_is_unchanged() -> None:
+    srv, seen = _serve_once()
+    try:
+        client = llm.Client(srv.server_port)
+        client.abort()  # idle abort
+        assert client.complete("s", "u", {}, 8) == "{}"
+    finally:
+        srv.server_close()
+
+
+def test_http_error_is_still_an_oserror() -> None:
+    import http.server
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(500)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *a: object) -> None:
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.handle_request, daemon=True).start()
+    try:
+        with pytest.raises(OSError):
+            llm.Client(srv.server_port).complete("s", "u", {}, 8)
+    finally:
+        srv.server_close()

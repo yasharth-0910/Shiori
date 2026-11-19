@@ -886,3 +886,61 @@ def test_each_group_answer_arrives_as_the_group_finishes(monkeypatch):
         "deadlines",
         "required_documents",
     ]  # read, nothing: one card each
+
+
+def test_cancel_in_the_middle_of_a_model_call_aborts_the_request(tmp_path, caplog):
+    """Real llm.Client against a slow fake llama-server: Cancel closes the connection, the job ends as
+    cancelled within seconds, no second request is sent, and the logs have cancel_asked then job_cancelled."""
+    import http.server
+    import logging
+    import socketserver
+
+    from shiori_core.extract import llm
+
+    from sidecar import __main__ as m
+
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    got, release = threading.Event(), threading.Event()
+    n: list[int] = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            n.append(1)
+            got.set()
+            release.wait(20)  # a long eligibility call
+
+        def log_message(self, *a: object) -> None:
+            pass
+
+    class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+
+    fake = S(("127.0.0.1", 0), H)
+    threading.Thread(target=fake.serve_forever, daemon=True).start()
+    client = llm.Client(fake.server_port)
+    lists = lambda doc_type, ss: m.extract_with_progress(client, doc_type, ss)  # noqa: E731
+    try:
+        with caplog.at_level(logging.INFO, logger="shiori.sidecar"):
+            with Server(create_app(TOKEN, lists, abort=client.abort)) as srv:
+                doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+                assert got.wait(10)  # inside the model call
+                t0 = time.monotonic()
+                srv.call("POST", f"/documents/{doc_id}/cancel")
+                wait_for(srv, doc_id, "cancelled")
+                assert time.monotonic() - t0 < 3
+                time.sleep(0.5)  # anything that would still follow
+    finally:
+        release.set()
+        fake.shutdown()
+        fake.server_close()
+    names = [
+        r.getMessage().split(" ")[0]
+        for r in caplog.records
+        if r.name == "shiori.sidecar"
+    ]
+    assert names[names.index("cancel_asked") :] == [
+        "cancel_asked",
+        "job_cancelled",
+    ]  # and nothing after
+    assert len(n) == 1  # the retry never reached the server

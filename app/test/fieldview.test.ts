@@ -51,5 +51,9 @@ test("date and enum answers are built by code from the normalized value, with no
   assert.deepEqual(scalarAnswer(field({ field: "notice_date", normalized: { date: "2024-06-05" } })), { text: "June 5, 2024", mt: false });
   assert.deepEqual(scalarAnswer(field({ field: "award_method", normalized: { method: "lowest_price" }, value_ja: "x" })), { text: "Lowest-price award", mt: false });
   assert.deepEqual(scalarAnswer(field({ field: "procurement_type", normalized: { type: "open_competitive" } })), { text: "Open competitive bidding", mt: false });
-  assert.equal(scalarAnswer(field({ field: "contracting_officer", normalized: { title: "x", name: "y" } })), null);
+  // the officer's stored title and name, as written in the document (2aa7506a), with no machine label
+  const officer = { title: "支出負担行為担当官 気象衛星センター所長", name: "立川 英二" };
+  assert.deepEqual(scalarAnswer(field({ field: "contracting_officer", normalized: officer })), { text: "Title: 支出負担行為担当官 気象衛星センター所長 · Name: 立川 英二", mt: false });
+  assert.deepEqual(scalarAnswer(field({ field: "contracting_officer", normalized: { name: "立川 英二" } })), { text: "Name: 立川 英二", mt: false });
+  assert.equal(scalarAnswer(field({ field: "contracting_officer", normalized: null, value_en: null })), null);
 });

@@ -52,10 +52,15 @@ export function isoDateEn(iso: unknown): string | null {
   return m && month ? `${month} ${Number(m[3])}, ${m[1]}` : null;
 }
 
-/** An answer written by code from the stored normalized value: an ISO date or an enum code. Null when there is none. */
+/** An answer written by code from the stored normalized value: an ISO date, an enum code, or an officer's title and name. Null when there is none. */
 function normalizedAnswer(f: Field): string | null {
   const n = f.normalized;
   if (!n) return null;
+  if (f.field === "contracting_officer") {
+    // The stored title and name, as the document wrote them (Japanese): shown as they are, never machine-translated.
+    const parts = [n.title && `Title: ${String(n.title)}`, n.name && `Name: ${String(n.name)}`].filter(Boolean);
+    return parts.length ? parts.join(" · ") : null;
+  }
   const e = ENUM_BY_CODE[f.field];
   return e ? (e[1][String(n[e[0]])] ?? null) : isoDateEn(n.date);
 }
