@@ -25,7 +25,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const ID = /^[0-9a-f]{64}$/;
-const SENTENCE = /^(?:p\d+_s\d+|h_s\d+)$/; // a sentence id, as core makes them
+const SENTENCE = /^(?:p\d+_s\d+|h_s\d+|value:title)$/; // a sentence id, as core makes them, or the title value's queue key (D-91)
 type Translated =
   | { ok: true; items: Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }>; done: number; total: number; failed: string[] }
   | { ok: false; reason: "no_model" | "no_document" | "failed" };

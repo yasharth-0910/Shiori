@@ -52,6 +52,26 @@ REGIONS: dict[str, str] = {
     "四国": "Shikoku",
 }
 
+# Official English names of central ministries and agencies, for the Issuer card (D-91). Only these
+# eight, none added; matched against the whole extracted issuer value, never inside a longer name
+# (a bureau or a prefecture is not listed and shows its Japanese). Keep in step with japanese_rules.md
+# section 5 and with ISSUERS in app/src/fieldview.ts.
+ISSUERS: dict[str, str] = {
+    "法務省": "Ministry of Justice",
+    "厚生労働省": "Ministry of Health, Labour and Welfare",
+    "総務省": "Ministry of Internal Affairs and Communications",
+    "内閣府": "Cabinet Office",
+    "農林水産省": "Ministry of Agriculture, Forestry and Fisheries",
+    "国土交通省": "Ministry of Land, Infrastructure, Transport and Tourism",
+    "気象庁": "Japan Meteorological Agency",
+    "出入国在留管理庁": "Immigration Services Agency of Japan",
+}
+
+
+def issuer_en(value_ja: str | None) -> str | None:
+    """The official English name when the whole value (spaces ignored) is a listed body, else None."""
+    return ISSUERS.get("".join((value_ja or "").split()))
+
 
 def terms_in(text: str) -> list[tuple[str, str]]:
     """The glossary entries whose Japanese occurs in `text`, longest first."""

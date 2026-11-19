@@ -76,7 +76,11 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
 
   // One English line: model text carries the label (and the numbers/name note), code-made text does not.
   const enView = (e: En, big: boolean) =>
-    e.mt ? <MachineEn text={e.text} note={e.tr ? (enLine(e.tr)?.note ?? null) : null} big={big} /> : <div className={big ? "answer big" : "answer"}>{e.text}</div>;
+    e.mt ? (
+      <MachineEn text={e.text} note={e.tr ? (enLine(e.tr)?.note ?? null) : null} big={big} />
+    ) : (
+      <div className={`${big ? "answer big" : "answer"}${e.ja ? " ja" : ""}`} lang={e.ja ? "ja" : undefined}>{e.text}</div>
+    );
 
   // The collapsed card's one line: the entry count (lists) and the English answer, or a placeholder while it is coming.
   const collapsed = (f: Field) => {
@@ -145,15 +149,16 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     const firstEn = (ids: string[]) => ids.map((id) => trItems?.[id]?.en).find((x) => x) ?? null;
     // Scalar: one group, its answer is value_en or the enum label. List: one group per item, its answer is
     // the code-made line (deadlines) or the item's own English.
-    const groups = f.items.length
+    const groups: { ans: En | null; ids: string[] }[] = f.items.length
       ? f.items.map((i) => ({ ans: ((m) => (m ? { text: m, mt: false } : i.text_en ? { text: i.text_en, mt: true } : null))(deadlineLine(i)), ids: i.citations }))
-      : [{ ans: scalarAnswer(f), ids: f.citations }];
+      : [{ ans: scalarAnswer(f, trItems), ids: f.citations }];
     return groups.map((g, n) => {
       const ids = g.ids.filter((id) => id in fx.sentences);
       const top = g.ans && worthShowing(g.ans.text, label, firstEn(ids)) ? g.ans : null;
       return (
         <div className="srcgroup" key={n}>
           {top && enView(top, true)}
+          {top?.tr && f.value_ja && <div className="javal" lang="ja">{f.value_ja}</div>}
           {g.ids.map(block)}
         </div>
       );

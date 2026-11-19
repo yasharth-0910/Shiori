@@ -944,3 +944,68 @@ def test_cancel_in_the_middle_of_a_model_call_aborts_the_request(tmp_path, caplo
         "job_cancelled",
     ]  # and nothing after
     assert len(n) == 1  # the retry never reached the server
+
+
+def cite_all_with_title(doc_type, sentences):
+    """cite_all plus a title field whose value is the first sentence's text (a value, not an id)."""
+    got = cite_all(doc_type, sentences)
+    got["title"] = Extracted(field="title", value_ja="件名の値", normalized={}, citations=[sentences[0].id])  # fmt: skip
+    return got
+
+
+def test_a_field_value_is_translated_first_and_is_not_counted_as_a_sentence(tmp_path):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    rec = Recorder()
+    with Server(create_app(TOKEN, cite_all_with_title, translator=rec)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        got = until(lambda: (g := ask(srv, doc_id)[1])["done"] == g["total"] and "value:title" in g["items"] and g, "queue empty")  # fmt: skip
+        assert (
+            got["total"] == 4 and got["done"] == 4 and got["failed"] == []
+        )  # sentences only
+        assert got["items"]["value:title"] == {"en": "EN 件名の値", "numbers_match": True, "protected_lost": False}  # fmt: skip
+        assert (
+            rec.calls[0] == "件名の値"
+        )  # first in the queue, through the same translator
+        assert len(rec.calls) == 5 and len(set(rec.calls)) == 5  # once each
+
+
+def test_the_value_key_is_accepted_to_move_to_the_front_and_others_are_refused(
+    tmp_path,
+):
+    pdf = make_pdf(tmp_path / "a.pdf")
+    with Server(create_app(TOKEN, cite_all_with_title, translator=Recorder())) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        assert ask(srv, doc_id, ["value:title"])[0] == 200
+        assert (
+            ask(srv, doc_id, ["value:issuer_org"])[0] == 400
+        )  # only listed value fields
+        assert ask(srv, doc_id, ["p9_s9"])[0] == 400
+
+
+def test_a_failed_value_translation_is_retried_when_asked_and_never_counted_as_failed(
+    tmp_path,
+):
+    from shiori_core.translate import Translation
+
+    pdf = make_pdf(tmp_path / "a.pdf")
+    state = {"fail": True}
+
+    def flaky(text, abbreviations, names):
+        if text == "件名の値" and state["fail"]:
+            raise OSError("down")
+        return Translation(en="ok", numbers_match=True)
+
+    with Server(create_app(TOKEN, cite_all_with_title, translator=flaky)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        got = until(
+            lambda: (g := ask(srv, doc_id)[1])["done"] == 4 and g, "sentences done"
+        )
+        assert (
+            "value:title" not in got["items"] and got["failed"] == []
+        )  # not in the sentence counts
+        state["fail"] = False
+        ask(srv, doc_id, ["value:title"])
+        until(lambda: "value:title" in ask(srv, doc_id)[1]["items"], "retried")

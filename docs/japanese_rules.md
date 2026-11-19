@@ -292,6 +292,16 @@ Readings are included so Yasharth can learn them. English renderings here are th
 | 委任状 | いにんじょう | Power of attorney | |
 | 甲 / 乙 | こう / おつ | Party A / Party B | in contracts; usually 甲 = client |
 | 発注者 / 受注者 | はっちゅうしゃ / じゅちゅうしゃ | Client / Contractor | |
+| 法務省 | ほうむしょう | Ministry of Justice | issuer name (D-91) |
+| 厚生労働省 | こうせいろうどうしょう | Ministry of Health, Labour and Welfare | issuer name |
+| 総務省 | そうむしょう | Ministry of Internal Affairs and Communications | issuer name |
+| 内閣府 | ないかくふ | Cabinet Office | issuer name |
+| 農林水産省 | のうりんすいさんしょう | Ministry of Agriculture, Forestry and Fisheries | issuer name |
+| 国土交通省 | こくどこうつうしょう | Ministry of Land, Infrastructure, Transport and Tourism | issuer name |
+| 気象庁 | きしょうちょう | Japan Meteorological Agency | issuer name |
+| 出入国在留管理庁 | しゅつにゅうこくざいりゅうかんりちょう | Immigration Services Agency of Japan | issuer name |
+
+The eight issuer names are shown on the Issuer card only when the whole extracted issuer is one of them (a bureau, a prefecture or any other body shows its Japanese). The list is closed: none is added without a decision.
 
 The Ministry of Justice's standard legal term dictionary (see sources.md) is the reference when a term isn't here. Prefer its renderings for legal terms.
 

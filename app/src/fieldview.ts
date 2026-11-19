@@ -2,8 +2,9 @@
 import type { Tr } from "./translate";
 import type { Field, Item } from "./types";
 
-// mt: a model wrote it, so the card labels it. tr: set when it is a sentence translation, whose checks add a note.
-export type En = { text: string; mt: boolean; tr?: Tr };
+// mt: a model wrote it, so the card labels it. tr: set when it is a translation, whose checks add a note.
+// ja: the text is the Japanese value itself (shown until the English is ready, or when there is none).
+export type En = { text: string; mt: boolean; tr?: Tr; ja?: boolean };
 export type Line = { count: string | null; en: En | null };
 
 type Items = Record<string, Tr>;
@@ -31,6 +32,21 @@ const ENUM_LABELS: Record<string, [RegExp, string][]> = {
     [/含む|含め|税込/, "Bid includes tax"],
   ],
 };
+
+// Official English names of central ministries and agencies (D-91). The same eight as ISSUERS in
+// core/shiori_core/glossary.py; a test fails if the two drift. Matched on the whole issuer value only.
+export const ISSUERS: Record<string, string> = {
+  法務省: "Ministry of Justice",
+  厚生労働省: "Ministry of Health, Labour and Welfare",
+  総務省: "Ministry of Internal Affairs and Communications",
+  内閣府: "Cabinet Office",
+  農林水産省: "Ministry of Agriculture, Forestry and Fisheries",
+  国土交通省: "Ministry of Land, Infrastructure, Transport and Tourism",
+  気象庁: "Japan Meteorological Agency",
+  出入国在留管理庁: "Immigration Services Agency of Japan",
+};
+
+export const VALUE_KEY = "value:title"; // the queue key of the title value's translation (D-91)
 
 export function enumLabel(f: Field): string | null {
   const hit = f.value_ja ? ENUM_LABELS[f.field]?.find(([re]) => re.test(f.value_ja!)) : undefined;
@@ -65,15 +81,28 @@ function normalizedAnswer(f: Field): string | null {
   return e ? (e[1][String(n[e[0]])] ?? null) : isoDateEn(n.date);
 }
 
-/** A deterministic answer for the top of a scalar card: built from the normalized value, else the quote's enum label, else the stored English value. */
-export function scalarAnswer(f: Field): En | null {
+/**
+ * A deterministic answer for the top of a scalar card: built from the normalized value, else the quote's enum label,
+ * else the stored English value. Title: its own translation (labelled) or, until that is ready, the Japanese value.
+ * Issuer: the official name by code (no label) or the Japanese value (D-91). Never the whole sentence's English.
+ */
+export function scalarAnswer(f: Field, tr: Items | null = null): En | null {
   if (f.items.length) return null;
+  const ja = f.value_ja?.trim();
+  if (f.field === "title" && ja) {
+    const t = f.value_en ? undefined : tr?.[VALUE_KEY];
+    return f.value_en ? { text: f.value_en, mt: true } : t ? { text: t.en, mt: true, tr: t } : { text: ja, mt: false, ja: true };
+  }
+  if (f.field === "issuer_org" && ja) {
+    const en = ISSUERS[ja.replace(/\s+/g, "")];
+    return en ? { text: en, mt: false } : { text: ja, mt: false, ja: true };
+  }
   const made = normalizedAnswer(f) ?? (f.value_en ? null : enumLabel(f));
   if (made) return { text: made, mt: false };
   return f.value_en ? { text: f.value_en, mt: true } : null;
 }
 
-const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const norm = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /** Show an answer line only when it adds something: not the field's own name, not a repeat of the sentence English. */
 export function worthShowing(answer: string, fieldLabel: string, sentenceEn: string | null): boolean {
@@ -88,7 +117,7 @@ export function worthShowing(answer: string, fieldLabel: string, sentenceEn: str
  */
 export function collapsedLine(f: Field, tr: Items | null, code: (i: Item) => string | null): Line {
   if (!f.items.length) {
-    return { count: null, en: scalarAnswer(f) ?? firstTr(f.citations, tr) };
+    return { count: null, en: scalarAnswer(f, tr) ?? firstTr(f.citations, tr) };
   }
   const n = f.items.length;
   const count = `${n} ${n === 1 ? "entry" : "entries"}`;

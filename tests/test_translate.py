@@ -336,3 +336,60 @@ def test_a_name_inside_a_definition_quote_is_one_span() -> None:
     assert masked == "契約担当官（以下「⟦P1⟧」という。）" and list(
         mapping.values()
     ) == ["鈴木 花子"]
+
+
+# --- issuer names (D-91) -----------------------------------------------------------------------
+# Real issuer_org values of dev labels (doc id prefix in the id); 国土交通省 and 気象庁 had no dev
+# example when this was written, so those two use the wording the user gave.
+
+
+@pytest.mark.parametrize(
+    "ja, en",
+    [
+        pytest.param("法務省", "Ministry of Justice", id="6b7142ab"),
+        pytest.param(
+            "厚生労働省", "Ministry of Health, Labour and Welfare", id="84e9d0c8"
+        ),
+        pytest.param(
+            "総務省", "Ministry of Internal Affairs and Communications", id="58f13b9c"
+        ),
+        pytest.param("内閣府", "Cabinet Office", id="563042df"),
+        pytest.param(
+            "農林水産省",
+            "Ministry of Agriculture, Forestry and Fisheries",
+            id="a13baaac",
+        ),
+        pytest.param(
+            "国土交通省",
+            "Ministry of Land, Infrastructure, Transport and Tourism",
+            id="no-dev-example",
+        ),
+        pytest.param("気象庁", "Japan Meteorological Agency", id="no-dev-example"),
+        pytest.param(
+            "出入国在留管理庁", "Immigration Services Agency of Japan", id="f19cddbd"
+        ),
+    ],
+)
+def test_issuer_names(ja: str, en: str) -> None:
+    assert glossary.issuer_en(ja) == en
+    assert glossary.ISSUERS[ja] == en
+
+
+def test_issuer_list_is_closed_and_in_the_rules_table() -> None:
+    from pathlib import Path
+
+    assert len(glossary.ISSUERS) == 8
+    table = (
+        Path(__file__).resolve().parent.parent / "docs" / "japanese_rules.md"
+    ).read_text()
+    for ja, en in glossary.ISSUERS.items():
+        assert f"| {ja} |" in table and f"| {en} |" in table, ja
+
+
+def test_an_unknown_issuer_has_no_english() -> None:
+    assert glossary.issuer_en("和歌山県") is None  # 4c40bbd8, a prefecture
+    assert (
+        glossary.issuer_en("国土交通省 関東地方整備局") is None
+    )  # a bureau is not a listed body
+    assert glossary.issuer_en("法 務 省") == "Ministry of Justice"  # spaces ignored
+    assert glossary.issuer_en(None) is None

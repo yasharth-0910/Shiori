@@ -405,6 +405,26 @@ class Worker:
 # --- background translation (D-88) -----------------------------------------------------------
 
 
+VALUE_FIELDS = (
+    "title",
+)  # fields whose extracted value (not a sentence) is translated too (D-91)
+
+
+def value_texts(job: Job) -> dict[str, str]:
+    """{"value:title": the extracted Japanese value} for each present field in VALUE_FIELDS. The key
+    shares the queue and the translations dict with sentence ids; it can never be a sentence id."""
+    assert job.result is not None
+    return {
+        f"value:{f.field}": f.value_ja
+        for f in job.result.fields
+        if f.field in VALUE_FIELDS and f.status == "present" and f.value_ja
+    }
+
+
+def is_sentence(key: str) -> bool:
+    return not key.startswith("value:")
+
+
 def cited_order(job: Job) -> list[str]:
     """The cited sentence ids in field order, each once."""
     assert job.result is not None
@@ -438,10 +458,15 @@ class Translations:
     def _fill(self, job: Job) -> None:
         """Queue every cited sentence that has no English and is not in flight."""
         order = cited_order(job)
-        job.total = len(order)
+        job.total = len(order)  # sentences only: the value keys are not counted
         job.failed.clear()
         job.pending = [
-            i for i in order if i not in job.translations and i != job.inflight
+            i
+            for i in [
+                *value_texts(job),
+                *order,
+            ]  # a field value first: it is one short line
+            if i not in job.translations and i != job.inflight
         ]
         job.tq = "running" if job.pending or job.inflight else "complete"
 
@@ -500,9 +525,9 @@ class Translations:
         with self.cond:
             return {
                 "items": dict(job.translations),
-                "done": len(job.translations),
+                "done": sum(is_sentence(k) for k in job.translations),
                 "total": job.total or len(cited_order(job)),
-                "failed": sorted(job.failed),
+                "failed": sorted(k for k in job.failed if is_sentence(k)),
             }
 
     def _loop(self) -> None:
@@ -518,7 +543,11 @@ class Translations:
                     sid = job.pending.pop(0)
                     job.inflight = sid
                     assert job.result is not None
-                    text = job.result.sentences[sid].text_orig
+                    text = (
+                        job.result.sentences[sid].text_orig
+                        if is_sentence(sid)
+                        else value_texts(job)[sid]
+                    )
                 try:
                     res = self.translator(text, job.abbreviations, job.names.get(sid, [])).model_dump()  # fmt: skip
                 except Exception as e:  # noqa: BLE001  the type is logged, never the text
@@ -637,8 +666,11 @@ def create_app(
         j = job_of(doc_id)
         if j.result is None:
             raise HTTPException(409, f"not ready: {j.stage}")
-        if any(i not in j.result.sentences for i in body.ids):
-            raise HTTPException(400, "only cited sentences can be translated")
+        values = value_texts(j)
+        if any(i not in j.result.sentences and i not in values for i in body.ids):
+            raise HTTPException(
+                400, "only cited sentences and field values can be translated"
+            )
         queues.prioritize(j, body.ids)
         return queues.counts(j)
 

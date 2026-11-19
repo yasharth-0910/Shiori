@@ -57,3 +57,44 @@ test("date and enum answers are built by code from the normalized value, with no
   assert.deepEqual(scalarAnswer(field({ field: "contracting_officer", normalized: { name: "立川 英二" } })), { text: "Name: 立川 英二", mt: false });
   assert.equal(scalarAnswer(field({ field: "contracting_officer", normalized: null, value_en: null })), null);
 });
+
+import { readFileSync } from "node:fs";
+import { ISSUERS } from "../src/fieldview.ts";
+import { idsOf } from "../src/translate.ts";
+
+test("title: the translated value when ready (labelled), the Japanese value until then, never the sentence English", () => {
+  const f = field({ field: "title", value_ja: "テスト件名", citations: ["s1"] });
+  const sentence = { s1: { en: "(2) Procurement Item Name and Quantity: Test", numbers_match: true } };
+  assert.deepEqual(collapsedLine(f, sentence, none).en, { text: "テスト件名", mt: false, ja: true });
+  const ready = { ...sentence, "value:title": { en: "Test title", numbers_match: true } };
+  assert.deepEqual(collapsedLine(f, ready, none).en, { text: "Test title", mt: true, tr: ready["value:title"] });
+  assert.deepEqual(collapsedLine(f, null, none).en, { text: "テスト件名", mt: false, ja: true });
+});
+
+test("title: opening the card asks for the value key too, other fields do not", () => {
+  const fx = { sentences: { s1: {} } } as never;
+  assert.deepEqual(idsOf(field({ field: "title", value_ja: "x", citations: ["s1"] }), fx), ["value:title", "s1"]);
+  assert.deepEqual(idsOf(field({ field: "title", value_ja: null, citations: ["s1"] }), fx), ["s1"]);
+  assert.deepEqual(idsOf(field({ field: "issuer_org", value_ja: "法務省", citations: ["s1"] }), fx), ["s1"]);
+});
+
+test("issuer: official name by code with no label; unknown or longer names show the Japanese value", () => {
+  const known = scalarAnswer(field({ field: "issuer_org", value_ja: "法務省" }), null); // dev doc 6b7142ab
+  assert.deepEqual(known, { text: "Ministry of Justice", mt: false });
+  assert.equal(scalarAnswer(field({ field: "issuer_org", value_ja: "法 務 省" }), null)?.text, "Ministry of Justice");
+  assert.deepEqual(scalarAnswer(field({ field: "issuer_org", value_ja: "和歌山県" }), null), { text: "和歌山県", mt: false, ja: true }); // 4c40bbd8
+  assert.equal(scalarAnswer(field({ field: "issuer_org", value_ja: "国土交通省 関東地方整備局" }), null)?.ja, true);
+  assert.equal(scalarAnswer(field({ field: "issuer_org", value_ja: null }), null), null);
+});
+
+test("a Japanese answer is worth showing", () => {
+  assert.equal(worthShowing("テスト件名", "Title", null), true);
+});
+
+test("the issuer list matches core/shiori_core/glossary.py", () => {
+  const py = readFileSync(new URL("../../core/shiori_core/glossary.py", import.meta.url), "utf8");
+  const block = py.slice(py.indexOf("ISSUERS: dict"), py.indexOf("def issuer_en"));
+  const pairs = [...block.matchAll(/"([^"]+)": "([^"]+)"/g)].map((m) => [m[1], m[2]]);
+  assert.equal(pairs.length, 8);
+  assert.deepEqual(Object.fromEntries(pairs), ISSUERS);
+});

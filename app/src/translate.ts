@@ -36,5 +36,6 @@ export function unavailableText(reason: Reason): string {
 
 /** The cited sentences of a field that this document has, once each, in order. */
 export function idsOf(f: Field, fx: Fixture): string[] {
-  return [...new Set([...f.citations, ...f.items.flatMap((i) => i.citations)])].filter((id) => id in fx.sentences);
+  const own = [...new Set([...f.citations, ...f.items.flatMap((i) => i.citations)])].filter((id) => id in fx.sentences);
+  return f.field === "title" && f.value_ja ? ["value:title", ...own] : own; // the title's value is queued like a sentence (D-91)
 }
