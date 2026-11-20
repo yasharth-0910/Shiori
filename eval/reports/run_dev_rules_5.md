@@ -1,6 +1,6 @@
-# Eval run dev_rules_3
+# Eval run dev_rules_5
 
-Split `dev`, extractor `rules`, extractor version 0.3.0, schema 1.0.0, commit 37c55a68876bdcfcfac25ccc0a1cd2115ddd8e94, 2026-11-20T15:03:42+00:00.
+Split `dev`, extractor `rules`, extractor version 0.3.0, schema 1.0.0, commit 6c88dc5f882ebf8e957ee48514db60e93c987337, 2026-11-20T15:17:42+00:00.
 
 Scores are against model-reviewed silver labels, not human-verified ones (D-41). Only fields asked of the document's type are scored. No cloud call and no document text in this report.
 

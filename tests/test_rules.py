@@ -822,3 +822,77 @@ def test_title_with_one_trailing_definition_still_found() -> None:
     ss = sents("(1) 件名", "サンプル市A業務委託（以下「業務A」という。）")
     a = got("bid_instructions", ss, "title")
     assert a and a.value_ja == "サンプル市A業務委託"
+
+
+# --- performance_period: more headings and start forms; title: 公募件名 -------------------------
+# Real wording: 2f2f5bd3 (和歌山県), 10be3ae3, 45f0a917, 74aed2a5 (デジタル庁). The 契約の日,
+# 翌日, spaced 件 名 and two-heading cases are made-up wording in the same layout (the collected
+# examples are restricted documents).
+
+
+def test_period_2f2f5bd3_業務の期間_heading_alone_then_the_value() -> None:
+    ss = sents("(5)業務の期間", "契約締結日から令和15年9月30日(金)まで", "2 一般競争入札に参加する者に必要な資格")  # fmt: skip
+    a = got("notice", ss, "performance_period")
+    assert a and a.normalized == {"start": None, "end": "2033-09-30", "relative_text": "契約締結日"}  # fmt: skip
+    assert a.citations == ["h_s1", "h_s2"]
+
+
+def test_period_10be3ae3_start_with_a_parenthetical_before_日() -> None:
+    ss = sents("3.契約期間", "契約締結(請書提出)日から令和9年3月31日", "4.業務要件")
+    a = got("spec", ss, "performance_period")
+    assert a and a.normalized["end"] == "2027-03-31" and a.normalized["start"] is None
+
+
+def test_period_45f0a917_two_dates_without_まで() -> None:
+    ss = sents(
+        "3.契約期間", "令和8年4月1日から令和9年3月31日", "4.契約の相手方に求める条件"
+    )
+    a = got("spec", ss, "performance_period")
+    assert a and a.normalized == {"start": "2026-04-01", "end": "2027-03-31", "relative_text": None}  # fmt: skip
+
+
+def test_period_契約の日_and_翌日_starts_and_賃貸借期間_heading() -> None:
+    a = got(
+        "notice",
+        sents("(3)業務期間 契約の日から令和9年3月12日まで"),
+        "performance_period",
+    )
+    assert a and a.normalized["end"] == "2027-03-12" and a.normalized["relative_text"] == "契約の日"  # fmt: skip
+    b = got("bid_instructions", sents("(4)委託期間", "契約締結日の翌日~令和9年(2027年)3月31日"), "performance_period")  # fmt: skip
+    assert b and b.normalized["end"] == "2027-03-31"
+    c = got("notice", sents("(3) 賃貸借期間  令和8年12月1日から令和13年11月30日まで"), "performance_period")  # fmt: skip
+    assert c and c.normalized["start"] == "2026-12-01"
+
+
+def test_period_two_headings_one_unreadable_is_not_answered() -> None:
+    # 契約期間 reads, 履行期間 has dates and a clause we do not read: which period is asked is unclear
+    ss = sents("(3)契約期間", "令和8年4月1日から令和9年3月31日まで", "(4)履行期間", "令和8年4月1日から令和11年3月31日まで(年度ごとの契約により3年間)")  # fmt: skip
+    assert got("bid_instructions", ss, "performance_period") is None
+
+
+def test_period_same_end_prefers_the_reading_with_a_start_date() -> None:
+    ss = sents("(3)履行期間", "契約締結の日から令和9年2月28日まで", "(4)業務期間", "令和8年6月1日から令和9年2月28日まで")  # fmt: skip
+    a = got("bid_instructions", ss, "performance_period")
+    assert a and a.normalized["start"] == "2026-06-01"
+
+
+def test_period_a_heading_line_without_a_date_is_only_prose() -> None:
+    ss = sents("(3)履行期間", "契約締結の日から令和9年3月31日まで", "契約期間の延長)")
+    a = got("bid_instructions", ss, "performance_period")
+    assert a and a.normalized["end"] == "2027-03-31"
+
+
+def test_title_74aed2a5_公募件名_label_alone_then_the_title() -> None:
+    ss = sents(
+        "1.公募件名",
+        "企業保有情報の新しい提出方法に係るシステム保守等",
+        "2.目的及び概要",
+    )
+    a = got("bid_instructions", ss, "title")
+    assert a and a.value_ja == "企業保有情報の新しい提出方法に係るシステム保守等"
+    assert a.citations == ["h_s1", "h_s2"]
+
+
+def test_title_件_名_with_spaces_inside_the_label() -> None:
+    a = got("spec", sents("1件  名", "サンプル品の購入", "2品目・数量"), "title")
+    assert a and a.value_ja == "サンプル品の購入"

@@ -1,9 +1,9 @@
 {
- "name": "dev_rules_3",
+ "name": "dev_rules_5",
  "split": "dev",
  "extractor": "rules",
- "date": "2026-11-20T15:03:42+00:00",
- "git_commit": "37c55a68876bdcfcfac25ccc0a1cd2115ddd8e94",
+ "date": "2026-11-20T15:17:42+00:00",
+ "git_commit": "6c88dc5f882ebf8e957ee48514db60e93c987337",
  "extractor_version": "0.3.0",
  "schema_version": "1.0.0",
  "documents": [

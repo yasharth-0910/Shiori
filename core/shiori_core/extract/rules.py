@@ -435,14 +435,28 @@ def submission_modes(ss: list[Sentence]) -> Hit | None:
 
 # --- performance_period, delivery_deadline -----------------------------------------------
 
-_PERIOD_HEAD = r"(?:履行期間|履行期限|契約期間|借入期間|業務期間)"
-_FROM = re.compile(r"(契約締結(?:の日|日)?)(?:から|~)")
+_PERIOD_HEAD = r"(?:履行期間|履行期限|契約期間|借入期間|業務期間|業務の期間|委託期間|賃貸借期間|事業の実施期間)"
+# The start as a phrase: 契約締結日から, 契約の日から, 契約締結(請書提出)日から, 契約締結日の翌日~
+_FROM = re.compile(r"(契約(?:締結)?(?:\([^)]*\))?(?:の日|日)?(?:の翌日)?)(?:から|~)\s*")
 
 
 def _one_date(v: str):
     ds = find_dates(v)
     ok = len(ds) == 1 and ds[0].value is not None and not ds[0].warning
     return ds[0] if ok else None
+
+
+def _two_dates(v: str) -> dict | None:
+    """`令和８年４月１日から令和９年３月３１日(まで)`: a start date and an end date, nothing else."""
+    ds = find_dates(v)
+    if len(ds) != 2 or any(d.value is None or d.warning for d in ds):
+        return None
+    a, b = ds
+    if v[: a.start].strip() or not re.fullmatch(r"\s*(?:から|~)\s*", v[a.end : b.start]) or not re.fullmatch(r"(?:まで)?。?", v[b.end :]):  # fmt: skip
+        return None
+    va, vb = a.value, b.value
+    assert va is not None and vb is not None  # checked above
+    return {"start": va.isoformat(), "end": vb.isoformat(), "relative_text": None}
 
 
 def performance_period(
@@ -454,27 +468,59 @@ def performance_period(
     whole in one sentence: a date the segmenter cut in two is not read. `proviso` (spec
     documents, D-93): a ただし clause after the period is cut off and never quoted."""
     hits: list[Hit] = []
+    parsed: set[str] = set()  # heading words that gave a period
+    unread: set[str] = set()  # heading words whose value is not a period we can read
+    by = {x.id: x for x in ss}
     for v, q, ids in headed(ss, head):
+        word = m.group() if (m := re.search(head, by[ids[0]].text_norm)) else ""
         if proviso and "ただし" in v:
             v, q = v.split("ただし")[0].strip(), q.split("ただし")[0].strip()
-        if p := pointer(v, q):
-            hits.append((p, q, ids))
-        elif d := _one_date(v):
-            pre, post = v[: d.start], v[d.end :]
-            if (m := _FROM.fullmatch(pre)) and re.fullmatch(r"(?:まで)?。?", post):
-                rel = m.group(1)
-            elif re.fullmatch(r"最長\s*", pre) and re.fullmatch(r"まで。?", post):
-                rel = v.rstrip("。")
-            else:
-                continue
-            end = d.value.isoformat()  # type: ignore[union-attr]
-            hits.append(({"start": None, "end": end, "relative_text": rel}, q, ids))
-    return one(hits)
+        hit = _period_hit(v, q, ids)
+        if hit:
+            hits.append(hit)
+            parsed.add(word)
+        elif find_dates(
+            v
+        ):  # dates we cannot read as a period; a line without a date is only prose
+            unread.add(word)
+    # A document that gives two periods under different words (契約期間 and 履行期間) and states one we
+    # cannot read is ambiguous: the answer would be the other word's period, maybe not the one asked.
+    if unread - parsed:
+        return None
+    return one(hits) or _same_end(hits)
+
+
+def _same_end(hits: list[Hit]) -> Hit | None:
+    """Several readings with the same end date, one of them only `契約締結の日から` and the others
+    giving the start: the one with a start date, when all of those agree."""
+    ends = {h[0].get("end") for h in hits}
+    if len(ends) != 1 or None in ends:
+        return None
+    dated = [h for h in hits if h[0].get("start")]
+    return one(dated) if dated and len(dated) < len(hits) else None
+
+
+def _period_hit(v: str, q: str, ids: list[str]) -> Hit | None:
+    if p := pointer(v, q):
+        return p, q, ids
+    if (two := _two_dates(v)) is not None:
+        return two, q, ids
+    if d := _one_date(v):
+        pre, post = v[: d.start], v[d.end :]
+        if (m := _FROM.fullmatch(pre)) and re.fullmatch(r"(?:まで)?。?", post):
+            rel = m.group(1)
+        elif re.fullmatch(r"最長\s*", pre) and re.fullmatch(r"まで。?", post):
+            rel = v.rstrip("。")
+        else:
+            return None
+        end = d.value.isoformat()  # type: ignore[union-attr]
+        return {"start": None, "end": end, "relative_text": rel}, q, ids
+    return None
 
 
 def performance_period_spec(ss: list[Sentence]) -> Hit | None:
-    """Spec documents (D-93): also the 委託期間 heading, and a ただし clause is cut off."""
-    return performance_period(ss, _PERIOD_HEAD[:-1] + "|委託期間)", proviso=True)
+    """Spec documents (D-93): a ただし clause after the period is cut off."""
+    return performance_period(ss, _PERIOD_HEAD, proviso=True)
 
 
 def delivery_deadline(ss: list[Sentence]) -> Hit | None:
@@ -551,7 +597,7 @@ def agreed(hits: list[Hit]) -> Hit | None:
 # the portal header 調達案件名称, 案件名, (n) 購入等/借入等件名及び数量, (1) 件名, and in spec and
 # bid-instruction documents 業務名, 委託業務名, 調達業務の名称. A label must end there: 調達件名の特質等
 # is a different line. 契約件名 (the cover sheet of a notice) is not listed: it can disagree with the notice.
-_TITLE_LABEL = r"(?:調達案件名称|案件名|(?:購入等|借入等|賃借等|調達)?件名(?:及び数量)?|(?:委託)?業務名|調達業務の名称)(?=\s|[:：]|$)"
+_TITLE_LABEL = r"(?:調達案件名称|案件名|(?:購入等|借入等|賃借等|調達|公募)?件名(?:及び数量)?|件\s{1,3}名|(?:委託)?業務名|調達業務の名称)(?=\s|[:：]|$)"
 _QTY = re.compile(
     r"[\s\u3000]+[0-9０-９一二三四五六七八九十]+(?:式|台)(?:[（(][^）)]*[）)])?$"
 )  # "<title>　一式", "<title> ２式（電子入札対象案件）" after 件名及び数量: the quantity, not the name
