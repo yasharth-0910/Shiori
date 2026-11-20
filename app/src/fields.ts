@@ -1,3 +1,4 @@
+import { notApplicable } from "./fieldview";
 import { stateOf, type State } from "./status";
 import type { Field, Fixture } from "./types";
 
@@ -35,7 +36,7 @@ export const STATES: State[] = ["verified", "needs_review", "not_found", "other_
 
 export function countStates(fx: Fixture): Record<State, number> {
   const out: Record<State, number> = { verified: 0, needs_review: 0, not_found: 0, other_document: 0 };
-  for (const f of fx.fields) out[stateOf(f, fx.sentences)]++;
+  for (const f of fx.fields) if (!notApplicable(f, fx.doc_type)) out[stateOf(f, fx.sentences)]++;
   return out;
 }
 

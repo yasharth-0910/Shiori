@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from shiori_core.fields import BY_ID, FIELD_IDS, SCHEMA_VERSION, validate_normalized
+from shiori_core.fields import (
+    BY_ID,
+    FIELD_IDS,
+    SCHEMA_VERSION,
+    SPECS,
+    validate_normalized,
+)
 
 DOC = Path(__file__).resolve().parent.parent / "docs/field_schema.md"
 
@@ -135,3 +141,20 @@ def test_models_accept_documented_shapes() -> None:
     validate_normalized("spec_access", {"mode": "email_after_pledge"})
     validate_normalized("wto_covered", {"covered": False})
     validate_normalized("title", None)
+
+
+def test_app_applies_table_matches_applies_to() -> None:
+    """fieldview.ts APPLIES (D-93) equals applies_to for the detected types."""
+    from shiori_core.doctype import DETECTED
+
+    ts = Path("app/src/fieldview.ts").read_text()
+    consts = {
+        n: re.findall(r'"(\w+)"', v)
+        for n, v in re.findall(r"^const (NBS|NB|N) = \[([^\]]*)\]", ts, re.M)
+    }
+    block = ts[ts.index("export const APPLIES") :]
+    block = block[: block.index("};")]
+    table = {k: consts[v] for k, v in re.findall(r"(\w+): (NBS|NB|N),", block)}
+    assert len(table) == len(SPECS)
+    for s in SPECS:
+        assert table[s.id] == [t for t in DETECTED if t in s.applies_to], s.id

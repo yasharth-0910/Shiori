@@ -59,7 +59,7 @@ test("date and enum answers are built by code from the normalized value, with no
 });
 
 import { readFileSync } from "node:fs";
-import { ISSUERS } from "../src/fieldview.ts";
+import { ISSUERS, notApplicable } from "../src/fieldview.ts";
 import { idsOf } from "../src/translate.ts";
 
 test("title: the translated value when ready (labelled), the Japanese value until then, never the sentence English", () => {
@@ -97,4 +97,13 @@ test("the issuer list matches core/shiori_core/glossary.py", () => {
   const pairs = [...block.matchAll(/"([^"]+)": "([^"]+)"/g)].map((m) => [m[1], m[2]]);
   assert.equal(pairs.length, 8);
   assert.deepEqual(Object.fromEntries(pairs), ISSUERS);
+});
+
+test("notApplicable: only a field without an answer, in a known type that does not look for it", () => {
+  const absent = field({ field: "bid_bond", status: "absent", value_ja: null, citations: [] });
+  assert.equal(notApplicable(absent, "spec"), true);
+  assert.equal(notApplicable(absent, "notice"), false);
+  assert.equal(notApplicable(absent, undefined), false);
+  assert.equal(notApplicable({ ...absent, status: "present" }, "spec"), false);
+  assert.equal(notApplicable({ ...absent, field: "title" }, "spec"), false);
 });

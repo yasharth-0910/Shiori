@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
-import { collapsedLine, scalarAnswer, worthShowing, type En } from "./fieldview";
+import { collapsedLine, notApplicable, scalarAnswer, worthShowing, type En } from "./fieldview";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
@@ -108,7 +108,9 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   };
 
   const q = text.trim().toLowerCase();
-  const shown = fx.fields.filter(
+  const applicable = fx.fields.filter((f) => !notApplicable(f, fx.doc_type));
+  const skipped = fx.fields.filter((f) => notApplicable(f, fx.doc_type) && (!q || labelOf(f).toLowerCase().includes(q)));
+  const shown = applicable.filter(
     (f) =>
       (!filter || stateOf(f, fx.sentences) === filter) &&
       (!q || `${labelOf(f)} ${summaryOf(f)}`.toLowerCase().includes(q)),
@@ -202,7 +204,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
           <>
             <div className="counts">
               <button className={filter === null ? "on" : ""} onClick={() => setFilter(null)}>
-                All {fx.fields.length}
+                All {applicable.length}
               </button>
               {STATES.map((s) => (
                 <button key={s} className={filter === s ? "on" : ""} onClick={() => setFilter(filter === s ? null : s)}>
@@ -213,7 +215,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
             {progressNote(tr) && <p className="meta">{progressNote(tr)}</p>}
             <input className="input" placeholder="Filter fields" aria-label="Filter fields" value={text} onChange={(e) => setText(e.target.value)} />
             <div className="list">
-              {groups.length === 0 && <p className="empty">No fields match.</p>}
+              {groups.length === 0 && skipped.length === 0 && <p className="empty">No fields match.</p>}
               {groups.map(([g, fs]) => (
                 <div key={g}>
                   <h3 className="group">{g}</h3>
@@ -267,6 +269,16 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
                   })}
                 </div>
               ))}
+              {!filter && skipped.length > 0 && (
+                <details className="napl">
+                  <summary>Not part of this document type ({skipped.length})</summary>
+                  <ul>
+                    {skipped.map((f) => (
+                      <li key={f.field}>{labelOf(f)}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           </>
         )}

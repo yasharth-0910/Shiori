@@ -402,13 +402,18 @@ def _one_date(v: str):
     return ds[0] if ok else None
 
 
-def performance_period(ss: list[Sentence]) -> Hit | None:
+def performance_period(
+    ss: list[Sentence], head: str = _PERIOD_HEAD, proviso: bool = False
+) -> Hit | None:
     """After a 履行期間, 契約期間, 業務期間 or 履行期限 heading: a pointer, or
     `契約締結日から令和９年２月２６日まで` (relative_text 契約締結日, end the date), or
     `最長 令和9年9月末まで` (the whole phrase in relative_text, guide). The date must stand
-    whole in one sentence: a date the segmenter cut in two is not read."""
+    whole in one sentence: a date the segmenter cut in two is not read. `proviso` (spec
+    documents, D-93): a ただし clause after the period is cut off and never quoted."""
     hits: list[Hit] = []
-    for v, q, ids in headed(ss, _PERIOD_HEAD):
+    for v, q, ids in headed(ss, head):
+        if proviso and "ただし" in v:
+            v, q = v.split("ただし")[0].strip(), q.split("ただし")[0].strip()
         if p := pointer(v, q):
             hits.append((p, q, ids))
         elif d := _one_date(v):
@@ -422,6 +427,11 @@ def performance_period(ss: list[Sentence]) -> Hit | None:
             end = d.value.isoformat()  # type: ignore[union-attr]
             hits.append(({"start": None, "end": end, "relative_text": rel}, q, ids))
     return one(hits)
+
+
+def performance_period_spec(ss: list[Sentence]) -> Hit | None:
+    """Spec documents (D-93): also the 委託期間 heading, and a ただし clause is cut off."""
+    return performance_period(ss, _PERIOD_HEAD[:-1] + "|委託期間)", proviso=True)
 
 
 def delivery_deadline(ss: list[Sentence]) -> Hit | None:
@@ -521,13 +531,18 @@ def _title_ok(v: str) -> bool:
     )
 
 
-def title(ss: list[Sentence]) -> Hit | None:
+# Spec documents (D-93): the cover line `１．業務の名称<name>` has no space after the label, and
+# `１ 業務の名称` / next line is the name. The label must not be followed by a connector (業務の名称及び...).
+_SPEC_TITLE_LABEL = rf"(?:{_TITLE_LABEL}|業務の名称(?![及並又等のは、・]))"
+
+
+def title(ss: list[Sentence], label: str = _TITLE_LABEL) -> Hit | None:
     """The text after a title label (same line, or the next sentence when the label stands
     alone). Every label in the document must give the same text (spaces ignored); two
     different titles, such as a cover sheet and the notice itself, answer nothing."""
     hits: list[Hit] = []
     by = {s.id: s for s in ss}
-    for norm_v, orig_v, ids in headed(ss, _TITLE_LABEL):
+    for norm_v, orig_v, ids in headed(ss, label):
         if "及び数量" in by[ids[0]].text_norm and (m := _QTY.search(orig_v)):
             orig_v, norm_v = orig_v[: m.start()], _QTY.sub("", norm_v)
         if m := _DEFINED.search(orig_v):
@@ -585,6 +600,17 @@ RULES: dict[str, Callable[[list[Sentence]], Hit | None]] = {
 }
 
 
+def title_spec(ss: list[Sentence]) -> Hit | None:
+    return title(ss, _SPEC_TITLE_LABEL)
+
+
+# Rules that replace the general one for a document type; every other type is untouched.
+SPEC_RULES: dict[str, Callable[[list[Sentence]], Hit | None]] = {
+    "title": title_spec,
+    "performance_period": performance_period_spec,
+}
+
+
 def _strip(s: str) -> str:
     return re.sub(r"\s+", "", s)
 
@@ -636,6 +662,8 @@ def extract(doc_type: str, sentences: list[Sentence]) -> dict[str, Extracted]:
     for field, rule in RULES.items():
         if doc_type not in BY_ID[field].applies_to:
             continue
+        if doc_type == "spec":
+            rule = SPEC_RULES.get(field, rule)
         if (hit := rule(ss)) and (ans := verified(field, hit, by_id)):
             out[field] = ans
     return out

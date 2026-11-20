@@ -126,3 +126,20 @@ export function collapsedLine(f: Field, tr: Items | null, code: (i: Item) => str
   if (made) return { count, en: { text: made, mt: false } };
   return { count, en: i.text_en ? { text: i.text_en, mt: true } : firstTr(i.citations, tr) };
 }
+
+// Which detected document types a field is looked for in: the same table as `applies_to` in core/shiori_core/fields.py
+// (a test fails if they drift). Only the three types the sidecar can detect (D-92); tender_page is not one of them.
+const NBS = ["notice", "bid_instructions", "spec"];
+const NB = ["notice", "bid_instructions"];
+const N = ["notice"];
+export const APPLIES: Record<string, string[]> = {
+  title: NBS, issuer_org: NBS, scope_summary: NBS, performance_period: NBS, delivery_deadline: NBS, delivery_location: NBS,
+  contracting_officer: NB, procurement_type: NB, award_method: NB, eligibility: NB, unified_qualification: NB, deadlines: NB,
+  submission_modes: NB, bid_bond: NB, performance_bond: NB, tax_basis: NB, language_currency: NB, required_documents: NB,
+  contact: NB, wto_covered: NB, spec_access: NB,
+  notice_date: N, item_category: N,
+};
+
+/** True when the document's type is known, the field is not looked for in that type, and it has no answer (D-93). A field with an answer is always shown. */
+export const notApplicable = (f: Field, docType: string | undefined): boolean =>
+  !!docType && f.status === "absent" && !!APPLIES[f.field] && !APPLIES[f.field]!.includes(docType);

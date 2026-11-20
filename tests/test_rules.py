@@ -657,3 +657,64 @@ def test_english_sentences_are_never_cited() -> None:
     ss = sents("(WTO対象)")
     ss[0].language = "en"
     assert rules.extract("notice", ss) == {}
+
+
+# --- spec documents (D-93): 業務の名称 title, 委託期間 with a ただし clause --------------
+
+
+def test_spec_4965207bb115_title_merged_with_the_業務の名称_heading() -> None:
+    ss = sents("委託業務仕様書（案）", "１．業務の名称わかやま空き家ポータルサイト構築及び保守管理運営業務", "２．業務の目的")  # fmt: skip
+    a = got("spec", ss, "title")
+    assert a and a.value_ja == "わかやま空き家ポータルサイト構築及び保守管理運営業務"
+    assert a.citations == ["h_s2"]
+
+
+def test_spec_cd1a1936865a_title_on_the_line_under_業務の名称() -> None:
+    ss = sents("１ 業務の名称", "令和８年度和歌山県ICT・PHRを活用した特定保健指導基盤整備事業委託業務", "２ 目的")  # fmt: skip
+    a = got("spec", ss, "title")
+    assert a and a.value_ja.endswith("事業委託業務") and a.citations == ["h_s1", "h_s2"]
+
+
+def test_spec_業務の名称_is_not_a_title_label_on_a_notice() -> None:
+    ss = sents("１．業務の名称わかやま空き家ポータルサイト構築及び保守管理運営業務")
+    assert got("notice", ss, "title") is None
+
+
+def test_spec_4965207bb115_a_connector_after_業務の名称_is_not_a_title() -> None:
+    ss = sents("１．業務の名称及び内容について")
+    assert got("spec", ss, "title") is None
+
+
+def test_spec_4965207bb115_period_cuts_the_ただし_clause() -> None:
+    ss = sents("３．委託期間", "契約締結日から令和１１年３月３１日までただし、「４－２．各種サイト保守管理」については、令和８年７月１日より業務開始とする。")  # fmt: skip
+    a = got("spec", ss, "performance_period")
+    assert a and a.normalized == {
+        "start": None,
+        "end": "2029-03-31",
+        "relative_text": "契約締結日",
+    }
+    assert (
+        a.value_ja == "契約締結日から令和１１年３月３１日まで"
+        and "ただし" not in a.value_ja
+    )
+    assert a.citations == ["h_s1", "h_s2"]
+
+
+def test_spec_870f1f2ec726_period_under_委託期間_without_a_clause() -> None:
+    ss = sents("３ 委託期間", "契約締結日から令和９年３月３１日まで", "４ 支援対象")
+    a = got("spec", ss, "performance_period")
+    assert a and a.normalized["end"] == "2027-03-31"
+
+
+def test_spec_4965207bb115_period_with_an_unclear_part_before_ただし_is_not_found() -> (
+    None
+):
+    ss = sents(
+        "３．委託期間", "別途協議して定めるただし、令和８年７月１日より業務開始とする。"
+    )
+    assert got("spec", ss, "performance_period") is None
+
+
+def test_notice_委託期間_and_ただし_are_not_read_on_a_notice() -> None:
+    ss = sents("３．委託期間", "契約締結日から令和１１年３月３１日までただし、令和８年７月１日より業務開始とする。")  # fmt: skip
+    assert got("notice", ss, "performance_period") is None
