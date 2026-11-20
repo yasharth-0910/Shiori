@@ -72,3 +72,115 @@ def test_dates():
         == "gemini_found_we_not_found"
     )
     assert compare("performance_period", None, "Not stated", "")[0] == "both_not_found"
+
+
+def rf(field, normalized, status="present"):
+    return Extracted(
+        field=field,
+        value_ja="x",
+        normalized=normalized,
+        citations=["s1"],
+        status=status,
+    )
+
+
+def test_rule_fields_enums_and_unmapped():
+    pt = rf("procurement_type", {"type": "open_competitive"})
+    assert (
+        compare("procurement_type", pt, "Open competitive bidding", "")[0]
+        == "both_found_agree"
+    )
+    assert (
+        compare("procurement_type", pt, "Proposal competition (x)", "")[0]
+        == "both_found_differ"
+    )
+    # two types in the head, or none: counted as unmapped, not guessed
+    assert (
+        compare(
+            "procurement_type", pt, "Proposal competition / public solicitation", ""
+        )[0]
+        == "unmapped"
+    )
+    assert compare("award_method", None, "Something else entirely", "")[0] == "unmapped"
+    assert (
+        compare("tax_basis", None, "Both tax-excluded and tax-included", "")[0]
+        == "unmapped"
+    )
+    tb = rf("tax_basis", {"basis": "bid_excludes_tax"})
+    assert (
+        compare("tax_basis", tb, "Excludes consumption tax (includes 10% later)", "")[0]
+        == "both_found_agree"
+    )
+    assert compare("wto_covered", None, "Not stated", "")[0] == "both_not_found"
+    wt = rf("wto_covered", {"covered": True})
+    assert (
+        compare("wto_covered", wt, "Yes, governed by an order", "")[0]
+        == "both_found_agree"
+    )
+
+
+def test_rule_fields_bond_modes_pointer():
+    b = rf("bid_bond", {"status": "required", "rate_percent": 5.0})
+    assert (
+        compare("bid_bond", b, "Required at 5/100 (5%); waived with conditions", "")[0]
+        == "both_found_agree"
+    )
+    assert compare("bid_bond", b, "Required at 10/100", "")[0] == "both_found_differ"
+    assert compare("bid_bond", b, "Waived", "")[0] == "both_found_differ"
+    m = rf("submission_modes", {"modes": ["electronic"], "mail_not_allowed": False})
+    assert (
+        compare("submission_modes", m, "Electronic (by email)", "")[0]
+        == "both_found_agree"
+    )
+    assert (
+        compare("submission_modes", m, "In person or by mail", "")[0]
+        == "both_found_differ"
+    )
+    sp = rf("spec_access", {"ref": {"kind": "spec"}}, status="see_other_document")
+    assert (
+        compare("spec_access", sp, "In another document: the spec", "")[0]
+        == "both_found_agree"
+    )
+    assert (
+        compare("bid_bond", None, "In another document: x", "")[0] == "both_not_found"
+    )
+    uq = rf("unified_qualification", {"grades": ["A", "B"]})
+    assert (
+        compare("unified_qualification", uq, "Unified qualification, Grade A or B", "")[
+            0
+        ]
+        == "both_found_agree"
+    )
+    assert (
+        compare("unified_qualification", uq, "Local equivalent: city list", "")[0]
+        == "both_found_differ"
+    )
+
+
+def test_submission_refusal_wording():
+    m = rf(
+        "submission_modes", {"modes": ["in_person", "mail"], "mail_not_allowed": False}
+    )
+    assert (
+        compare(
+            "submission_modes",
+            m,
+            "In person or by mail. Mail is permitted (not refused).",
+            "",
+        )[0]
+        == "both_found_agree"
+    )
+    assert (
+        compare(
+            "submission_modes",
+            m,
+            "In person or registered mail only (ordinary mail is invalid)",
+            "",
+        )[0]
+        == "both_found_agree"
+    )
+    r = rf("submission_modes", {"modes": ["in_person"], "mail_not_allowed": True})
+    assert (
+        compare("submission_modes", r, "In person. Mail bids are refused.", "")[0]
+        == "both_found_agree"
+    )

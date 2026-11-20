@@ -2,9 +2,28 @@
 
 ## Current phase
 
-**Phase 7 is in progress. Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is not started (blocked by D-10, the providers' output terms for training on cloud labels). The app is built through the Processing screen (live results, cancel), the Workspace, the Summary tab, English for cited sentences, and the Title and Issuer cards. Still to do in Phase 7: the Deadlines tab, Export, Setup and model download, the Wi-Fi-off test, the Windows 16 GB run, and more documents. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
+**Working to the v0.1 plan below (2026-11-21), week 1 of 6: Phase 5 close-out, with the Phase 7 highlight check and the Phase 3 and 9 framing and hold-out text alongside. Phase 7 is in progress. Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is not started (blocked by D-10, the providers' output terms for training on cloud labels). The app is built through the Processing screen (live results, cancel), the Workspace, the Summary tab, English for cited sentences, and the Title and Issuer cards. Still to do in Phase 7: the Deadlines tab, Export, Setup and model download, the Wi-Fi-off test, the Windows 16 GB run, and more documents. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
+
+## v0.1 plan (2026-11-21)
+
+Exit for v0.1: a tester installs it on a Mac, adds a tender PDF with Wi-Fi off, sees English fields where every citation highlights the right Japanese text, and exports a CSV and a calendar file. The README carries real numbers, including a test-split run.
+
+The phase checklists below stay as they are. This plan says which parts of them get done, in what order, over six weeks.
+
+| Week | Dates | Work |
+|---|---|---|
+| 1 | 21 to 27 Nov | **Phase 5 close-out:** notice_date guard; precision audit of the remaining rule fields against the Gemini references; list-field comparison against Gemini (a long model job, run in the morning); issuer rules for bid instructions and specs. Done when no known wrong Verified answer remains on the 50 documents and the coverage table is re-run. **Phase 7:** Yasharth checks click-to-highlight by hand (10 citations on 3 documents); the wrong highlights are listed and fixed. **Phases 3 and 9:** a framing paragraph (public tenders are the test bed, confidential documents are the target users), the hold-out rule, and the Later list. Native-reader outreach starts this week. |
+| 2 | 28 Nov to 4 Dec | **Phase 7:** Deadlines tab and Export (CSV and .ics); opening HTML notices (181 documents today). |
+| 3 | 5 to 11 Dec | **Phases 7 and 4:** Setup and model-download screen with pinned URLs and SHA-256; the Wi-Fi-off test; the Windows 16 GB run. |
+| 4 | 12 to 18 Dec | **Phase 3:** the section-path fix and the one EXTRACTOR_VERSION bump, then freeze the rules. Label a small test set of about 10 documents with the same silver plus review process. A native-reader review of a sample. |
+| 5 | 19 to 25 Dec | **Phases 4 and 9:** one test-split run for the milestone report (fixes only for bugs, never for tuning); archive old runs in `eval/reports/`; README with real numbers; demo video with Wi-Fi off. |
+| 6 | 26 Dec to 1 Jan | Buffer. **Phase 8:** a Mac installer if easy; repo history cleanup. Outreach to a Japanese engineer with the demo. v0.1 to a first outside tester. |
+
+Cut order if time runs short: Windows installer and Windows polish first, then test labels down to 5 documents, then video polish. Never cut the highlight check, Export or the hold-out run.
+
+Hold-out rule (D-96): a new rule needs an example from outside the 15 dev documents. The test split is run once, for the milestone, after the rules freeze.
 
 ## Ground rules for the whole plan
 
@@ -185,6 +204,13 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - Korean and German adapters on the same pipeline
 - MCP server exposing the local document store to other local tools
 - Agentic workflows (compare two tenders, draft a bid/no-bid checklist)
+
+Parked after the v0.1 plan (2026-11-21), one line each on why:
+
+- Phase 6, LoRA on a small model: blocked by D-10 (the providers' output terms for training on cloud labels), and rules gave larger gains than the model changes did.
+- Phase 10, full document translation: it is a reading aid and not needed for the v0.1 exit; it starts after Phase 9 (D-78).
+- Bundle reconciliation (a Q&A overriding the notice): needs links between documents of one tender, and v0.1 reads one document at a time.
+- Pluggable schemas: the 23 v1 fields are still being fixed by the audit, so opening the schema to other users would freeze it too early.
 
 ## Phase 10: full document translation
 

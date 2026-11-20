@@ -750,8 +750,18 @@ def scalar_sentences(fields: list[str], ss: list[Sentence]) -> list[Sentence]:
     return out
 
 
+PORTAL_WINDOW_LABELS = (
+    "公開開始日",
+    "公開終了日",
+)  # the portal's publication window, not the notice date (D-95)
+
+
 def _scalar_answer(
-    fld: str, raw: dict, by_id: dict[str, Sentence], doc_type: str
+    fld: str,
+    raw: dict,
+    by_id: dict[str, Sentence],
+    doc_type: str,
+    prev: dict[str, Sentence] | None = None,
 ) -> tuple[Extracted | None, str]:
     """(answer, "") when every check passes, else (None, reason)."""
     from shiori_core.checks import (
@@ -767,6 +777,13 @@ def _scalar_answer(
     shown = x.model_copy(update={"normalized": extra or None})
     if not value or not value_in_citation(value, [by_id[i] for i in ids]):
         return None, "value_not_in_citation"
+    if (
+        fld == "notice_date"
+    ):  # HTML portals: label and value are two sentences, the label just before the value
+        for i in ids:
+            p = (prev or {}).get(i)
+            if any(t.startswith(PORTAL_WINDOW_LABELS) for t in (by_id[i].text_orig.strip(), p.text_orig.strip() if p else "")):  # fmt: skip
+                return None, "portal_window_date"
     failed = [n for n, ok in run_checks(shown, doc_type, by_id) if not ok and n in ("citations_exist", "value_in_citation", "schema_valid", "values_roundtrip")]  # fmt: skip
     return (None, failed[0]) if failed else (x, "")
 
@@ -813,13 +830,14 @@ def extract_scalars(
             if isinstance(e, Truncated):
                 break
     stat.seconds = time.monotonic() - t0
+    prev = {b.id: a for a, b in zip(ss, ss[1:], strict=False)}
     out: dict[str, Extracted] = {}
     for f in fields:
         raw = got.get(f) if isinstance(got, dict) else None
         if not isinstance(raw, dict):
             continue
         stat.proposed += 1
-        x, why = _scalar_answer(f, raw, by_id, doc_type)
+        x, why = _scalar_answer(f, raw, by_id, doc_type, prev)
         if x is None:
             stat.dropped[why] = stat.dropped.get(why, 0) + 1
             continue

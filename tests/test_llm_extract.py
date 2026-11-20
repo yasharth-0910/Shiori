@@ -715,6 +715,50 @@ def test_scalars_4965207bb115_null_answers_and_fields_the_rules_found_are_not_as
     assert out == {} and "title:" not in calls[0].split("Sentences to read")[0].split("Fields:")[1]  # fmt: skip
 
 
+PORTAL = [  # 563042df (内閣府, HTML portal page): label and value are separate sentences
+    sent("h_s8", "調達案件名称"),
+    sent(
+        "h_s9",
+        "令和８年度\u3000国立研究開発法人によるイノベーションシステム構築に関する調査",
+    ),
+    sent("h_s10", "公開開始日"),
+    sent("h_s11", "令和08年08月19日"),
+    sent("h_s12", "公開終了日"),
+    sent("h_s13", "令和08年10月05日"),
+    sent("h_s14", "調達機関"),
+]
+
+
+def test_scalars_563042df_portal_publication_dates_are_not_the_notice_date() -> None:
+    for sid, text, day in (
+        ("h_s11", "令和08年08月19日", "2026-08-19"),
+        ("h_s13", "令和08年10月05日", "2026-10-05"),
+    ):
+        a = {"notice_date": {"value_ja": text, "citations": [sid], "date": day}}
+        out, _ = scalars(a, doc=PORTAL, doc_type="notice")
+        assert "notice_date" not in out
+    a = {
+        "notice_date": {
+            "value_ja": "公開開始日",
+            "citations": ["h_s10"],
+            "date": "2026-08-19",
+        }
+    }
+    assert "notice_date" not in scalars(a, doc=PORTAL, doc_type="notice")[0]
+
+
+def test_scalars_a_notice_date_not_under_a_portal_label_is_kept() -> None:
+    doc = [sent("p1_s1", "入札公告"), sent("p1_s2", "令和８年８月19日")]
+    a = {
+        "notice_date": {
+            "value_ja": "令和８年８月19日",
+            "citations": ["p1_s2"],
+            "date": "2026-08-19",
+        }
+    }
+    assert "notice_date" in scalars(a, doc=doc, doc_type="notice")[0]
+
+
 def test_scalars_nothing_missing_makes_no_call() -> None:
     out, calls = scalars({}, have={"title", "issuer_org", "scope_summary", "performance_period", "delivery_deadline", "delivery_location"})  # fmt: skip
     assert out == {} and calls == []
