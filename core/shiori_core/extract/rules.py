@@ -82,6 +82,41 @@ def one(hits: list[Hit]) -> Hit | None:
 OFFICER = re.compile(r"支出負担行為担当官|契約担当官|契約責任者")
 
 
+# A local body's head signs the notice on page 1 (旭川市長 今津寛介, 和歌山県知事 宮﨑 泉): the body
+# name, the post, and a short person name (none, or up to 8 characters in 1-3 tokens). A line that
+# goes on (旭川市長は、...) or addresses someone (殿, 宛) is not a signature.
+_SIGN_CJK = r"[ぁ-ヿ一-鿿々]"
+_SIGN_NAME = rf"(?:\s*[ァ-ヿ一-鿿々]{_SIGN_CJK}{{0,5}}(?:\s*{_SIGN_CJK}{{1,6}}){{0,2}})?"  # a name starts with a kanji or katakana, never a particle (が, に, は...)
+_SIGN_BODY = r"[^\s\u3000（()、。0-9]{1,9}?"
+_PREF_SIGN = re.compile(rf"(?P<body>{_SIGN_BODY}[都道府県])知事(?P<name>{_SIGN_NAME})")
+_CITY_SIGN = re.compile(rf"(?P<body>{_SIGN_BODY}[市区町村])長(?P<name>{_SIGN_NAME})")
+_ANY_POST_SIGN = re.compile(
+    rf"[^\s\u3000（()、。0-9]{{2,16}}?(?:知事|長)(?P<name>{_SIGN_NAME})"
+)
+SIGN_ZONE = 12  # a page-1 signature block sits in the first sentences of the document
+
+
+def _local_sign(t: str) -> re.Match[str] | None:
+    """The 〇〇県知事 / 〇〇市長 ... signature line (whole sentence), else None."""
+    t = t.strip()
+    for pat in (_PREF_SIGN, _CITY_SIGN):
+        m = pat.fullmatch(t)
+        if m and not re.search(r"副|知事|又は", m["body"]) and not re.search(r"[殿宛様]", m["name"]) and len(re.sub(r"\s", "", m["name"])) <= 8:  # fmt: skip
+            return m
+    return None
+
+
+def _any_post_sign(t: str) -> bool:
+    """For the date only: any post line with a name (所長, 校長, ... 長) as the signature."""
+    m = _ANY_POST_SIGN.fullmatch(t.strip())
+    return bool(m and m["name"].strip() and not re.search(r"[殿宛様]", m["name"]) and len(re.sub(r"\s", "", m["name"])) <= 8)  # fmt: skip
+
+
+def _date_only(t: str) -> bool:
+    ds = find_dates(t.strip())
+    return len(ds) == 1 and ds[0].value is not None and not ds[0].warning and ds[0].text == t.strip()  # fmt: skip
+
+
 def notice_date(ss: list[Sentence]) -> Hit | None:
     """A sentence that is a date and nothing else, with an officer's title in one of the
     next three sentences (guide: "before the officer's name"). A portal date under its
@@ -95,7 +130,15 @@ def notice_date(ss: list[Sentence]) -> Hit | None:
         before = ss[i - 1].text_norm.strip() if i else ""
         if len(before) <= 12 and re.search(r"[日時間限]$", before):
             continue
-        if any(OFFICER.search(x.text_norm) for x in ss[i + 1 : i + 4]):
+        signed = (
+            s.page == 1
+            and i < SIGN_ZONE
+            and i + 1 < len(ss)
+            and (
+                _local_sign(ss[i + 1].text_norm) or _any_post_sign(ss[i + 1].text_norm)
+            )
+        )  # the date line right above a page-1 signature
+        if signed or any(OFFICER.search(x.text_norm) for x in ss[i + 1 : i + 4]):
             hits.append(
                 ({"date": ds[0].value.isoformat()}, s.text_orig.strip(), [s.id])
             )
@@ -515,19 +558,34 @@ _QTY = re.compile(
 _DEFINED = re.compile(
     r"[（(]以下[^）)]*[）)]$"
 )  # "（以下「本整備業務」という。）" after a name
+_DEFINED_MID = re.compile(
+    r"[（(]以下[^）)]*[）)]"
+)  # a definition left after the trailing one is cut
 _CASE_NO = re.compile(
     r"^[0-9０-９]{2}-[0-9０-９]{3,}"
 )  # a portal case number in front of the name: where the name ends is unclear
 _NUMBERED = re.compile(r"^[(（]?[0-9一二三四五六七八九十]{1,2}[)）.．、]")
 
 
+# Table column labels that can follow an empty 件名 cell (a list page: 件名 / 契約種別 / 開札日 ...).
+_COLUMN_LABELS = re.compile(
+    r"(?:No\.?)?(?:契約種別|契約番号|契約方法|契約区分|営業種目(?:・取扱品目)?|取扱品目|開札日|開札場所|備考|申込期限|公告日|公告番号|"
+    r"担当課|担当部署|担当者|納入場所|履行場所|履行期間|履行期限|入札方法|入札日|予定価格|区分|種別|種目|品名|摘要|数量|単位|規格|業務内容|業務の内容)等?"
+)
+
+
 def _title_ok(v: str) -> bool:
-    """A title is a name: not a numbered heading that follows an empty label, not a label."""
+    """A title is a name: not a numbered heading that follows an empty label, not a label, not a
+    table column label, not several project names run together (a （以下「…」という。） in the
+    middle of the text: each project defines its own short name)."""
+    v = re.sub(r"\s+", "", v)
     return (
         len(v) >= 4
         and not _NUMBERED.match(v)
         and not _CASE_NO.match(v)
         and not re.fullmatch(_TITLE_LABEL, v)
+        and not _COLUMN_LABELS.fullmatch(v)
+        and not _DEFINED_MID.search(_DEFINED.sub("", v))
     )
 
 
@@ -569,6 +627,15 @@ def issuer_org(ss: list[Sentence]) -> Hit | None:
     for norm_v, orig_v, ids in headed(ss, r"調達機関(?![番所])"):
         if len(ids) == 2 and _ORG_LINE.fullmatch(norm_v.strip()):
             hits.append(({}, orig_v.strip(), ids[1:]))
+    for i, s in enumerate(
+        ss[:SIGN_ZONE]
+    ):  # the page-1 signature of a prefecture, city, town or village
+        m = _local_sign(s.text_norm) if s.page == 1 else None
+        if m and (m["name"].strip() or (i and _date_only(ss[i - 1].text_norm))):
+            t = s.text_norm
+            off = len(t) - len(t.lstrip()) + m.start("body")
+            q, ids = Joined([s]).cut(off, off + len(m["body"]))
+            hits.append(({}, q.strip(), ids))
     for i, s in enumerate(ss[:-1]):
         if re.fullmatch(OFFICER.pattern, s.text_norm.strip()) and (m := _ORG_PREFIX.match(ss[i + 1].text_norm.strip())):  # fmt: skip
             nxt = ss[i + 1]

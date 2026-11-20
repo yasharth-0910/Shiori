@@ -7,11 +7,11 @@ from shiori_core.models import Sentence
 from shiori_core.normalize import normalize
 
 
-def sents(*texts: str, prefix: str = "h_s") -> list[Sentence]:
+def sents(*texts: str, prefix: str = "h_s", page: int = 0) -> list[Sentence]:
     out = []
     for n, t in enumerate(texts, 1):
         norm, m = normalize(t)
-        out.append(Sentence(id=f"{prefix}{n}", page=0, section_path=[], section_titles=[], text_orig=t,
+        out.append(Sentence(id=f"{prefix}{n}", page=page, section_path=[], section_titles=[], text_orig=t,
                             text_norm=norm, norm_to_orig=m, boxes=[]))  # fmt: skip
     return out
 
@@ -752,3 +752,73 @@ def test_heading_cue_4965207bb115_a_title_far_from_any_heading_is_still_unusual(
     )
     a = Extracted(field="title", value_ja="業務", normalized={}, citations=["h_s1"])
     assert heading_cue(a, {s.id: s for s in ss}) is False
+
+
+# --- page-1 signature block: issuer_org and notice_date ---------------------------------------
+# 2f2f5bd3 (和歌山県, open): the date line, then the governor's line. Spacing inside the name is how the
+# PDF text came out. The 市長 and other-post cases are made-up wording in the same layout (the
+# collected examples are restricted documents, so none of their text is used here).
+
+WAKAYAMA = ["令和8年9月15日", "和歌山県知事 宮 崎   泉", "1 一般競争入札に付する事項"]
+
+
+def test_issuer_and_date_2f2f5bd3_wakayama_signature_block() -> None:
+    ss = sents(*WAKAYAMA, page=1)
+    org, date = got("notice", ss, "issuer_org"), got("notice", ss, "notice_date")
+    assert org and org.value_ja == "和歌山県" and org.citations == ["h_s2"]
+    assert date and date.normalized == {"date": "2026-09-15"} and date.citations == ["h_s1"]  # fmt: skip
+
+
+def test_issuer_city_mayor_line_gives_the_city_name() -> None:
+    ss = sents("令和8年4月1日", "サンプル市長 山田 太郎", "第1 業務概要", page=1)
+    org = got("notice", ss, "issuer_org")
+    assert org and org.value_ja == "サンプル市" and org.citations == ["h_s2"]
+
+
+def test_signature_rules_only_read_page_1_near_the_top() -> None:
+    assert got("notice", sents(*WAKAYAMA, page=2), "issuer_org") is None
+    assert got("notice", sents(*WAKAYAMA, page=2), "notice_date") is None
+    late = sents(*(["本文"] * 12), *WAKAYAMA, page=1)
+    assert got("notice", late, "issuer_org") is None and got("notice", late, "notice_date") is None  # fmt: skip
+
+
+def test_signature_line_must_be_the_whole_sentence_and_not_a_deputy_or_addressee() -> (
+    None
+):
+    for line in ("和歌山県知事は、次のとおり公告する。", "副市長 山田 太郎", "サンプル市長 山田 太郎 殿", "都道府県知事又は市長が認定した者"):  # fmt: skip
+        assert (
+            got("notice", sents("令和8年4月1日", line, page=1), "issuer_org") is None
+        ), line
+
+
+def test_notice_date_not_taken_when_a_heading_stands_between_date_and_signature() -> (
+    None
+):
+    ss = sents("令和7年7月24日", "質問回答書", "サンプル市長 山田 太郎", page=1)
+    assert got("notice", ss, "notice_date") is None
+
+
+def test_notice_date_before_a_named_post_other_than_governor_or_mayor() -> None:
+    ss = sents("令和8年10月2日", "サンプル県サンプル事務所長 山田 太郎", "地方自治法第234条の規定により", page=1)  # fmt: skip
+    a = got("notice", ss, "notice_date")
+    assert a and a.normalized == {"date": "2026-10-02"}
+
+
+# --- title: column labels and run-together project names -------------------------------------
+
+
+def test_title_is_never_a_table_column_label() -> None:
+    # a list page: the 件名 cell is empty, the next cell is the next column's label
+    for label in ("契約種別", "契約番号", "開札日", "備考", "営業種目・取扱品目"):
+        assert got("notice", sents("件名", label), "title") is None, label
+
+
+def test_title_with_several_defined_projects_is_not_found() -> None:
+    ss = sents("(1) 件名", "サンプル市A業務委託（以下「業務A」という。）サンプル市B業務委託（以下「業務B」という。）")  # fmt: skip
+    assert got("bid_instructions", ss, "title") is None
+
+
+def test_title_with_one_trailing_definition_still_found() -> None:
+    ss = sents("(1) 件名", "サンプル市A業務委託（以下「業務A」という。）")
+    a = got("bid_instructions", ss, "title")
+    assert a and a.value_ja == "サンプル市A業務委託"
