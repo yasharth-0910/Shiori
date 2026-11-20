@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is next and not started. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
+**Phase 7 is in progress. Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is not started (blocked by D-10, the providers' output terms for training on cloud labels). The app is built through the Processing screen (live results, cancel), the Workspace, the Summary tab, English for cited sentences, and the Title and Issuer cards. Still to do in Phase 7: the Deadlines tab, Export, Setup and model download, the Wi-Fi-off test, the Windows 16 GB run, and more documents. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
 
