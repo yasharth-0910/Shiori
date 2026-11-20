@@ -742,3 +742,37 @@ def test_scalar_schema_caps_the_quoted_value() -> None:
         "properties"
     ]
     assert props["value_ja"]["maxLength"] == llm.SCALAR_VALUE_MAX
+
+
+def test_scalar_system_prompt_has_the_b2_instructions_and_no_when_unsure() -> None:
+    sp = llm.SCALAR_SYSTEM
+    assert "When unsure" not in sp and "answer null." not in sp.split("as shown.")[0]
+    for key in (
+        "with no added spaces",
+        "ISO date only in the date field",
+        "quote the date as written in value_ja",
+        "仕様書による",
+        "Never answer scope_summary with a copy of the title",
+        "納入期限 or 納期",
+        "not a delivery deadline",
+        "入札室, 開札場所, 問い合わせ先",
+        "納入場所, 履行場所 or 委託場所",
+    ):
+        assert key in sp, key
+
+
+def test_scalar_system_prompt_issuer_line_matches_the_labeling_guide() -> None:
+    # docs/labeling_guide.md: the body (和歌山県), never a unit below it (和歌山県会計局会計課)
+    assert "For issuer_org answer the body only" in llm.SCALAR_SYSTEM
+    assert "和歌山県会計局会計課" in llm.SCALAR_SYSTEM
+
+
+def test_scalar_call_sends_the_shipped_system_prompt() -> None:
+    sent: list[str] = []
+
+    def spy(system: str, user: str, schema: dict, max_out: int) -> str:
+        sent.append(system)
+        return "{}"
+
+    llm.extract_scalars("spec", SPEC, spy, set(), [])
+    assert sent and all(x == llm.SCALAR_SYSTEM for x in sent)
