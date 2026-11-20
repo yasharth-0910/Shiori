@@ -700,9 +700,9 @@ SCALAR_EXTRA: dict[str, dict] = {
     "performance_period": {"start": {"type": ["string", "null"]}, "end": {"type": ["string", "null"]}, "relative_text": {"type": ["string", "null"]}},
     "delivery_deadline": {"date": {"type": "string"}},
 }  # fmt: skip
-# The wording of variant B2 of eval/gemini_scalar_compare.py (copied, core/ never imports eval/), plus the
-# issuer_org line from docs/labeling_guide.md. There is no "When unsure, answer null": in the 3 and 50 document
-# probes it made the model answer null for nearly every field (D-95).
+# The wording of variant B2 of eval/gemini_scalar_compare.py, exactly (copied, core/ never imports eval/); a test
+# pins the text. There is no "When unsure, answer null": in the 3 and 50 document probes it made the model answer
+# null for nearly every field. An issuer_org sentence was tried and removed (D-95).
 SCALAR_SYSTEM = (
     "You read part of a Japanese public tender document. Each sentence is written as "
     "[id] text. For each field listed, answer with an object, or null when the document does "
@@ -715,7 +715,6 @@ SCALAR_SYSTEM = (
     " Never answer scope_summary with a copy of the title."
     " For delivery_deadline answer null unless the sentence labels the date as 納入期限 or 納期; the end of a contract period or performance period is not a delivery deadline."
     " For delivery_location answer null for places where bids are opened or inquiries are answered (入札室, 開札場所, 問い合わせ先); use it only for a place labelled 納入場所, 履行場所 or 委託場所."
-    " For issuer_org answer the body only: the prefecture or city (和歌山県), not an office or department below it (和歌山県会計局会計課)."
 )  # fmt: skip
 
 

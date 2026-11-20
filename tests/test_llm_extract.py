@@ -761,10 +761,24 @@ def test_scalar_system_prompt_has_the_b2_instructions_and_no_when_unsure() -> No
         assert key in sp, key
 
 
-def test_scalar_system_prompt_issuer_line_matches_the_labeling_guide() -> None:
-    # docs/labeling_guide.md: the body (和歌山県), never a unit below it (和歌山県会計局会計課)
-    assert "For issuer_org answer the body only" in llm.SCALAR_SYSTEM
-    assert "和歌山県会計局会計課" in llm.SCALAR_SYSTEM
+# The text of variant B2 (eval/gemini_scalar_compare.py), pinned here word for word.
+B2_TEXT = (
+    "You read part of a Japanese public tender document. Each sentence is written as [id] text. "
+    "For each field listed, answer with an object, or null when the document does not state it. "
+    "Use only what the sentences say. value_ja is copied exactly from the sentences (several sentences: one per line); "
+    "citations are the ids it comes from, exactly as shown."
+    " value_ja must be copied exactly from the sentences, with no added spaces."
+    " Put the ISO date only in the date field, and quote the date as written in value_ja."
+    " For scope_summary and delivery_location answer null if the text only says see the spec (仕様書による) or does not label the place as 納入場所 or 履行場所."
+    " Never answer scope_summary with a copy of the title."
+    " For delivery_deadline answer null unless the sentence labels the date as 納入期限 or 納期; the end of a contract period or performance period is not a delivery deadline."
+    " For delivery_location answer null for places where bids are opened or inquiries are answered (入札室, 開札場所, 問い合わせ先); use it only for a place labelled 納入場所, 履行場所 or 委託場所."
+)  # fmt: skip
+
+
+def test_scalar_system_prompt_is_b2_exactly_and_has_no_issuer_sentence() -> None:
+    assert llm.SCALAR_SYSTEM == B2_TEXT
+    assert "issuer_org" not in llm.SCALAR_SYSTEM  # tried and removed (D-95)
 
 
 def test_scalar_call_sends_the_shipped_system_prompt() -> None:

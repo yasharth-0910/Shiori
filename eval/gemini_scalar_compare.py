@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 """Rules plus the local scalar fallback, compared with Gemini's silver answers (local model only, no network).
 
-    uv run python -m eval.gemini_scalar_compare [--limit N]
+    uv run python -m eval.gemini_scalar_compare [--limit N] [--only S]
 
 For the documents in data/cache/gemini_batches/index.md: the sidecar's path (read_pages, doc type from page 1,
 segment, rules.extract), then one grouped scalar call per prompt variant for the fields the rules left empty
@@ -48,7 +48,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CSV = ROOT / "data/cache/gemini_ref/gemini_fields.csv"
 OUT = ROOT / "data/cache/gemini_compare"
 FIELDS = ("title", "issuer_org", "contracting_officer", "notice_date", "performance_period", "scope_summary", "delivery_deadline", "delivery_location")  # fmt: skip
-# The scalar system prompt as shipped before 2026-11-21 (D-95), kept here so B and B2 stay what was measured.
+# The scalar system prompt as shipped before 2026-11-20 (D-95), kept here so B and B2 stay what was measured.
 OLD_SYSTEM = (
     "You read part of a Japanese public tender document. Each sentence is written as "
     "[id] text. For each field listed, answer with an object, or null when the document does "
@@ -66,7 +66,8 @@ B2 = (
     + " For delivery_deadline answer null unless the sentence labels the date as 納入期限 or 納期; the end of a contract period or performance period is not a delivery deadline."
     + " For delivery_location answer null for places where bids are opened or inquiries are answered (入札室, 開札場所, 問い合わせ先); use it only for a place labelled 納入場所, 履行場所 or 委託場所."
 )
-VARIANTS = {"B": B, "B2": B2}
+S = llm.SCALAR_SYSTEM  # the shipped prompt (D-95, prompt change 2026-11-20)
+VARIANTS = {"B": B, "B2": B2, "S": S}
 
 
 def compare(field: str, ours: Extracted | None, answer_en: str, quote_ja: str) -> str:
@@ -103,6 +104,10 @@ def one_line(s: str) -> str:
 def main(argv: list[str]) -> None:
     started = time.monotonic()
     limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else None
+    only = argv[argv.index("--only") + 1] if "--only" in argv else None
+    run_variants = (
+        {only: VARIANTS[only]} if only else VARIANTS
+    )  # --only adds one variant to an existing report
     splits = json.loads((ROOT / "data/eval/splits.json").read_text())
     manifest = [
         json.loads(x)
@@ -113,10 +118,10 @@ def main(argv: list[str]) -> None:
         if r["field"] in FIELDS:
             gem.setdefault((r["doc_prefix"], r["field"]), r)
     index = read_index()[:limit]
-    classes = {v: {f: Counter() for f in FIELDS} for v in ("rules", *VARIANTS)}
-    seconds: dict[str, list[float]] = {v: [] for v in VARIANTS}
+    classes = {v: {f: Counter() for f in FIELDS} for v in ("rules", *run_variants)}
+    seconds: dict[str, list[float]] = {v: [] for v in run_variants}
     raw: dict[str, Counter] = {
-        v: Counter() for v in VARIANTS
+        v: Counter() for v in run_variants
     }  # non_null, passed_checks, failed_value_in_citation
     failures: dict[str, list[str]] = {}
     tsv = [
@@ -158,10 +163,10 @@ def main(argv: list[str]) -> None:
                 classes["rules"][f][
                     compare(f, found.get(f), g[f]["answer_en"], g[f]["quote_ja"])
                 ] += 1
-                if f in found:
+                if f in found and not only:
                     x = found[f]
                     tsv.append("\t".join(["rules", prefix[:8], f, one_line(x.value_ja), ",".join(x.citations), str(by_all[x.citations[0]].page), "True", "", one_line(g[f]["answer_en"]), one_line(g[f]["quote_ja"])]))  # fmt: skip
-            for name, system in VARIANTS.items():
+            for name, system in run_variants.items():
                 answers: dict = {}
                 secs = 0.0
                 if sent:
@@ -200,10 +205,19 @@ def main(argv: list[str]) -> None:
     finally:
         hybrid.stop()
     OUT.mkdir(parents=True, exist_ok=True)
+    if (
+        only and (OUT / "scalars.tsv").exists()
+    ):  # keep the earlier rows of the other variants, replace this one's
+        old_rows = (OUT / "scalars.tsv").read_text(encoding="utf-8").splitlines()
+        tsv = [
+            old_rows[0],
+            *[r for r in old_rows[1:] if r.split("\t", 1)[0] != only],
+            *tsv[1:],
+        ]
     (OUT / "scalars.tsv").write_text("\n".join(tsv) + "\n", encoding="utf-8")
     md = ["# Rules + scalar fallback vs Gemini", "", f"Documents: {len(index)} in the index slice. Counts and doc id prefixes only; text is in scalars.tsv.",
           "'rules' is the rules alone. B and B2 are rules plus the scalar fallback with that system prompt (an answer counts only when it passes the pipeline's checks).", ""]  # fmt: skip
-    for v in ("rules", *VARIANTS):
+    for v in ("rules", *run_variants):
         md += [
             f"## {v}",
             "",
@@ -214,7 +228,7 @@ def main(argv: list[str]) -> None:
             f"| {f} | " + " | ".join(str(classes[v][f][c]) for c in CLASSES) + " |"
             for f in FIELDS
         ]
-        if v in VARIANTS:
+        if v in run_variants:
             sec = sorted(seconds[v])
             med = (
                 sec[len(sec) // 2]
@@ -232,7 +246,31 @@ def main(argv: list[str]) -> None:
     md += ["## Failures", ""] + (
         [f"- {k}: {', '.join(v)}" for k, v in failures.items()] or ["- none"]
     )
-    (OUT / "scalars_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    report = OUT / "scalars_report.md"
+    if (
+        only and report.exists()
+    ):  # add this variant's section to the existing report, B and B2 are not rerun
+        mine = md[
+            md.index(f"## {only}") : next(
+                i for i, x in enumerate(md) if x.startswith("Total run time")
+            )
+        ]
+        mine += [
+            f"Variant {only} alone: {(time.monotonic() - started) / 60:.1f} minutes ({len(index)} documents).",
+            "",
+        ]
+        lines = report.read_text(encoding="utf-8").splitlines()
+        if f"## {only}" in lines:  # drop an older section of the same variant
+            a = lines.index(f"## {only}")
+            b = next(
+                i
+                for i in range(a + 1, len(lines))
+                if lines[i].startswith(("## ", "Total run time"))
+            )
+            del lines[a:b]
+        at = next(i for i, x in enumerate(lines) if x.startswith("Total run time"))
+        md = [*lines[:at], *mine, *lines[at:]]
+    report.write_text("\n".join(md) + "\n", encoding="utf-8")
     for line in md:
         print(line)
 

@@ -15,7 +15,9 @@ def ex(field: str, value_ja: str, normalized: dict | None = None) -> Extracted:
 def test_variants_are_pinned_to_the_old_prompt() -> None:
     assert "When unsure" in OLD_SYSTEM
     assert "When unsure" not in B and B2.startswith(B) and len(B2) > len(B)
-    assert set(VARIANTS) == {"B", "B2"}
+    assert set(VARIANTS) == {"B", "B2", "S"}
+    assert VARIANTS["S"] == llm.SCALAR_SYSTEM  # S is the shipped prompt
+    assert VARIANTS["S"] == B2  # and since 2026-11-20 it equals B2 (D-95)
     assert "When unsure" not in llm.SCALAR_SYSTEM  # the shipped prompt moved on (D-95)
 
 
