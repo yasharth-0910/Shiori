@@ -725,3 +725,20 @@ def test_scalars_a_failed_call_is_not_found() -> None:
         raise OSError("down")
 
     assert llm.extract_scalars("spec", SPEC, boom, set(), []) == {}
+
+
+def test_scalar_sentences_2f2f5bd3_first_40_always_go_in_once_and_in_order() -> None:
+    doc = [sent(f"p1_s{n}", f"無関係な文{n}") for n in range(1, 61)]
+    doc.insert(
+        10, sent("p1_s11b", "契約期間", ["契約期間"])
+    )  # a cue hit inside the head must not repeat
+    got = [s.id for s in llm.scalar_sentences(["performance_period"], doc)]
+    assert got[:40] == [s.id for s in doc[:40]] and len(got) == len(set(got))
+    assert "p1_s60" not in got  # past the head and far from any cue
+
+
+def test_scalar_schema_caps_the_quoted_value() -> None:
+    props = llm.scalar_schema(["title"])["properties"]["title"]["anyOf"][0][
+        "properties"
+    ]
+    assert props["value_ja"]["maxLength"] == llm.SCALAR_VALUE_MAX

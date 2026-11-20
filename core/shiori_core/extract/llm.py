@@ -679,7 +679,8 @@ SCALAR_FIELDS = (
     "delivery_deadline",
     "delivery_location",
 )
-SCALAR_HEAD = 20  # the first sentences always go in: title, date, issuer and officer sit at the top
+SCALAR_HEAD = 40  # the first sentences always go in (document order): title, date, issuer and officer sit at the top
+SCALAR_VALUE_MAX = 400  # characters a quoted value may have in the grammar
 SCALAR_BUDGET = 9000  # characters, at most
 SCALAR_MAX_OUT = 1500
 
@@ -716,7 +717,7 @@ def scalar_prompt(fields: list[str], ss: list[Sentence]) -> str:
 def scalar_schema(fields: list[str]) -> dict:
     def one(f: str) -> dict:
         props = {
-            "value_ja": {"type": "string", "minLength": 1},
+            "value_ja": {"type": "string", "minLength": 1, "maxLength": SCALAR_VALUE_MAX},
             "citations": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": MAX_CITES},
             **SCALAR_EXTRA.get(f, {}),
         }  # fmt: skip
