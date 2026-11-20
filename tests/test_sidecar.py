@@ -328,7 +328,7 @@ def test_extract_with_progress_reports_each_field(monkeypatch):
         sent("h_s2", "入札書の受領期限　令和８年10月21日", ["入札書の受領期限"]),
     ]
     m.extract_with_progress(FakeClient(), "notice", ss)  # type: ignore[arg-type]
-    assert seen[0] == "eligibility (1 of 3)" and all(d.endswith(" of 3)") for d in seen)
+    assert seen[0] == "eligibility (1 of 3)" and all(d.endswith(" of 3)") or d == "Other fields" for d in seen)  # fmt: skip
 
 
 def test_translate_endpoint_without_a_model_is_503(tmp_path):

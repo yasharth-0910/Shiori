@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 import uvicorn
 from shiori_core import translate as tr
-from shiori_core.extract import llm
+from shiori_core.extract import llm, rules
 from shiori_core.fields import BY_ID
 
 from sidecar.server import (
@@ -81,6 +81,11 @@ def extract_with_progress(client: llm.Client, doc_type: str, ss) -> dict:
 
     out = llm.extract_lists(doc_type, ss, complete, on_field=got)
     settle()
+    # Scalar fields the rules left not found: one more grouped call (D-95). Answers only fill gaps.
+    if not os.environ.get("SHIORI_NO_SCALARS"):  # dev switch, for before/after checks
+        have = set(rules.extract(doc_type, ss))
+        report("Other fields")
+        out |= llm.extract_scalars(doc_type, ss, complete, have, on_field=got)
     return out
 
 

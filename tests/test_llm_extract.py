@@ -661,3 +661,67 @@ def test_http_error_is_still_an_oserror() -> None:
             llm.Client(srv.server_port).complete("s", "u", {}, 8)
     finally:
         srv.server_close()
+
+
+# --- scalar fallback (D-95) ---------------------------------------------------------------
+
+SPEC = [
+    sent("h_s1", "委託業務仕様書（案）"),
+    sent("h_s2", "１．業務の名称わかやま空き家ポータルサイト構築及び保守管理運営業務"),
+    sent("h_s3", "３．委託期間"),
+    sent("h_s4", "契約締結日から令和１１年３月３１日まで"),
+]
+
+
+def scalars(
+    answer: dict,
+    doc: list[Sentence] = SPEC,
+    have: set[str] | None = None,
+    doc_type: str = "spec",
+):
+    calls: list[str] = []
+
+    def complete(system: str, user: str, schema: dict, max_out: int) -> str:
+        calls.append(user)
+        return json.dumps(answer, ensure_ascii=False)
+
+    out = llm.extract_scalars(doc_type, doc, complete, have or set(), [])
+    return out, calls
+
+
+def test_scalars_4965207bb115_cited_and_quoted_answer_is_kept() -> None:
+    a = {"title": {"value_ja": "わかやま空き家ポータルサイト構築及び保守管理運営業務", "citations": ["h_s2"]},
+         "performance_period": {"value_ja": "契約締結日から令和１１年３月３１日まで", "citations": ["h_s4"], "start": None, "end": "2029-03-31", "relative_text": "契約締結日"}}  # fmt: skip
+    out, calls = scalars(a)
+    assert len(calls) == 1  # one grouped call for every missing field
+    assert out["title"].citations == ["h_s2"] and out["title"].normalized == {}
+    assert out["performance_period"].normalized["end"] == "2029-03-31"
+
+
+def test_scalars_4965207bb115_unknown_citation_quote_not_in_it_or_unread_date_are_dropped() -> (
+    None
+):
+    a = {"title": {"value_ja": "わかやま空き家ポータルサイト構築及び保守管理運営業務", "citations": ["h_s99"]},
+         "scope_summary": {"value_ja": "空き家を活用する", "citations": ["h_s2"]},
+         "performance_period": {"value_ja": "契約締結日から令和１１年３月３１日まで", "citations": ["h_s4"], "start": None, "end": "2030-03-31", "relative_text": None}}  # fmt: skip
+    out, _ = scalars(a)
+    assert out == {}
+
+
+def test_scalars_4965207bb115_null_answers_and_fields_the_rules_found_are_not_asked() -> (
+    None
+):
+    out, calls = scalars({"scope_summary": None, "delivery_deadline": None, "delivery_location": None}, have={"title", "performance_period", "issuer_org"})  # fmt: skip
+    assert out == {} and "title:" not in calls[0].split("Sentences to read")[0].split("Fields:")[1]  # fmt: skip
+
+
+def test_scalars_nothing_missing_makes_no_call() -> None:
+    out, calls = scalars({}, have={"title", "issuer_org", "scope_summary", "performance_period", "delivery_deadline", "delivery_location"})  # fmt: skip
+    assert out == {} and calls == []
+
+
+def test_scalars_a_failed_call_is_not_found() -> None:
+    def boom(system: str, user: str, schema: dict, max_out: int) -> str:
+        raise OSError("down")
+
+    assert llm.extract_scalars("spec", SPEC, boom, set(), []) == {}

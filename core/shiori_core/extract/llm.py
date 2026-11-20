@@ -662,3 +662,159 @@ def extract_lists(
         if on_field is not None:
             on_field(out[fld])
     return out
+
+
+# --- scalar fallback (D-95) -----------------------------------------------------------------
+# One grouped call for the scalar fields the rules left not found. The model quotes and cites;
+# code decides: an answer is kept only when its citations exist, its quote is in them and the
+# value passes schema_valid and values_roundtrip. Anything else stays not found.
+
+SCALAR_FIELDS = (
+    "title",
+    "issuer_org",
+    "contracting_officer",
+    "notice_date",
+    "scope_summary",
+    "performance_period",
+    "delivery_deadline",
+    "delivery_location",
+)
+SCALAR_HEAD = 20  # the first sentences always go in: title, date, issuer and officer sit at the top
+SCALAR_BUDGET = 9000  # characters, at most
+SCALAR_MAX_OUT = 1500
+
+SCALAR_RULES = {
+    "title": "The name of the procurement or work as the document states it (the text after a label such as 件名 or 業務名, or the title line). Not the label, not the document kind (仕様書, 入札公告).",
+    "issuer_org": "The body that issues the document (a ministry, agency, prefecture or city), as written.",
+    "contracting_officer": "The officer who signs: title (支出負担行為担当官 and the like) and name. Quote them as written.",
+    "notice_date": "The date the notice is issued, quoted as written; date is that day as YYYY-MM-DD (令和N年 is 2018+N). Not a deadline or a period.",
+    "scope_summary": "One or two sentences that say what the work is (purpose or content of the work), quoted as written.",
+    "performance_period": "When the work or contract runs. start and end as YYYY-MM-DD when the text gives them, else null; relative_text for a phrase that is not a date (契約締結日から90日間). Quote only the period, not a ただし clause.",
+    "delivery_deadline": "The date goods or work must be delivered by (納入期限), quoted as written; date as YYYY-MM-DD.",
+    "delivery_location": "Where the work is done or goods are delivered (納入場所, 履行場所), as written.",
+}
+SCALAR_EXTRA: dict[str, dict] = {
+    "contracting_officer": {"title": {"type": ["string", "null"]}, "name": {"type": ["string", "null"]}},
+    "notice_date": {"date": {"type": "string"}},
+    "performance_period": {"start": {"type": ["string", "null"]}, "end": {"type": ["string", "null"]}, "relative_text": {"type": ["string", "null"]}},
+    "delivery_deadline": {"date": {"type": "string"}},
+}  # fmt: skip
+SCALAR_SYSTEM = (
+    "You read part of a Japanese public tender document. Each sentence is written as "
+    "[id] text. For each field listed, answer with an object, or null when the document does "
+    "not state it. Use only what the sentences say. value_ja is copied exactly from the "
+    "sentences (several sentences: one per line); citations are the ids it comes from, exactly "
+    "as shown. When unsure, answer null."
+)
+
+
+def scalar_prompt(fields: list[str], ss: list[Sentence]) -> str:
+    rules = "\n".join(f"- {f}: {SCALAR_RULES[f]}" for f in fields)
+    return f"Field: scalars\n\nFields:\n{rules}\n\nSentences to read:\n{numbered(ss)}\n\nAnswer:"
+
+
+def scalar_schema(fields: list[str]) -> dict:
+    def one(f: str) -> dict:
+        props = {
+            "value_ja": {"type": "string", "minLength": 1},
+            "citations": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": MAX_CITES},
+            **SCALAR_EXTRA.get(f, {}),
+        }  # fmt: skip
+        return {"anyOf": [{"type": "object", "properties": props, "required": list(props), "additionalProperties": False}, {"type": "null"}]}  # fmt: skip
+
+    return {"type": "object", "properties": {f: one(f) for f in fields}, "required": fields, "additionalProperties": False}  # fmt: skip
+
+
+def scalar_sentences(fields: list[str], ss: list[Sentence]) -> list[Sentence]:
+    """The head of the document plus the cue windows of every asked field, in document order, cut at the budget."""
+    keep = {s.id for s in ss[:SCALAR_HEAD]}
+    for f in fields:
+        keep |= {s.id for s in retrieve(f, ss)}
+    out, n = [], 0
+    for s in ss:
+        if s.id in keep:
+            n += len(s.text_orig)
+            if n > SCALAR_BUDGET:
+                break
+            out.append(s)
+    return out
+
+
+def _scalar_answer(
+    fld: str, raw: dict, by_id: dict[str, Sentence], doc_type: str
+) -> tuple[Extracted | None, str]:
+    """(answer, "") when every check passes, else (None, reason)."""
+    from shiori_core.checks import (
+        run_checks,
+    )  # local: checks has no need of the model module
+
+    ids = [i for i in dict.fromkeys(raw.get("citations") or [])]
+    if not ids or any(i not in by_id for i in ids):
+        return None, "unknown_id"
+    extra = {k: raw[k] for k in SCALAR_EXTRA.get(fld, {}) if raw.get(k) is not None}
+    value = (raw.get("value_ja") or "").strip()
+    x = Extracted(field=fld, value_ja=value, normalized=extra, citations=ids)
+    shown = x.model_copy(update={"normalized": extra or None})
+    if not value or not value_in_citation(value, [by_id[i] for i in ids]):
+        return None, "value_not_in_citation"
+    failed = [n for n, ok in run_checks(shown, doc_type, by_id) if not ok and n in ("citations_exist", "value_in_citation", "schema_valid", "values_roundtrip")]  # fmt: skip
+    return (None, failed[0]) if failed else (x, "")
+
+
+def extract_scalars(
+    doc_type: str,
+    sentences: list[Sentence],
+    complete: Complete,
+    have: set[str],
+    stats: list[CallStat] | None = None,
+    on_field: Callable[[Extracted], None] | None = None,
+) -> dict[str, Extracted]:
+    """The scalar fields that apply to `doc_type`, are not in `have` (what the rules found) and that
+    one grouped model call answered with a cited, checked value. No such field: no call. A failed
+    call, or an answer that fails a check, leaves the field not found."""
+    ss = [s for s in sentences if s.language == "ja"]
+    fields = [
+        f for f in SCALAR_FIELDS if doc_type in BY_ID[f].applies_to and f not in have
+    ]
+    sent = scalar_sentences(fields, ss) if fields else []
+    if not sent:
+        return {}
+    by_id = {s.id: s for s in sent}
+    stat = CallStat("scalars", sentences_sent=len(sent), retrieved=[s.id for s in sent])
+    if stats is not None:
+        stats.append(stat)
+    t0 = time.monotonic()
+    got: dict = {}
+    for attempt in (0, 1):  # one retry, then not found
+        stat.retries = attempt
+        try:
+            got = json.loads(
+                complete(
+                    SCALAR_SYSTEM,
+                    scalar_prompt(fields, sent),
+                    scalar_schema(fields),
+                    SCALAR_MAX_OUT,
+                )
+            )
+            stat.call_failed = None
+            break
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            stat.call_failed = type(e).__name__
+            if isinstance(e, Truncated):
+                break
+    stat.seconds = time.monotonic() - t0
+    out: dict[str, Extracted] = {}
+    for f in fields:
+        raw = got.get(f) if isinstance(got, dict) else None
+        if not isinstance(raw, dict):
+            continue
+        stat.proposed += 1
+        x, why = _scalar_answer(f, raw, by_id, doc_type)
+        if x is None:
+            stat.dropped[why] = stat.dropped.get(why, 0) + 1
+            continue
+        stat.kept += 1
+        out[f] = x
+        if on_field is not None:
+            on_field(x)
+    return out

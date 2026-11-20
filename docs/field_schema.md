@@ -37,7 +37,7 @@ Heading cues are what to look for in section titles and line starts. They feed t
 
 | Field id | Type | applies_to | Heading cues | Normalized form | Notes |
 |---|---|---|---|---|---|
-| `title` | text | notice, tender_page, bid_instructions, spec | 件名, 調達件名, 購入等件名, 業務名 | null (value_ja) | |
+| `title` | text | notice, tender_page, bid_instructions, spec | 件名, 調達件名, 購入等件名, 業務名, 業務の名称 | null (value_ja) | |
 | `issuer_org` | text | notice, tender_page, bid_instructions, spec | 発注機関, 調達機関, notice header | null (value_ja) | ministry/agency/municipality |
 | `contracting_officer` | object | notice, tender_page, bid_instructions | 支出負担行為担当官, 契約担当官, 契約責任者 | {title, name} | at least one of the two |
 | `notice_date` | date | notice, tender_page | top of notice, before 記 | {date} | |
@@ -45,7 +45,7 @@ Heading cues are what to look for in section titles and line starts. They feed t
 | `award_method` | enum | notice, tender_page, bid_instructions | 落札者の決定方法, 総合評価, 最低価格 | {method}: `lowest_price`, `best_value`, `other` | |
 | `item_category` | codes | notice, tender_page | 品目分類番号 | {codes: [string]} | numeric category codes on national notices |
 | `scope_summary` | text | notice, tender_page, bid_instructions, spec | 調達件名の特質等, 業務内容, 概要, 目的 | null (value_ja) | 1 to 3 sentences, often from the spec; `value_ja` is the cited text, joined with a line break |
-| `performance_period` | date range | notice, tender_page, bid_instructions, spec | 履行期間, 契約期間, 履行期限 | {start, end, relative_text} | apply DATE-6 for 年度 phrases; at least one part set |
+| `performance_period` | date range | notice, tender_page, bid_instructions, spec | 履行期間, 契約期間, 履行期限, 委託期間 | {start, end, relative_text} | apply DATE-6 for 年度 phrases; at least one part set |
 | `delivery_deadline` | date | notice, tender_page, bid_instructions, spec | 納入期限 | {date} | for goods |
 | `delivery_location` | text | notice, tender_page, bid_instructions, spec | 納入場所, 履行場所 | null (value_ja) | |
 | `eligibility` | list | notice, tender_page, bid_instructions | 競争参加資格, 参加資格, 暴力団関係事業者, 指名停止 | {items: [{kind, polarity, text_ja, text_en, citations}]} | `kind`: unified_qualification, legal, suspension, experience, certification, other. `polarity`: requirement or disqualification (SEM-3). 暴力団関係事業者 items are `legal` disqualifications, 指名停止 items are `suspension` |

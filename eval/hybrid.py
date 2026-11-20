@@ -13,6 +13,7 @@ Dev-time only. No cloud call. Reports hold counts and seconds, never document te
 """
 
 import argparse
+import os
 import re
 import socket
 import subprocess
@@ -113,7 +114,12 @@ def extract(row: ManifestRow, sentences: list[Sentence]) -> dict[str, Candidate]
         State.client = llm.Client(PORT)
     assert State.client is not None
     stats: list[llm.CallStat] = []
-    found = {**rules_extract(row.doc_type, sentences), **llm.extract_lists(row.doc_type, sentences, State.client.complete, stats)}  # fmt: skip
+    base = rules_extract(row.doc_type, sentences)
+    found = {**base, **llm.extract_lists(row.doc_type, sentences, State.client.complete, stats)}  # fmt: skip
+    if os.environ.get(
+        "SHIORI_SCALARS"
+    ):  # D-95: the scalar fallback, on only when asked, so older runs stay comparable
+        found = {**llm.extract_scalars(row.doc_type, sentences, State.client.complete, set(base), stats), **found}  # fmt: skip
     out = {f: Candidate(f, x.status, x.value_ja, None, x.normalized or None, x.citations) for f, x in found.items()}  # fmt: skip
     State.stats += [(row.doc_id[:12], s) for s in stats]
     State.doc_seconds[row.doc_id[:12]] = sum(s.seconds for s in stats)

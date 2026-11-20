@@ -718,3 +718,37 @@ def test_spec_4965207bb115_period_with_an_unclear_part_before_ただし_is_not_f
 def test_notice_委託期間_and_ただし_are_not_read_on_a_notice() -> None:
     ss = sents("３．委託期間", "契約締結日から令和１１年３月３１日までただし、令和８年７月１日より業務開始とする。")  # fmt: skip
     assert got("notice", ss, "performance_period") is None
+
+
+# --- heading_cue accepts 業務の名称 and 委託期間 (D-94) ----------------------------------
+
+
+def _cue(doc_type: str, ss: list[Sentence], field: str) -> bool | None:
+    from shiori_core.checks import heading_cue
+
+    a = got(doc_type, ss, field)
+    assert a
+    return heading_cue(a, {s.id: s for s in ss})
+
+
+def test_heading_cue_4965207bb115_業務の名称_is_a_title_cue() -> None:
+    ss = sents("１．業務の名称わかやま空き家ポータルサイト構築及び保守管理運営業務")
+    assert _cue("spec", ss, "title") is True
+
+
+def test_heading_cue_4965207bb115_委託期間_is_a_period_cue() -> None:
+    ss = sents("３．委託期間", "契約締結日から令和１１年３月３１日まで")
+    assert _cue("spec", ss, "performance_period") is True
+
+
+def test_heading_cue_4965207bb115_a_title_far_from_any_heading_is_still_unusual() -> (
+    None
+):
+    from shiori_core.checks import heading_cue
+    from shiori_core.extract.rules import Extracted
+
+    ss = sents(
+        "本事業の実施に当たり、受託者は次の各号に掲げる業務の名称を遵守すること。"
+    )
+    a = Extracted(field="title", value_ja="業務", normalized={}, citations=["h_s1"])
+    assert heading_cue(a, {s.id: s for s in ss}) is False

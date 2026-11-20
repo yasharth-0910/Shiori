@@ -269,7 +269,10 @@ def _spec(
 
 
 SPECS: tuple[FieldSpec, ...] = (
-    _spec("title", "text", ALL_LABELED, ("件名", "調達件名", "購入等件名", "業務名")),
+    _spec(
+        "title", "text", ALL_LABELED,
+        ("件名", "調達件名", "購入等件名", "業務名", "業務の名称"),
+    ),
     _spec("issuer_org", "text", ALL_LABELED, ("発注機関", "調達機関")),
     _spec(
         "contracting_officer", "structured", NOTICE_LIKE,
@@ -296,7 +299,7 @@ SPECS: tuple[FieldSpec, ...] = (
     ),
     _spec(
         "performance_period", "structured", ALL_LABELED,
-        ("履行期間", "契約期間", "履行期限"), PerformancePeriod,
+        ("履行期間", "契約期間", "履行期限", "委託期間"), PerformancePeriod,
     ),
     _spec(
         "delivery_deadline", "structured", ALL_LABELED, ("納入期限",), DeliveryDeadline
