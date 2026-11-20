@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { stateOf, unusualSection } from "../src/status.ts";
+import { docTypeText, stateOf, unusualSection } from "../src/status.ts";
 
 const sentences = { p1_s5: { page: 1, text_orig: "x", section_path: [], section_titles: [], boxes: [] } };
 const field = (over: object) => ({
@@ -97,4 +97,11 @@ test("real fixture: procurement_type is needs review", { skip: !existsSync("publ
   const f = fx.fields.find((x: { field: string }) => x.field === "procurement_type");
   assert.equal(stateOf(f, fx.sentences), "needs_review");
   assert.equal(unusualSection(f), true);
+});
+
+test("docTypeText gives plain words for the three detected types and passes an unknown one through", () => {
+  assert.equal(docTypeText("notice"), "Notice");
+  assert.equal(docTypeText("bid_instructions"), "Bid instructions");
+  assert.equal(docTypeText("spec"), "Specification");
+  assert.equal(docTypeText("tender_page"), "tender_page");
 });

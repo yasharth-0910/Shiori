@@ -22,6 +22,7 @@ export type Status = {
   sentences?: number | null;
   fields_total?: number;
   answered?: number;
+  doc_type?: string; // notice, bid_instructions or spec (D-92)
   events: ProcEvent[];
   cursor: number;
 };

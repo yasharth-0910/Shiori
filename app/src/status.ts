@@ -8,6 +8,10 @@ export const STATE_TEXT: Record<State, string> = {
   other_document: "See other document",
 };
 
+// The document type the sidecar read from the first page (D-92), in plain words for the small chip in the Workspace.
+const DOC_TYPE_TEXT: Record<string, string> = { notice: "Notice", bid_instructions: "Bid instructions", spec: "Specification" };
+export const docTypeText = (t: string): string => DOC_TYPE_TEXT[t] ?? t;
+
 // Checks that decide "verified". Any other stored check (field_applicable, ...) is shown, not gated on.
 // heading_cue is not in this set, but a failed one still blocks "verified" below (D-76).
 const HARD = new Set(["citations_exist", "value_in_citation", "schema_valid", "values_roundtrip"]);

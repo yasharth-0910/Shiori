@@ -1009,3 +1009,37 @@ def test_a_failed_value_translation_is_retried_when_asked_and_never_counted_as_f
         state["fail"] = False
         ask(srv, doc_id, ["value:title"])
         until(lambda: "value:title" in ask(srv, doc_id)[1]["items"], "retried")
+
+
+def test_doc_type_is_read_from_the_first_page_unless_given(tmp_path):
+    """D-92: no doc_type in the post means the rule on page 1 decides; a given type wins; no cue is notice."""
+    spec = make_pdf(
+        tmp_path / "spec.pdf",
+        ["委託業務仕様書（案）", "１．業務の名称", "invented system"],
+    )
+    plain = make_pdf(tmp_path / "plain.pdf")
+    given = make_pdf(
+        tmp_path / "given.pdf",
+        ["委託業務仕様書（案）", "１．業務の名称", "invented system two"],
+    )  # other bytes, so a new job
+    from shiori_core.extract import rules
+
+    app = create_app(TOKEN, lambda d, s: {}, rules.extract)
+    with Server(app) as srv:
+        got = {}
+        for name, pdf, body in (
+            ("spec", spec, {}),
+            ("plain", plain, {}),
+            ("given", given, {"doc_type": "bid_instructions"}),
+        ):
+            code, r = srv.call("POST", "/documents", {"path": str(pdf), **body})
+            assert code == 200
+            got[name] = wait_for(srv, r["doc_id"], "done")
+        assert got["spec"]["doc_type"] == "spec"
+        assert (
+            got["spec"]["fields_total"] == 6
+        )  # title, issuer, scope, period, delivery deadline and place
+        assert (
+            got["plain"]["doc_type"] == "notice" and got["plain"]["fields_total"] == 23
+        )
+        assert got["given"]["doc_type"] == "bid_instructions"

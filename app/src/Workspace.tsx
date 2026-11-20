@@ -5,7 +5,7 @@ import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
 import { deadlineLine } from "./summary";
-import { STATE_TEXT, stateOf, unusualSection, type State } from "./status";
+import { STATE_TEXT, docTypeText, stateOf, unusualSection, type State } from "./status";
 import { enLine, idsOf, progressNote, unavailableText, working, type TrState } from "./translate";
 import type { Field, Fixture } from "./types";
 
@@ -182,6 +182,11 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
               {label}
             </button>
           ))}
+          {fx.doc_type && (
+            <span className="dtype" title="Guessed from the first page. A wrong guess changes which fields are looked for.">
+              Read as: {docTypeText(fx.doc_type)}
+            </span>
+          )}
         </div>
         {tab === "deadlines" && <p className="empty">Nothing here yet.</p>}
         {tab === "summary" && (

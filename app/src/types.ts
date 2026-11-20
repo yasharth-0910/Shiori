@@ -23,4 +23,10 @@ export type Field = {
   citations: string[];
   checks: Check[];
 };
-export type Fixture = { doc_id: string; pdf: string; fields: Field[]; sentences: Record<string, Sentence> };
+export type Fixture = {
+  doc_id: string;
+  pdf: string;
+  doc_type?: string; // what the sidecar read from the first page (D-92); not part of the stored fields JSON
+  fields: Field[];
+  sentences: Record<string, Sentence>;
+};

@@ -1,10 +1,11 @@
 # ruff: noqa: E501
 """The sidecar: a loopback HTTP server that runs the core pipeline on one PDF at a time.
 
-    POST /documents            {"path": ..., "doc_type": "notice"} -> {"doc_id": ...}
+    POST /documents            {"path": ..., "doc_type": optional} -> {"doc_id": ...}; without doc_type the
+                               type is read from the first page (shiori_core.doctype, D-92)
     GET  /documents/{id}/status?since=N -> {"doc_id", "stage", "pages", "detail", "error",
                                             "seconds", "stage_elapsed", "sentences", "fields_total",
-                                            "answered", "events", "cursor"} (D-90)
+                                            "answered", "doc_type", "events", "cursor"} (D-90, D-92)
     POST /documents/{id}/cancel -> {"stage"}; the worker stops at the next stage or model call
     GET  /documents/{id}/fields -> the shape of app/public/fixture.json (app/src/types.ts)
 
@@ -29,6 +30,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from shiori_core.checks import run_checks
+from shiori_core.doctype import detect_doc_type, first_page_lines
 from shiori_core.extract import rules
 from shiori_core.extract.rules import Extracted
 from shiori_core.fields import BY_ID, FIELD_IDS, SPECS, Status
@@ -121,7 +123,9 @@ Translator = Callable[[str, dict[str, str], list[str]], Translation]
 
 class NewDocument(BaseModel):
     path: str
-    doc_type: str = "notice"
+    doc_type: str | None = (
+        None  # None: detected from the first page after ingest (D-92)
+    )
 
 
 def _item(raw: dict) -> Item:
@@ -241,6 +245,7 @@ class Job:
     t0: float = field(default_factory=time.monotonic)  # when the current stage began
     sentences: int | None = None  # Japanese sentences after segmentation
     answered: int = 0  # fields with an answer so far
+    detect: bool = False  # doc_type is a default until the first page is read (D-92)
 
     def go(self, stage: str) -> None:
         now = time.monotonic()
@@ -325,12 +330,12 @@ class Worker:
         self._queue: queue.Queue[Job] = queue.Queue()
         threading.Thread(target=self._loop, daemon=True).start()
 
-    def submit(self, path: Path, doc_type: str) -> Job:
+    def submit(self, path: Path, doc_type: str | None) -> Job:
         h = hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
         old = self.jobs.get(h)
         if old is not None and old.stage != "failed" and not old.cancel:
             return old  # same bytes: already done or on its way
-        job = self.jobs[h] = Job(h, path, doc_type)
+        job = self.jobs[h] = Job(h, path, doc_type or "notice", detect=doc_type is None)
         self.outstanding += 1
         if self.on_new:
             self.on_new(job)
@@ -369,7 +374,20 @@ class Worker:
         job.go("ingest")
         doc = read_pages(job.path)
         job.pages = len(doc.pages)
-        log.info("ingested doc=%s pages=%d", job.doc_id[:8], job.pages)
+        if (
+            job.detect
+        ):  # a rule on the first page's title zone; no cue means notice (D-92)
+            job.doc_type = (
+                detect_doc_type(first_page_lines(doc.pages[0]))
+                if doc.pages
+                else "notice"
+            )
+        log.info(
+            "ingested doc=%s pages=%d doc_type=%s",
+            job.doc_id[:8],
+            job.pages,
+            job.doc_type,
+        )
         job.check_cancel()
         job.go("segment")
         doc.sentences = segment(doc.pages)
@@ -607,7 +625,7 @@ def create_app(
             raise HTTPException(
                 400, "not a readable pdf path"
             )  # the path is not echoed
-        if body.doc_type not in DOC_TYPES:
+        if body.doc_type is not None and body.doc_type not in DOC_TYPES:
             raise HTTPException(400, "unknown doc_type")
         return {"doc_id": worker.submit(path, body.doc_type).doc_id}
 
@@ -627,6 +645,7 @@ def create_app(
             "sentences": j.sentences,
             "fields_total": sum(j.doc_type in BY_ID[f].applies_to for f in FIELD_IDS),
             "answered": j.answered,
+            "doc_type": j.doc_type,
             "events": [e for e in list(j.events) if e["n"] > since],
             "cursor": j.n_events,
         }
