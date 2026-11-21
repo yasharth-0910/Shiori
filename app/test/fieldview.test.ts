@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { collapsedLine } from "../src/fieldview.ts";
+import { collapsedLine, valueFirst } from "../src/fieldview.ts";
 import type { Field } from "../src/types.ts";
 
 const field = (over: Partial<Field>): Field => ({ field: "x", status: "present", value_en: null, value_ja: null, items: [], citations: [], checks: [], ...over });
@@ -106,4 +106,14 @@ test("notApplicable: only a field without an answer, in a known type that does n
   assert.equal(notApplicable(absent, undefined), false);
   assert.equal(notApplicable({ ...absent, status: "present" }, "spec"), false);
   assert.equal(notApplicable({ ...absent, field: "title" }, "spec"), false);
+});
+
+// 2f2f5bd3 performance_period: the heading (p1_s14) is cited before the value line (p1_s15).
+test("valueFirst puts the sentence holding the value first and keeps the rest in order", () => {
+  const sent = { p1_s14: { text_orig: "（5）業務の期間" }, p1_s15: { text_orig: "契約締結日から令和15年9月30日（金）まで" }, p1_s16: { text_orig: "他" } };
+  const v = "契約締結日から令和15年9月30日（金）まで";
+  assert.deepEqual(valueFirst(["p1_s14", "p1_s15", "p1_s16"], v, sent), ["p1_s15", "p1_s14", "p1_s16"]);
+  assert.deepEqual(valueFirst(["p1_s15", "p1_s14"], v, sent), ["p1_s15", "p1_s14"]);
+  assert.deepEqual(valueFirst(["p1_s14", "p1_s16"], v, sent), ["p1_s14", "p1_s16"]); // no match: unchanged
+  assert.deepEqual(valueFirst(["p1_s14", "p1_s15"], null, sent), ["p1_s14", "p1_s15"]);
 });

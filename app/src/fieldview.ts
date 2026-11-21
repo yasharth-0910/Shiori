@@ -143,3 +143,11 @@ export const APPLIES: Record<string, string[]> = {
 /** True when the document's type is known, the field is not looked for in that type, and it has no answer (D-93). A field with an answer is always shown. */
 export const notApplicable = (f: Field, docType: string | undefined): boolean =>
   !!docType && f.status === "absent" && !!APPLIES[f.field] && !APPLIES[f.field]!.includes(docType);
+
+/** Citation ids with the one whose sentence contains the displayed Japanese value first; the rest keep their order. */
+export function valueFirst(ids: string[], valueJa: string | null, sentences: Record<string, { text_orig: string }>): string[] {
+  const strip = (t: string) => t.replace(/\s+/g, "");
+  const v = valueJa ? strip(valueJa) : "";
+  const i = v ? ids.findIndex((id) => strip(sentences[id]?.text_orig ?? "").includes(v)) : -1;
+  return i > 0 ? [ids[i]!, ...ids.slice(0, i), ...ids.slice(i + 1)] : ids;
+}

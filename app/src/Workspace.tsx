@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { groupOf, labelOf, STATES } from "./fields";
-import { collapsedLine, notApplicable, scalarAnswer, worthShowing, type En } from "./fieldview";
+import { collapsedLine, notApplicable, scalarAnswer, valueFirst, worthShowing, type En } from "./fieldview";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { SummaryPanel } from "./SummaryPanel";
@@ -102,7 +102,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
       setSid(null);
     } else {
       setOpen(f.field);
-      setSid(f.citations.find((id) => id in fx.sentences) ?? null);
+      setSid(valueFirst(f.citations, f.value_ja, fx.sentences).find((id) => id in fx.sentences) ?? null);
       if (tr.status !== "unavailable") void ask(idsOf(f, fx)).then(take);
     }
   };
@@ -153,7 +153,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     // the code-made line (deadlines) or the item's own English.
     const groups: { ans: En | null; ids: string[] }[] = f.items.length
       ? f.items.map((i) => ({ ans: ((m) => (m ? { text: m, mt: false } : i.text_en ? { text: i.text_en, mt: true } : null))(deadlineLine(i)), ids: i.citations }))
-      : [{ ans: scalarAnswer(f, trItems), ids: f.citations }];
+      : [{ ans: scalarAnswer(f, trItems), ids: valueFirst(f.citations, f.value_ja, fx.sentences) }];
     return groups.map((g, n) => {
       const ids = g.ids.filter((id) => id in fx.sentences);
       const top = g.ans && worthShowing(g.ans.text, label, firstEn(ids)) ? g.ans : null;

@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from pydantic import ValidationError
 
+from shiori_core.extract.rules import SIGN_ZONE, _local_sign
 from shiori_core.fields import BY_ID, SeeOtherRef, validate_normalized
 from shiori_core.models import Sentence
 from shiori_core.normalize import normalize
@@ -303,7 +304,25 @@ def heading_cue(c: Answer, by_id: dict[str, Sentence]) -> bool | None:
     cues = BY_ID[c.field].cues
     if c.status == "absent" or not cues:
         return None
-    return any(cue_at_heading(k, s) for s in _cited(c, by_id) for k in cues)
+    return any(
+        cue_at_heading(k, s) or _page1_signature(c.field, s)
+        for s in _cited(c, by_id)
+        for k in cues
+    )
+
+
+def _page1_signature(field: str, s: Sentence) -> bool:
+    """issuer_org and contracting_officer: a cited page-1 signature line (旭川市長 ...,
+    in the first SIGN_ZONE sentences) is a valid place, it has no heading. The condition
+    is the page-1 signature rules' own (rules._local_sign, SIGN_ZONE)."""
+    m = re.fullmatch(r"p1_s(\d+)", s.id)
+    return (
+        field in ("issuer_org", "contracting_officer")
+        and s.page == 1
+        and bool(m)
+        and int(m[1]) <= SIGN_ZONE  # ids count from 1: s1..s12 are ss[:12]
+        and _local_sign(s.text_norm) is not None
+    )
 
 
 def schema_valid(c: Answer) -> bool:

@@ -8,6 +8,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import * as llama from "./llama";
 import * as sidecar from "./sidecar";
+import { runHighlightCheck } from "./hlcheck";
 
 const DIST = path.join(__dirname, "..", "dist");
 const MIME: Record<string, string> = {
@@ -32,6 +33,8 @@ type Translated =
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
 // SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
 const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
+// SHIORI_HLCHECK=<dir> (with SHIORI_PICK) runs the highlight check in hlcheck.ts; dev only, like SHIORI_SHOT.
+const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK;
 
 // One backend for the session: llama-server (when SHIORI_LLAMA_SERVER and SHIORI_MODEL are set)
 // and the sidecar. Started on the first Add document, stopped when the app quits.
@@ -90,7 +93,7 @@ async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: devSize?.[0] ?? 1280,
     height: devSize?.[1] ?? 860,
-    show: !process.env.SHIORI_SHOT,
+    show: !process.env.SHIORI_SHOT && !HLCHECK,
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -103,6 +106,7 @@ async function createWindow(): Promise<void> {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (e) => e.preventDefault());
   await win.loadURL("shiori://app/");
+  if (HLCHECK && PICK) void runHighlightCheck(win, HLCHECK, PICK, (id) => sidecar.call("GET", `/documents/${id}/fields`));
 
   // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
   const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;

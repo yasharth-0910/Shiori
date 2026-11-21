@@ -33,6 +33,12 @@ def test_shot_stage_and_shot_open_only_work_when_not_packaged() -> None:
                 assert "app.isPackaged ?" in line, f"{name}: {line.strip()}"
 
 
+def test_highlight_check_hook_only_works_when_not_packaged() -> None:
+    main = read("main.ts")
+    assert "const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK" in main
+    assert main.count("process.env.SHIORI_HLCHECK") == 1
+
+
 def test_the_api_key_travels_in_the_environment_not_argv() -> None:
     llama, sidecar = read("llama.ts"), read("sidecar.ts")
     assert "LLAMA_API_KEY: key" in llama and "SHIORI_LLAMA_KEY: llama.key" in sidecar

@@ -754,6 +754,34 @@ def test_heading_cue_4965207bb115_a_title_far_from_any_heading_is_still_unusual(
     assert heading_cue(a, {s.id: s for s in ss}) is False
 
 
+# --- heading_cue accepts a page-1 signature line (issuer_org, contracting_officer) ---------
+
+
+def _sign_cue(ss: list[Sentence], field: str, cite: str) -> bool | None:
+    from shiori_core.checks import heading_cue
+    from shiori_core.extract.rules import Extracted
+
+    a = Extracted(field=field, value_ja="和歌山県", normalized={}, citations=[cite])
+    return heading_cue(a, {s.id: s for s in ss})
+
+
+def test_heading_cue_2f2f5bd3_page1_signature_line_is_a_valid_place() -> None:
+    ss = sents(*WAKAYAMA, page=1, prefix="p1_s")
+    assert _sign_cue(ss, "issuer_org", "p1_s2") is True
+    assert _sign_cue(ss, "contracting_officer", "p1_s2") is True
+
+
+def test_heading_cue_signature_exception_is_narrow() -> None:
+    ss = sents(*WAKAYAMA, page=1, prefix="p1_s")
+    assert _sign_cue(ss, "title", "p1_s2") is False  # other fields: still unusual
+    late = sents(*(["本文"] * 12), *WAKAYAMA, page=1, prefix="p1_s")
+    assert _sign_cue(late, "issuer_org", "p1_s14") is False  # outside the first 12
+    p2 = sents(*WAKAYAMA, page=2, prefix="p2_s")
+    assert _sign_cue(p2, "issuer_org", "p2_s2") is False  # not page 1
+    plain = sents("令和8年9月15日", "本文だけの文", page=1, prefix="p1_s")
+    assert _sign_cue(plain, "issuer_org", "p1_s2") is False  # not a signature line
+
+
 # --- page-1 signature block: issuer_org and notice_date ---------------------------------------
 # 2f2f5bd3 (和歌山県, open): the date line, then the governor's line. Spacing inside the name is how the
 # PDF text came out. The 市長 and other-post cases are made-up wording in the same layout (the
