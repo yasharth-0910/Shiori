@@ -78,7 +78,10 @@ def field_form(field_id: str) -> str:
     if model is None:
         return "text (value_ja only, no normalized)"
     schema = model.model_json_schema()
-    return _form(schema, schema.get("$defs", {}))
+    form = _form(schema, schema.get("$defs", {}))
+    # sv4 is frozen (D-58) and was written for schema 1.0.0: it does not offer the 1.1.0 kind
+    # `application` (D-97), so its prompt and the guide's forms block stay as they were.
+    return form.replace("|application", "") if field_id == "deadlines" else form
 
 
 def forms_markdown() -> str:

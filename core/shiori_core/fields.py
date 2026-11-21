@@ -1,4 +1,6 @@
-"""The v1 field schema (docs/field_schema.md), frozen as SCHEMA_VERSION 1.0.0 (D-39).
+"""The v1 field schema (docs/field_schema.md), frozen as 1.0.0 (D-39).
+
+SCHEMA_VERSION 1.1.0 adds the deadline kind `application` (D-97).
 
 One `FieldSpec` per field: its id, whether it is free text or structured, which
 document types normally contain it, the heading cues that locate it, and the pydantic
@@ -28,7 +30,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
+# 1.1.0 only adds a deadline kind, so 1.0.0 labels stay valid (D-97)
+SUPPORTED_SCHEMA_VERSIONS = ("1.0.0", "1.1.0")
 
 Status = Literal["present", "absent", "see_other_document"]
 DocTypeName = str  # the manifest's doc_type values (collector.manifest.DocType)
@@ -138,7 +142,7 @@ class UnifiedQualification(Strict):
 
 DeadlineKind = Literal[
     "bid_in_person", "mail_arrival", "electronic", "bid_opening", "question",
-    "briefing", "document_request", "other",
+    "briefing", "document_request", "application", "other",
 ]  # fmt: skip
 DeadlineFlag = Literal["arrival_required", "postmark_ok"]  # DATE-8
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}$")
@@ -318,7 +322,7 @@ SPECS: tuple[FieldSpec, ...] = (
         "deadlines", "list", NOTICE_LIKE,
         ("入札日時", "入札書の受領期限", "提出期限", "受付期間", "開札の日時及び場所",
          "開札日時", "入札場所", "質問", "質疑", "質問書の提出期限", "入札説明会",
-         "説明会", "受領期限", "必着"),
+         "説明会", "受領期限", "必着", "公募期間", "応募期間"),
         Deadlines,
     ),  # fmt: skip
     _spec(

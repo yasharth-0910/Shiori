@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
+from shiori_core.fields import SCHEMA_VERSION
 from shiori_core.models import EXTRACTOR_VERSION, Sentence
 
 from collector.manifest import ManifestRow
@@ -32,7 +33,7 @@ def sentence(i: str, text: str) -> Sentence:
 
 
 def line(doc_id: str, field: str, status: str, **kw) -> dict:
-    return {"doc_id": doc_id, "extractor_version": EXTRACTOR_VERSION, "schema_version": "1.0.0",
+    return {"doc_id": doc_id, "extractor_version": EXTRACTOR_VERSION, "schema_version": SCHEMA_VERSION,
             "field": field, "status": status, "value_ja": kw.get("value_ja"), "normalized": None,
             "citations": kw.get("citations", []),
             "provenance": {"reviewed_by": kw.get("reviewed_by")}}  # fmt: skip

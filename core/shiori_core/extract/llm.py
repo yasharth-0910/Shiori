@@ -63,6 +63,7 @@ RULES = {
 - text_ja: copied exactly from the sentence, without the leading number such as (2). Never shorten it with an ellipsis.""",
     "deadlines": """One item per dated event (入札日時, 入札書の受領期限, 提出期限, 受付期間, 開札日時, 質問, 入札説明会).
 - kind: bid_in_person (handed in at a place and time), mail_arrival (sent by mail, with an arrival time), electronic (through an electronic system), bid_opening (開札), question, briefing (説明会), document_request, other.
+- application: the end of a 公募 or application period, or of a proposal submission (公募期間, 応募期間, 提案書の提出期限). Use the end date of the period.
 - A bid receipt deadline on an electronic notice is electronic. mail_arrival only when mail is said (必着, 到着). When the sentence does not say how bids are received, use other.
 - datetime: YYYY-MM-DD when the text gives no time, else YYYY-MM-DDTHH:MM:00+09:00 (Japan time). 令和N年 is the year 2018+N. relative_text: only for a rule that is not a calendar date (入札説明書の交付後7日以内); then datetime is null. Exactly one of the two.
 - One sentence can hold two events (a bid time and, in brackets, a mail arrival time): one item each, each with its own date and time.""",

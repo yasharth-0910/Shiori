@@ -240,10 +240,15 @@ def prompt_for(provider: str) -> str:
     )
 
 
+# The cached answers were made under schema 1.0.0; 1.1.0 only adds a deadline kind (D-97), so the
+# file names stay put and no cloud call is repeated.
+RAW_CACHE_SCHEMA = "1.0.0"
+
+
 def raw_path(doc_id: str, provider: str, model: str, prompt: str | None = None) -> Path:
     prompt = prompt or prompt_for(provider)
     safe = re.sub(r"[^A-Za-z0-9.\-]+", "_", model)
-    name = f"{provider}__{safe}__{prompt}__{EXTRACTOR_VERSION}__{SCHEMA_VERSION}.json"
+    name = f"{provider}__{safe}__{prompt}__{EXTRACTOR_VERSION}__{RAW_CACHE_SCHEMA}.json"
     return config.CACHE / "raw" / doc_id / name
 
 

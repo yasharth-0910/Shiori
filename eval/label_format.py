@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from shiori_core.fields import (
     BY_ID,
     FIELD_IDS,
-    SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     SeeOtherRef,
     Status,
     validate_normalized,
@@ -103,9 +103,10 @@ class LabelLine(Strict):
 
     @model_validator(mode="after")
     def _status_rules(self) -> "LabelLine":
-        if self.schema_version != SCHEMA_VERSION:
+        if self.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
             raise ValueError(
-                f"schema_version {self.schema_version} != {SCHEMA_VERSION}"
+                f"schema_version {self.schema_version} not in "
+                f"{SUPPORTED_SCHEMA_VERSIONS}"
             )
         if self.field not in FIELD_IDS:
             raise ValueError(f"unknown field {self.field!r}")

@@ -32,12 +32,13 @@ const DEADLINE: Record<string, (when: string) => string> = {
   mail_arrival: (w) => `Bids due ${w} (${BID_HOW.mail_arrival}).`,
   electronic: (w) => `Bids due ${w} (${BID_HOW.electronic}).`,
   bid_opening: (w) => `Bid opening ${w}.`,
+  application: (w) => `Applications due ${w}.`,
   question: (w) => `Questions due ${w}.`,
   briefing: (w) => `Briefing ${w}.`,
   document_request: (w) => `Document requests due ${w}.`,
   other: (w) => `Other deadline ${w}.`,
 };
-export const BID_KINDS = ["bid_in_person", "mail_arrival", "electronic"];
+export const BID_KINDS = ["bid_in_person", "mail_arrival", "electronic", "application"]; // D-97: the dates that count as the deadline
 
 export function deadlineLine(i: Item): string | null {
   const when = i.datetime ? formatWhen(i.datetime) : null;

@@ -42,7 +42,7 @@ test("formatWhen: date and 24h time as stored, date-only has no time", () => {
 test("deadline line templates, one per kind", () => {
   const w = "2026-10-16T17:00:00+09:00";
   const got = Object.fromEntries(
-    ["bid_in_person", "mail_arrival", "electronic", "bid_opening", "question", "briefing", "document_request", "other"].map((k) => [
+    ["bid_in_person", "mail_arrival", "electronic", "bid_opening", "question", "briefing", "document_request", "application", "other"].map((k) => [
       k, texts(run([field("deadlines", { items: [dl(k, w)] })]))[0],
     ]),
   );
@@ -54,6 +54,7 @@ test("deadline line templates, one per kind", () => {
     question: "Questions due 16 Oct 2026, 17:00.",
     briefing: "Briefing 16 Oct 2026, 17:00.",
     document_request: "Document requests due 16 Oct 2026, 17:00.",
+    application: "Applications due 16 Oct 2026, 17:00.",
     other: "Other deadline 16 Oct 2026, 17:00.",
   });
 });

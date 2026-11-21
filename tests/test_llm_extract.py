@@ -834,3 +834,28 @@ def test_scalar_call_sends_the_shipped_system_prompt() -> None:
 
     llm.extract_scalars("spec", SPEC, spy, set(), [])
     assert sent and all(x == llm.SCALAR_SYSTEM for x in sent)
+
+
+# --- application: the end of a 公募期間 (D-97), real wording from 74aed2a5 (Digital Agency) p1 ----
+
+PERIOD = "令和８年１月３０日から令和８年３月２日 12時"
+
+
+def test_application_deadline_is_the_end_of_the_公募期間_74aed2a5() -> None:
+    ss = [
+        sent("p1_s9", "３．公募期間", ["公募期間"]),
+        sent("p1_s10", PERIOD, ["公募期間"]),
+    ]
+    item = {"kind": "application", "datetime": "2026-03-02T12:00:00+09:00", "relative_text": None, "flags": [], "citations": ["p1_s10"]}  # fmt: skip
+    (got,) = deadline_run(item, ss)["deadlines"].normalized["items"]
+    assert (got["kind"], got["datetime"], got["citations"]) == ("application", "2026-03-02T12:00:00+09:00", ["p1_s10"])  # fmt: skip
+    # a date the cited sentence does not give is still dropped, whatever the kind
+    wrong = {**item, "datetime": "2026-03-03T12:00:00+09:00"}
+    assert "deadlines" not in deadline_run(wrong, ss)
+
+
+def test_deadlines_prompt_tells_the_model_to_use_application() -> None:
+    assert (
+        "application: the end of a 公募 or application period" in llm.RULES["deadlines"]
+    )
+    assert "application" in llm.schema_for("deadlines")["$defs"]["DeadlineItem"]["properties"]["kind"]["enum"]  # fmt: skip

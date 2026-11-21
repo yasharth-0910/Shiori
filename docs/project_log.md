@@ -251,3 +251,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 ### Fallbacks taken
 ### Missed or still open
 ### Lessons
+
+- 2026-11-21 (D-97): schema 1.1.0, deadline kind `application`, two cues (公募期間, 応募期間). Dev eval stopped at 4 right-to-wrong `deadlines` rows (see Open questions); changes left in the working tree, not tuned further.
