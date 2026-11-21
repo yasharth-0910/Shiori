@@ -596,8 +596,9 @@ def agreed(hits: list[Hit]) -> Hit | None:
 # Labels in front of the title, as the dev scan found them (data/cache/rules_title_issuer_scan.txt):
 # the portal header 調達案件名称, 案件名, (n) 購入等/借入等件名及び数量, (1) 件名, and in spec and
 # bid-instruction documents 業務名, 委託業務名, 調達業務の名称. A label must end there: 調達件名の特質等
-# is a different line. 契約件名 (the cover sheet of a notice) is not listed: it can disagree with the notice.
-_TITLE_LABEL = r"(?:調達案件名称|案件名|(?:購入等|借入等|賃借等|調達|公募)?件名(?:及び数量)?|件\s{1,3}名|(?:委託)?業務名|調達業務の名称)(?=\s|[:：]|$)"
+# is a different line. The value may follow the label with no space or colon (（１）委託業務名わかやま…,
+# 53320d90) unless a connector, particle or bracket follows it (件名及び, 件名の, 業務名称, 件名（…）). 契約件名 (the cover sheet of a notice) is not listed: it can disagree with the notice.
+_TITLE_LABEL = r"(?:調達案件名称|案件名|(?:購入等|借入等|賃借等|調達|公募)?件名(?:及び数量)?|件\s{1,3}名|(?:委託)?業務名|調達業務の名称)(?=\s|[:：]|$|(?![及並又等のはがをにでと称欄、・，,（(]))"
 _QTY = re.compile(
     r"[\s\u3000]+[0-9０-９一二三四五六七八九十]+(?:式|台)(?:[（(][^）)]*[）)])?$"
 )  # "<title>　一式", "<title> ２式（電子入札対象案件）" after 件名及び数量: the quantity, not the name
@@ -620,6 +621,11 @@ _COLUMN_LABELS = re.compile(
 )
 
 
+_COLUMN_RUN = re.compile(
+    f"(?:{_COLUMN_LABELS.pattern})+"
+)  # a glued label has no space to split a run of them
+
+
 def _title_ok(v: str) -> bool:
     """A title is a name: not a numbered heading that follows an empty label, not a label, not a
     table column label, not several project names run together (a （以下「…」という。） in the
@@ -630,7 +636,7 @@ def _title_ok(v: str) -> bool:
         and not _NUMBERED.match(v)
         and not _CASE_NO.match(v)
         and not re.fullmatch(_TITLE_LABEL, v)
-        and not _COLUMN_LABELS.fullmatch(v)
+        and not _COLUMN_RUN.fullmatch(v)
         and not _DEFINED_MID.search(_DEFINED.sub("", v))
     )
 

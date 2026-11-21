@@ -299,7 +299,8 @@ SPECS: tuple[FieldSpec, ...] = (
     ),
     _spec(
         "performance_period", "structured", ALL_LABELED,
-        ("履行期間", "契約期間", "履行期限", "委託期間"), PerformancePeriod,
+        ("履行期間", "契約期間", "履行期限", "委託期間", "業務の期間"),
+        PerformancePeriod,
     ),
     _spec(
         "delivery_deadline", "structured", ALL_LABELED, ("納入期限",), DeliveryDeadline

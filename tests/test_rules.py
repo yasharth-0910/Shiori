@@ -924,3 +924,33 @@ def test_title_74aed2a5_公募件名_label_alone_then_the_title() -> None:
 def test_title_件_名_with_spaces_inside_the_label() -> None:
     a = got("spec", sents("1件  名", "サンプル品の購入", "2品目・数量"), "title")
     assert a and a.value_ja == "サンプル品の購入"
+
+
+# --- title label glued to the value; 業務の期間 as a period cue (D-94 follow-up) -------------
+
+
+def test_bid_53320d90_title_glued_to_委託業務名_label() -> None:
+    ss = sents("１ 委託業務の概要", "（１）委託業務名わかやま空き家ポータルサイト構築及び保守管理運営業務", "（２）業務内容")  # fmt: skip
+    a = got("bid_instructions", ss, "title")
+    assert a and a.value_ja == "わかやま空き家ポータルサイト構築及び保守管理運営業務"
+    assert a.citations == ["h_s2"]
+
+
+def test_title_glued_label_followed_by_a_connector_or_bracket_is_not_a_title() -> None:
+    for t in ("（１）業務名称わかやま空き家ポータルサイト構築", "（１）件名のとおり調達する", "（１）件名（わかやま空き家ポータルサイト構築）"):  # fmt: skip
+        assert got("bid_instructions", sents(t), "title") is None
+
+
+def test_title_glued_column_labels_are_not_a_title() -> None:
+    assert got("notice", sents("件名契約種別"), "title") is None
+    assert got("notice", sents("件名契約種別開札日"), "title") is None
+
+
+def test_title_glued_with_a_definition_in_the_middle_is_not_a_title() -> None:
+    ss = sents("（１）委託業務名わかやま空き家ポータルサイト構築業務（以下「構築業務」という。）及び保守管理運営業務")  # fmt: skip
+    assert got("bid_instructions", ss, "title") is None
+
+
+def test_heading_cue_2f2f5bd3_業務の期間_is_a_period_cue() -> None:
+    ss = sents("（5）業務の期間", "契約締結日から令和15年9月30日（金）まで")
+    assert _cue("notice", ss, "performance_period") is True
