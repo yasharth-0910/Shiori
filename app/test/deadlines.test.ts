@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stateOf } from "../src/status.ts";
 import { formatWhen } from "../src/summary.ts";
+import { valueFirst } from "../src/fieldview.ts";
 import { deadlineRows as rowsOf, jaDateText, KIND_LABEL, kindLabel } from "../src/deadlines.ts";
 
 const sent = (page: number, text_orig: string) => ({ page, text_orig, section_path: [], section_titles: [], boxes: [] });
@@ -12,7 +13,7 @@ const sentences = {
   p3_s1: sent(3, "開札は2026年10月20日 10時に行う。"),
 };
 const checks = [{ name: "schema_valid", passed: true }, { name: "value_in_citation", passed: true }];
-const deadlineRows = (f: Parameters<typeof rowsOf>[0]) => rowsOf(f, (x) => stateOf(x, sentences), formatWhen);
+const deadlineRows = (f: Parameters<typeof rowsOf>[0]) => rowsOf(f, (x) => stateOf(x, sentences), formatWhen, valueFirst);
 const item = (kind: string | null, datetime: string | null, citations: string[]) => ({ text_ja: null, text_en: null, citations, kind, datetime });
 const fx = (items: ReturnType<typeof item>[], over: object = {}) => ({
   doc_id: "d", pdf: "d.pdf", sentences,
@@ -67,4 +68,13 @@ test("empty state: absent field, no items, or no field gives no rows", () => {
   assert.deepEqual(deadlineRows(fx([], { status: "absent" })), []);
   assert.deepEqual(deadlineRows(fx([])), []);
   assert.deepEqual(deadlineRows({ doc_id: "d", pdf: "d.pdf", sentences, fields: [] }), []);
+});
+
+test("the sentence that contains the date text opens first, not an earlier heading", () => {
+  const sn = { ...sentences, h1: sent(1, "公募期間"), d1: sent(1, "令和8年10月16日（金）午後5時00分まで") };
+  const f = { ...fx([item("application", "2026-10-16T17:00:00+09:00", ["h1", "d1"])]), sentences: sn };
+  const r = rowsOf(f, (x) => stateOf(x, sn), formatWhen, valueFirst)[0]!;
+  assert.equal(r.sid, "d1");
+  const heading = rowsOf({ ...f, fields: [{ ...f.fields[0]!, items: [item("application", "2026-10-16", ["h1"])] }] }, (x) => stateOf(x, sn), formatWhen, valueFirst)[0]!;
+  assert.equal(heading.sid, "h1"); // no date text anywhere: the first cited sentence, as before
 });

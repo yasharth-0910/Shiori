@@ -1,4 +1,5 @@
 import { deadlineRows } from "./deadlines";
+import { valueFirst } from "./fieldview";
 import { STATE_TEXT, stateOf } from "./status";
 import { formatWhen } from "./summary";
 import type { Fixture } from "./types";
@@ -6,7 +7,7 @@ import type { Fixture } from "./types";
 // One row per deadline item, sorted by date. A row is a button that calls the same cite function as the
 // Fields view and the Summary chips, so the PDF opens at the cited sentence with the highlight.
 export function DeadlinesPanel({ fx, onCite }: { fx: Fixture; onCite: (sid: string) => void }) {
-  const rows = deadlineRows(fx, (f) => stateOf(f, fx.sentences), formatWhen);
+  const rows = deadlineRows(fx, (f) => stateOf(f, fx.sentences), formatWhen, valueFirst);
   if (rows.length === 0) {
     const f = fx.fields.find((x) => x.field === "deadlines");
     const other = f && stateOf(f, fx.sentences) === "other_document";

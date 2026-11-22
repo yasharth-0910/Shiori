@@ -3,7 +3,7 @@
 
 For each document: launches the app with SHIORI_PICK, the model on and SHIORI_HLCHECK (app/electron/hlcheck.ts),
 which clicks up to 12 citation chips and saves a screenshot per click. This script then reads the raw records and
-writes data/cache/highlight_check/results.tsv and prints the summary. Run: uv run python scripts/highlight_check.py
+writes data/cache/highlight_check/results.tsv and prints the summary. After the field cards it also opens the Deadlines tab and clicks up to 4 rows (rows named deadlines_tab:N, screenshots <prefix>_deadlines_tab_N.png). Run: uv run python scripts/highlight_check.py
 [--no-build] [--only <doc prefix>[:<field>]]. Quit any other running Shiori app first (a second llama-server is refused).
 """
 
@@ -19,6 +19,7 @@ OUT = ROOT / "data" / "cache" / "highlight_check"
 DOCS = [
     "data/raw/wakayama_pref/4965207bb115546f7918a638a1cd15c99a5e7263fd7a2213a6837426cc5d5e46.pdf",
     "data/raw/_samples/wakayama_pref/2f2f5bd332965253eed43d739e56e7859b149afa0d157ea3c89dfdd7d0d8b419.pdf",
+    "data/raw/digital/74aed2a543b8a0af2e09f02b9887244c8c1d1f67f7bdca8f31af2ff68e812873.pdf",
     "data/raw/wakayama_pref/53320d90cf87d7db2f0caef75e1b10061f26f67d00af1f8597e4be9dbbf4d9bb.pdf",
 ]
 MODEL = ROOT / "models" / "Qwen3.5-9B-Q4_K_M.gguf"

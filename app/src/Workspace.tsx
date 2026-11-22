@@ -5,7 +5,9 @@ import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
 import { DeadlinesPanel } from "./DeadlinesPanel";
 import { SummaryPanel } from "./SummaryPanel";
-import { deadlineLine } from "./summary";
+import { deadlineRows } from "./deadlines";
+import { deadlinesIcs, exportName, fieldsCsv } from "./export";
+import { deadlineLine, formatWhen } from "./summary";
 import { STATE_TEXT, docTypeText, stateOf, unusualSection, type State } from "./status";
 import { enLine, idsOf, progressNote, unavailableText, working, type TrState } from "./translate";
 import type { Field, Fixture } from "./types";
@@ -37,6 +39,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const [find, setFind] = useState<Find | null>(null);
   const [hitCount, setHitCount] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
+  const [exportNote, setExportNote] = useState<string | null>(null);
   // English for the cited sentences comes from the sidecar's background queue (D-88). The Workspace opens
   // without it, asks once on mount (which restarts a cancelled queue), polls while the queue works, and
   // asks again with a field's sentence ids when that field is opened, which moves them to the front.
@@ -173,6 +176,25 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     setFind(null);
     setSid(id);
   };
+  // Export (D-98): a CSV of every field, then an .ics of the deadline items that have a stored date. Each goes through the
+  // native save dialog; cancelling the first stops. Nothing is opened afterwards.
+  const doExport = async () => {
+    if (!window.shiori) return;
+    setExportNote(null);
+    try {
+      const csv = fieldsCsv(fx, { state: (f) => stateOf(f, fx.sentences), stateText: STATE_TEXT, label: labelOf, scalar: (f) => scalarAnswer(f, trItems), itemLine: deadlineLine });
+      if (!(await window.shiori.saveExport("csv", exportName(fx.pdf, "fields.csv"), csv))) return;
+      const tf = fx.fields.find((f) => f.field === "title");
+      const title = (tf && scalarAnswer(tf, trItems)?.text) || fx.pdf.replace(/\.pdf$/i, "");
+      const rows = deadlineRows(fx, (f) => stateOf(f, fx.sentences), formatWhen, valueFirst);
+      const ics = deadlinesIcs(fx, rows, title, new Date());
+      if (ics.count === 0) return setExportNote("Saved the fields file. No deadline has a stored date, so there is no calendar file.");
+      const ok = await window.shiori.saveExport("ics", exportName(fx.pdf, "deadlines.ics"), ics.text);
+      setExportNote(ok ? `Saved the fields file and a calendar file with ${ics.count} ${ics.count === 1 ? "event" : "events"}. Check the dates against the document.` : "Saved the fields file.");
+    } catch {
+      setExportNote("Export failed.");
+    }
+  };
   const sentence = sid ? (fx.sentences[sid] ?? null) : null;
   const doFind = (e: React.FormEvent<HTMLFormElement>, cur: Find | null) => {
     e.preventDefault();
@@ -190,12 +212,16 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
               {label}
             </button>
           ))}
+          <button className="exportbtn" onClick={() => void doExport()} disabled={!window.shiori} title="Save the fields as a CSV and the deadlines as a calendar file">
+            Export
+          </button>
           {fx.doc_type && (
             <span className="dtype" title="Guessed from the first page. A wrong guess changes which fields are looked for.">
               Read as: {docTypeText(fx.doc_type)}
             </span>
           )}
         </div>
+        {exportNote && <p className="meta" role="status">{exportNote}</p>}
         {tab === "deadlines" && <DeadlinesPanel fx={fx} onCite={cite} />}
         {tab === "summary" && (
           <SummaryPanel fx={fx} onCite={cite} />

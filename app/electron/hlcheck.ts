@@ -147,6 +147,12 @@ export async function runHighlightCheck(
         console.log(`hlcheck ${prefix}: deadlines row ${k} (${got.kind}) clicked, overlay rects ${seen.overlay.length}`);
       }
     }
+    // With SHIORI_EXPORT_DIR set (main.ts writes there instead of opening the dialog), click Export and report the note shown.
+    if (process.env.SHIORI_EXPORT_DIR) {
+      await js(`document.querySelector(".exportbtn")?.click()`);
+      await sleep(2500);
+      console.log(`hlcheck ${prefix}: export note: ${await js(`document.querySelector("[role=status]")?.textContent ?? ""`)}`);
+    }
     console.log(`hlcheck ${prefix}: done, ${rows.length} clicks`);
   } catch (e) {
     console.log(`hlcheck ${prefix}: error ${(e as Error).message}`);

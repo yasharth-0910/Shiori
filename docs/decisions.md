@@ -989,6 +989,15 @@ Consequences: the change is additive, so every old label stays valid; none uses 
 
 Rejected variant (2026-11-21): the `application` line was reworded once to say it is the deadline for the proposal or application documents (提案書, 企画提案書, 応募書類) and that steps that only declare intent to take part (参加表明書, 応募表明) stay `other`. Run once on dev as `application_after2`: verified accuracy 224 of 324, against 226 for the earlier wording (`application_after`) and 230 before the kind existed (`application_before`). It did not fix the rows it was meant to fix (d4000027 p3_s13 became `application`, 4b0b9d82 h_s37 stayed `application`), added two new right-to-wrong `deadlines` rows (f19cddbd and 5d75d4a6, both `electronic` becoming `bid_in_person`), and on the six Digital Agency documents lost cca048bc (no deadline item) and 4a654d88 (`bid_in_person` instead of `application`). It did fix 53320d90 (6/1 is `application`, 5/26 is `other`). Rejected and reverted to the earlier wording. Each variant was run once, so some of the differences may be model noise rather than the wording.
 
+## D-98: Export (CSV and .ics) and a sixth IPC function
+
+Date: 2026-11-22
+Status: accepted (Yasharth's task of 2026-11-22)
+Context: the v0.1 plan needs an Export action. The renderer has the fields and cannot write files; the bridge was exactly five functions (D-83, D-85, D-90).
+Decision: one new bridge function, `saveExport(kind, name, content)`, channel `shiori:save`. The renderer builds the text (`app/src/export.ts`, pure functions); main checks the sender, the kind (`csv` or `ics`), the type and size of the content (5 MB cap), reduces the name to a base name, shows the native save dialog and writes the file as UTF-8. It returns false when the user cancels. It never logs the path or the text and opens nothing afterwards. `SHIORI_EXPORT_DIR=<dir>` replaces the dialog in dev runs only (ignored when packaged, like `SHIORI_PICK`). No dependency is added: the .ics is written by hand (RFC 5545: CRLF, folding at 75 octets, TEXT escaping, a fixed Asia/Tokyo VTIMEZONE, no daylight saving). The CSV is UTF-8 with a BOM, RFC 4180 quoting, and a cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe (document text is untrusted and Excel runs formulas).
+Alternatives: letting the renderer write files (rejected: no file access there by design); a library for .ics (rejected: no new dependency for forty lines).
+Consequences: `tests/test_app_ipc.py` now expects six functions and six channels. An event time is Japan time as stored; a stored offset other than +09:00 is not checked. A date-only deadline becomes an all-day event. An item with no stored date is left out of the .ics. English text from a model is marked "[machine translation]" in the CSV.
+
 ## Open questions
 
 Add anything uncertain here, with a date and where it came up. Resolve by moving the answer into a decision or a rule in japanese_rules.md.

@@ -45,20 +45,24 @@ export function jaDateText(texts: string[], iso: string | null): string | null {
   return same ?? hits[0] ?? null;
 }
 
-export function deadlineRows(fx: Fixture, state: (f: Field) => State, formatWhen: (iso: string) => string | null): DeadlineRow[] {
+// order is valueFirst from fieldview.ts, passed in for the same reason.
+export type Order = (ids: string[], valueJa: string | null, sentences: Fixture["sentences"]) => string[];
+export function deadlineRows(fx: Fixture, state: (f: Field) => State, formatWhen: (iso: string) => string | null, order: Order): DeadlineRow[] {
   const f = fx.fields.find((x) => x.field === "deadlines");
   if (!f || f.status === "absent") return [];
   const st = state(f);
   const rows = f.items.map((i, n): DeadlineRow => {
-    const sid = i.citations.find((id) => id in fx.sentences) ?? null;
     const when = i.datetime ? formatWhen(i.datetime) : null;
     const texts = i.citations.flatMap((id) => fx.sentences[id]?.text_orig ?? []);
+    const ja = jaDateText(texts, when ? (i.datetime ?? null) : null);
+    // The sentence that holds the date text opens first (a heading like 公募期間 may be cited before it).
+    const sid = order(i.citations, ja, fx.sentences).find((id) => id in fx.sentences) ?? null;
     return {
       key: `d${n}`,
       kind: kindLabel(i.kind),
       when: when ? (i.datetime?.includes("T") ? `${when} JST` : when) : null,
       iso: when ? (i.datetime ?? null) : null,
-      ja: jaDateText(texts, when ? (i.datetime ?? null) : null),
+      ja,
       sid,
       page: sid ? (fx.sentences[sid]?.page ?? null) : null,
       state: st,

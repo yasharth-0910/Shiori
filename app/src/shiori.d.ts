@@ -27,7 +27,7 @@ export type Status = {
   cursor: number;
 };
 
-// The five functions preload.ts exposes. Nothing else crosses the bridge.
+// The six functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
   interface Window {
     shiori?: {
@@ -36,6 +36,8 @@ declare global {
       cancel(docId: string): Promise<void>;
       getFields(docId: string): Promise<Fixture>;
       translate(docId: string, ids: string[]): Promise<Translated>;
+      // Native save dialog (main process); resolves true when a file was written, false when the user cancelled.
+      saveExport(kind: "csv" | "ics", name: string, content: string): Promise<boolean>;
     };
   }
 }

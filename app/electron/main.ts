@@ -33,6 +33,8 @@ type Translated =
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
 // SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
 const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
+// SHIORI_EXPORT_DIR=<dir> makes the export write there instead of opening the save dialog; dev only, like SHIORI_PICK.
+const EXPORT_DIR = app.isPackaged ? undefined : process.env.SHIORI_EXPORT_DIR;
 // SHIORI_HLCHECK=<dir> (with SHIORI_PICK) runs the highlight check in hlcheck.ts; dev only, like SHIORI_SHOT.
 const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK;
 
@@ -290,6 +292,25 @@ function registerIpc(): void {
     } catch (err) {
       return { ok: false, reason: (err as Error).message === "sidecar_http_503" ? "no_model" : "failed" };
     }
+  });
+  // Export (D-98): the renderer builds the text (src/export.ts); main only asks where to save it and writes it.
+  // Returns false when the user cancels. Nothing is opened afterwards, and the path and text are never logged.
+  ipcMain.handle("shiori:save", async (e, kind: unknown, name: unknown, content: unknown): Promise<boolean> => {
+    own(e);
+    if (kind !== "csv" && kind !== "ics") throw new Error("bad_export_kind");
+    if (typeof name !== "string" || typeof content !== "string" || content.length > 5_000_000) throw new Error("bad_export");
+    const safe = path.basename(name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_") || `export.${kind}`;
+    let file: string | undefined;
+    if (EXPORT_DIR) file = path.join(EXPORT_DIR, safe);
+    else {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const opts = { defaultPath: safe, filters: [kind === "csv" ? { name: "CSV", extensions: ["csv"] } : { name: "Calendar", extensions: ["ics"] }] };
+      const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+      file = r.canceled ? undefined : r.filePath;
+    }
+    if (!file) return false;
+    fs.writeFileSync(file, content, "utf8"); // the BOM is U+FEFF in the string and becomes EF BB BF
+    return true;
   });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
