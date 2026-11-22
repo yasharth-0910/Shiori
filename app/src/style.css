@@ -189,7 +189,8 @@ button:disabled { cursor: default; opacity: 0.5; }
 .dlrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; padding: 10px 12px; text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-box); }
 .dlrow:hover:not(:disabled) { border-color: var(--stroke); }
 .dlkind { font-weight: 500; }
-.dlwhen { flex-basis: 100%; font-size: 16px; font-weight: 500; }
+.dlwhen { font-size: 16px; font-weight: 500; }
+.dllocal { font-size: 13px; color: var(--muted, #666); }
 .dlrow .ja { font-size: 13px; color: var(--muted); }
 
 /* Model picker (D-99): no script; the card opens on hover or keyboard focus of the i button. */

@@ -40,6 +40,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const [hitCount, setHitCount] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
   const [exportNote, setExportNote] = useState<string | null>(null);
+  const [icsSaved, setIcsSaved] = useState(false); // the .ics was written this time; shows Open in Calendar
   // English for the cited sentences comes from the sidecar's background queue (D-88). The Workspace opens
   // without it, asks once on mount (which restarts a cancelled queue), polls while the queue works, and
   // asks again with a field's sentence ids when that field is opened, which moves them to the front.
@@ -181,6 +182,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
   const doExport = async () => {
     if (!window.shiori) return;
     setExportNote(null);
+    setIcsSaved(false);
     try {
       const csv = fieldsCsv(fx, { state: (f) => stateOf(f, fx.sentences), stateText: STATE_TEXT, label: labelOf, scalar: (f) => scalarAnswer(f, trItems), itemLine: deadlineLine });
       if (!(await window.shiori.saveExport("csv", exportName(fx.pdf, "fields.csv"), csv))) return;
@@ -190,6 +192,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
       const ics = deadlinesIcs(fx, rows, title, new Date());
       if (ics.count === 0) return setExportNote("Saved the fields file. No deadline has a stored date, so there is no calendar file.");
       const ok = await window.shiori.saveExport("ics", exportName(fx.pdf, "deadlines.ics"), ics.text);
+      setIcsSaved(ok);
       setExportNote(ok ? `Saved the fields file and a calendar file with ${ics.count} ${ics.count === 1 ? "event" : "events"}. Check the dates against the document.` : "Saved the fields file.");
     } catch {
       setExportNote("Export failed.");
@@ -222,6 +225,11 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
           )}
         </div>
         {exportNote && <p className="meta" role="status">{exportNote}</p>}
+        {icsSaved && (
+          <button className="exportbtn" onClick={() => void window.shiori?.openCalendar()} title="Open the saved calendar file with your default calendar app">
+            Open in Calendar
+          </button>
+        )}
         {tab === "deadlines" && <DeadlinesPanel fx={fx} onCite={cite} />}
         {tab === "summary" && (
           <SummaryPanel fx={fx} onCite={cite} />

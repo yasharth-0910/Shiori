@@ -1,6 +1,8 @@
 import type { State } from "./status";
 import type { Field, Fixture } from "./types";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 // Pure logic for the Deadlines tab. One row per stored deadline item; nothing is computed from today's date.
 // formatWhen and the state function are passed in so this file has no value imports node's test runner cannot resolve (see summary.ts).
 export const KIND_LABEL: Record<string, string> = {
@@ -16,11 +18,35 @@ export const KIND_LABEL: Record<string, string> = {
 };
 export const kindLabel = (k: string | null | undefined): string => KIND_LABEL[k ?? "other"] ?? KIND_LABEL.other!;
 
+// The stored value (Japan time, "+09:00") as date and time in an IANA zone. A date-only value has no time to convert: null.
+// Intl does the zone and daylight-saving rules; the stored string is parsed by hand so the machine zone cannot touch it.
+export function localWhen(iso: string, zone: string): { date: string; time: string } | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso)) return null;
+  const d = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(iso) ? iso : `${iso}+09:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(d).map((x) => [x.type, x.value]),
+  );
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+}
+
+// "13:30 your time"; "02:00 on 25 Oct, your time" when the local date differs from the Japan date.
+export function yourTime(iso: string, zone: string): string | null {
+  const l = localWhen(iso, zone);
+  if (!l) return null;
+  const jp = /^\d{4}-\d{2}-\d{2}/.exec(iso)?.[0];
+  if (l.date === jp) return `${l.time} your time`;
+  const [, m, day] = l.date.split("-").map(Number);
+  return `${l.time} on ${day} ${MONTHS[(m ?? 1) - 1]}, your time`;
+}
+
 export type DeadlineRow = {
   key: string;
   kind: string; // the readable label
   when: string | null; // "16 Oct 2026, 17:00 JST", or null when the item stores no date
   iso: string | null;
+  local: string | null; // "13:30 your time"; null for a date-only item or no date
   ja: string | null; // the date text as written in the cited sentence
   sid: string | null; // the cited sentence the click opens; null when none is in the export
   page: number | null;
@@ -62,6 +88,7 @@ export function deadlineRows(fx: Fixture, state: (f: Field) => State, formatWhen
       kind: kindLabel(i.kind),
       when: when ? (i.datetime?.includes("T") ? `${when} JST` : when) : null,
       iso: when ? (i.datetime ?? null) : null,
+      local: when && i.datetime ? yourTime(i.datetime, Intl.DateTimeFormat().resolvedOptions().timeZone) : null,
       ja,
       sid,
       page: sid ? (fx.sentences[sid]?.page ?? null) : null,

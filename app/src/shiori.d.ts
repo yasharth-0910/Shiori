@@ -52,6 +52,8 @@ declare global {
       translate(docId: string, ids: string[]): Promise<Translated>;
       // Native save dialog (main process); resolves true when a file was written, false when the user cancelled.
       saveExport(kind: "csv" | "ics", name: string, content: string): Promise<boolean>;
+      // Opens the .ics saved in this session with the default calendar app; false when none was saved. Takes no path.
+      openCalendar(): Promise<boolean>;
     };
   }
 }

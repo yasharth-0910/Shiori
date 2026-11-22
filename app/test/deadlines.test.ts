@@ -78,3 +78,27 @@ test("the sentence that contains the date text opens first, not an earlier headi
   const heading = rowsOf({ ...f, fields: [{ ...f.fields[0]!, items: [item("application", "2026-10-16", ["h1"])] }] }, (x) => stateOf(x, sn), formatWhen, valueFirst)[0]!;
   assert.equal(heading.sid, "h1"); // no date text anywhere: the first cited sentence, as before
 });
+
+// Local time (2026-10-26 17:00 JST). Daylight saving: Paris ended 25 Oct 2026 (UTC+1), New York runs to 1 Nov (UTC-4).
+import { localWhen, yourTime } from "../src/deadlines.ts";
+const J = "2026-10-26T17:00:00+09:00";
+test("local time in Kolkata, Paris and New York", () => {
+  assert.deepEqual(localWhen(J, "Asia/Kolkata"), { date: "2026-10-26", time: "13:30" });
+  assert.deepEqual(localWhen(J, "Europe/Paris"), { date: "2026-10-26", time: "09:00" });
+  assert.deepEqual(localWhen(J, "America/New_York"), { date: "2026-10-26", time: "04:00" });
+  assert.equal(yourTime(J, "Asia/Kolkata"), "13:30 your time");
+});
+test("the local date moves back when the converted time is on the previous day", () => {
+  const l = localWhen("2026-10-26T02:00:00+09:00", "America/New_York");
+  assert.deepEqual(l, { date: "2026-10-25", time: "13:00" });
+  assert.equal(yourTime("2026-10-26T02:00:00+09:00", "America/New_York"), "13:00 on 25 Oct, your time");
+});
+test("a date-only deadline gets no time conversion", () => {
+  assert.equal(localWhen("2026-10-26", "Asia/Kolkata"), null);
+  assert.equal(yourTime("2026-10-26", "America/New_York"), null);
+});
+test("a row carries the local time and none for a date-only item", () => {
+  const rows = deadlineRows(fx([item("bid_in_person", J, ["p1_s1"]), item("question", "2026-10-02", ["p2_s1"])]));
+  assert.match(rows.find((r) => r.iso === J)?.local ?? "", /your time$/);
+  assert.equal(rows.find((r) => r.iso === "2026-10-02")?.local, null);
+});

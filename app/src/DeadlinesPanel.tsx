@@ -29,6 +29,7 @@ export function DeadlinesPanel({ fx, onCite }: { fx: Fixture; onCite: (sid: stri
               <span className="dlkind">{r.kind}</span>
               <span className={`pill pill-${r.state}`}>{STATE_TEXT[r.state]}</span>
               <span className="dlwhen">{r.when ?? "No date stored"}</span>
+              {r.local && <span className="dllocal">({r.local})</span>}
               {r.ja && <span className="ja" lang="ja">{r.ja}</span>}
               {r.page && <span className="pgchip">p. {r.page}</span>}
             </button>

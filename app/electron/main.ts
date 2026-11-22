@@ -2,7 +2,7 @@
 // fetch, which file:// blocks) and cancels every request that is not shiori://.
 // The renderer gets five IPC functions (preload.ts); main owns the file picker, the
 // sidecar and its token (D-83).
-import { app, BrowserWindow, dialog, ipcMain, protocol, session, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
@@ -11,6 +11,7 @@ import { CUSTOM_ID, defaultChoice, discover, modelDirs, realWhere, systemFacts, 
 import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
 import { runHighlightCheck } from "./hlcheck";
+import { savedCalendar } from "./saved";
 
 const DIST = path.join(__dirname, "..", "dist");
 const MIME: Record<string, string> = {
@@ -237,6 +238,8 @@ const docId = (id: unknown): string => {
   return id;
 };
 
+const calendar = savedCalendar((f) => shell.openPath(f));
+
 function registerIpc(): void {
   // Asks the user for a PDF (native picker), posts its path to the sidecar, returns the id.
   // SHIORI_PICK=<pdf> stands in for the picker in dev checks (like SHIORI_SHOT); the renderer cannot set it.
@@ -343,7 +346,13 @@ function registerIpc(): void {
     }
     if (!file) return false;
     fs.writeFileSync(file, content, "utf8"); // the BOM is U+FEFF in the string and becomes EF BB BF
+    calendar.remember(file, kind);
     return true;
+  });
+  // Open in Calendar (D-98): no arguments. Opens the .ics this session saved, with the default app, and nothing else.
+  ipcMain.handle("shiori:open-calendar", async (e): Promise<boolean> => {
+    own(e);
+    return calendar.openLast();
   });
   // The picker's data (D-99): the registry with what is installed, this machine's recommendation, the default, and
   // what is missing. Local file checks and os facts only. skipPicker is the dev-check path (SHIORI_PICK).

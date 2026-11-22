@@ -124,6 +124,7 @@ export async function runHighlightCheck(
       await js(`[...document.querySelectorAll("[role=tab]")].find((x) => x.textContent === "Deadlines")?.click()`);
       await sleep(500);
       const n = await js(`document.querySelectorAll(".dlrow").length`);
+      for (let k = 0; k < n; k++) console.log(`hlcheck ${prefix}: deadlines row ${k} text: ${await js(`document.querySelectorAll(".dlrow")[${k}]?.innerText.replace(/\\s+/g, " | ")`)}`);
       console.log(`hlcheck ${prefix}: deadlines tab rows ${n}, empty state ${await js(`!!document.querySelector(".empty")`)}`);
       for (let k = 0; k < Math.min(n, 4); k++) {
         const got = await js(
@@ -152,6 +153,12 @@ export async function runHighlightCheck(
       await js(`document.querySelector(".exportbtn")?.click()`);
       await sleep(2500);
       console.log(`hlcheck ${prefix}: export note: ${await js(`document.querySelector("[role=status]")?.textContent ?? ""`)}`);
+    }
+    // SHIORI_HLCHECK_OPENCAL=1 also clicks Open in Calendar (opens the saved .ics with the default app).
+    if (process.env.SHIORI_EXPORT_DIR && process.env.SHIORI_HLCHECK_OPENCAL) {
+      const r = await js(`(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === "Open in Calendar"); if (!b) return "button hidden"; b.click(); return "clicked"; })()`);
+      await sleep(3000);
+      console.log(`hlcheck ${prefix}: open in calendar: ${r}`);
     }
     console.log(`hlcheck ${prefix}: done, ${rows.length} clicks`);
   } catch (e) {

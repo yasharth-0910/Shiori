@@ -998,6 +998,8 @@ Decision: one new bridge function, `saveExport(kind, name, content)`, channel `s
 Alternatives: letting the renderer write files (rejected: no file access there by design); a library for .ics (rejected: no new dependency for forty lines).
 Consequences: `tests/test_app_ipc.py` now expects six functions and six channels. An event time is Japan time as stored; a stored offset other than +09:00 is not checked. A date-only deadline becomes an all-day event. An item with no stored date is left out of the .ics. English text from a model is marked "[machine translation]" in the CSV.
 
+Addendum (2026-11-22): Open in Calendar and your own time zone. After the .ics is saved, an "Open in Calendar" button appears; it calls an eighth bridge function, `openCalendar()` (channel `shiori:open-calendar`), which takes no arguments. Main remembers only the path the save dialog returned for the .ics (`app/electron/saved.ts`, kept only when the name ends in .ics) and opens that with `shell.openPath`, nothing else, never automatically, never logged. Because the renderer cannot send a path, a path the dialog did not return cannot be asked for; with no .ics saved the call does nothing and the button is hidden. Each Deadlines row shows the stored Japan time and the viewer's own time (`yourTime` in `deadlines.ts`, Intl with the system zone; a date-only deadline gets no conversion). Google Calendar is not integrated: it needs OAuth and an API call, which breaks the zero-network rule, and the deadline text would leave the machine (privacy.md). The .ics file works with Google Calendar when the user imports it themselves.
+
 
 ## D-99: Model registry, automatic model start, model picker
 
