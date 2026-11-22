@@ -176,7 +176,8 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - [ ] Click citation -> jump to page, highlight, show original Japanese + on-demand English for that sentence
 - [ ] Executive summary panel generated from verified fields only
 - [ ] Progress reporting while a document processes
-- [x] Model registry, automatic llama-server and model discovery, model picker with info card (D-99, 2026-11-22); download in the Setup screen still to do
+- [x] Model registry, automatic llama-server and model discovery, model picker with info card (D-99, 2026-11-22)
+- [x] Setup and model-download screen: pinned URLs and SHA-256, one network file (`download.ts`), renderer request filter (D-100, 2026-11-22). Not yet done: a real download of a full model with the hash check, and the Wi-Fi-off run after it
 
 **Exit:** a full tender processes end to end on the Mac with Wi-Fi off, and on a Windows 16 GB laptop.
 

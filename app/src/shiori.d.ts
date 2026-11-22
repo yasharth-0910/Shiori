@@ -1,5 +1,7 @@
 import type { ModelEntry, Recommendation } from "../electron/registry";
 import type { Fixture } from "./types";
+import type { DownloadError, DownloadState, ImportResult } from "../electron/downloadtypes";
+export type { DownloadError, DownloadState, ImportResult };
 
 export type ModelInfo = ModelEntry & { installed: boolean };
 export type ModelList = {
@@ -40,7 +42,7 @@ export type Status = {
   cursor: number;
 };
 
-// The seven functions preload.ts exposes. Nothing else crosses the bridge.
+// The eleven functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
   interface Window {
     shiori?: {
@@ -54,6 +56,11 @@ declare global {
       saveExport(kind: "csv" | "ics", name: string, content: string): Promise<boolean>;
       // Opens the .ics saved in this session with the default calendar app; false when none was saved. Takes no path.
       openCalendar(): Promise<boolean>;
+      // The only network use in the app (D-100). Takes a registry id, never a URL. Returns at once; poll downloadStatus().
+      downloadModel(modelId: string): Promise<void>;
+      downloadStatus(): Promise<DownloadState>;
+      // Native file dialog in main; null when cancelled. A .gguf is copied in only if its SHA-256 is a registry entry's.
+      chooseModelFile(): Promise<ImportResult | null>;
     };
   }
 }

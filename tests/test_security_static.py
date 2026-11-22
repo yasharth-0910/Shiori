@@ -12,10 +12,16 @@ Rules:
   bind       sidecar/ names an all-interfaces address or a host other than 127.0.0.1
 
 Allowlist entries need a written reason. Entries may name files that do not
-exist yet (the loopback server and the model download are not built).
+exist yet (the loopback server is not built).
+
+The model download (D-09, D-100) lives in TypeScript: app/electron/download.ts is
+the one allowed network file, listed in TS_NETWORK_ALLOWLIST with its reason. The
+rules above read only Python with ast, so a separate test scans the app's
+TypeScript for http and https imports.
 """
 
 import ast
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -41,10 +47,6 @@ ALLOWLIST: dict[str, dict[str, str]] = {
         "sidecar/server.py": (
             "The loopback server (Phase 7) needs socket to bind a random free "
             "port on 127.0.0.1; the bind rule still checks the host."
-        ),
-        "core/shiori_core/model_download.py": (
-            "The first-run model download is the only network path (D-09): "
-            "pinned URLs, SHA-256 verified."
         ),
         "core/shiori_core/extract/llm.py": (
             "Calls the local llama-server over urllib.request; Client refuses any "
@@ -287,3 +289,44 @@ def test_allowlist_exempts_only_its_rule_and_file(tmp_path: Path, monkeypatch) -
         ALLOWLIST, "net", {"core/dl.py": "invented reason for this test only"}
     )
     assert scan([d], base=tmp_path) == {"core/dl.py": ["unsafe"]}
+
+
+# TypeScript side (D-100): files in app/ that may import node:http or node:https.
+TS_NETWORK_ALLOWLIST: dict[str, str] = {
+    "app/electron/download.ts": (
+        "The model download is the only network path in the app (D-09, D-100): "
+        "it takes a registry id, never a renderer URL, uses https only and "
+        "keeps a file only if its SHA-256 matches the registry."
+    ),
+}
+_TS_NET_IMPORT = re.compile(
+    r"""(?:from|require\()\s*["'](?:node:)?(?:https?|tls|dgram|dns)["']|\bnet\s*[,}]\s*[^;]*from\s*["']electron["']"""
+)
+
+
+def _ts_network_importers(app: Path) -> set[str]:
+    skip = {"node_modules", "dist", "dist-electron", "public"}
+    return {
+        p.relative_to(app.parent).as_posix()
+        for p in app.rglob("*")
+        if p.suffix in {".ts", ".tsx", ".mts", ".js", ".mjs", ".cjs"}
+        and not (set(p.relative_to(app).parts) & skip)
+        and p.relative_to(app).parts[0] != "test"  # dev tests, loopback server
+        and _TS_NET_IMPORT.search(p.read_text(encoding="utf-8"))
+    }
+
+
+def test_exactly_download_ts_is_the_typescript_network_file() -> None:
+    assert _ts_network_importers(REPO_ROOT / "app") == set(TS_NETWORK_ALLOWLIST)
+    for path, reason in TS_NETWORK_ALLOWLIST.items():
+        assert len(reason.split()) >= 5, f"{path} needs a written reason"
+        assert (REPO_ROOT / path).is_file()
+
+
+def test_ts_network_scan_flags_a_second_file(tmp_path: Path) -> None:
+    app = tmp_path / "app"
+    (app / "electron").mkdir(parents=True)
+    (app / "electron" / "a.ts").write_text('import * as https from "node:https";\n')
+    (app / "electron" / "b.ts").write_text('import { net } from "electron";\n')
+    (app / "electron" / "c.ts").write_text('import * as fs from "node:fs";\n')
+    assert _ts_network_importers(app) == {"app/electron/a.ts", "app/electron/b.ts"}

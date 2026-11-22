@@ -210,3 +210,16 @@ button:disabled { cursor: default; opacity: 0.5; }
 .infocard { display: none; position: absolute; right: 12px; top: 100%; z-index: 30; width: 340px; max-width: 80vw; padding: 10px 12px; background: var(--white); border: 1px solid var(--card-line); border-radius: var(--radius-box); box-shadow: 0 4px 12px rgba(30, 30, 30, 0.12); font-size: 12px; }
 .infowrap:hover .infocard, .infowrap:focus-within .infocard { display: block; }
 .infocard dl { margin: 0; } .infocard dt { color: var(--muted); } .infocard dd { margin: 0 0 6px; }
+
+/* Setup screen (D-100) */
+.setup { max-width: 640px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; }
+.setup h2 { margin: 0; font-size: 20px; }
+.setup p { margin: 0; }
+.mcards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.mcard { position: relative; padding: 12px 14px; background: var(--white); border: 1px solid var(--card-line); border-radius: var(--radius-card); box-shadow: var(--card-shadow); display: flex; flex-direction: column; gap: 8px; }
+.mhead { display: flex; align-items: center; gap: 8px; }
+.mfacts { margin: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.mfacts > div { display: flex; gap: 8px; } .mfacts dt { width: 110px; flex: none; color: var(--muted); } .mfacts dd { margin: 0; min-width: 0; }
+.hash { font-size: 11px; word-break: break-all; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.drow.l { justify-content: flex-start; align-items: center; }
+.mcard progress { width: 100%; }

@@ -24,9 +24,10 @@ test("validator: required fields, url needs a sha256, hash shape, repeats", () =
   assert.deepEqual(validateRegistry([mk({ url: "https://example.test/m.gguf", sha256: "a".repeat(64) })]), []);
 });
 
-test("no entry invents a url or a hash", () => {
-  assert.ok(REGISTRY.every((m) => m.url === "")); // no URL is recorded in the repo yet
-  assert.ok(REGISTRY.every((m) => m.sha256 === "" || /^[0-9a-f]{64}$/.test(m.sha256)));
+test("every entry has a real hash; a url is only the pinned huggingface.co one recorded in sources.md (D-100)", () => {
+  assert.ok(REGISTRY.every((m) => /^[0-9a-f]{64}$/.test(m.sha256)));
+  assert.ok(REGISTRY.every((m) => m.url === "" || m.url.startsWith("https://huggingface.co/")));
+  assert.equal(REGISTRY.find((m) => m.id === "gemma-4-e4b")?.sha256, "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"); // D-70
 });
 
 test("recommendation for fake machines", () => {
@@ -120,12 +121,11 @@ test("option labels and result keys", () => {
 });
 
 test("model code makes no network call except the app's own loopback", () => {
-  const files = ["electron/registry.ts", "electron/discover.ts", "src/modelinfo.ts", "src/ModelPicker.tsx"];
+  const files = ["electron/registry.ts", "electron/discover.ts", "src/modelinfo.ts", "src/ModelPicker.tsx", "src/Setup.tsx"];
   for (const f of files) {
-    const t = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+    // the registry's pinned huggingface.co urls are the one allowed exception (D-100)
+    const t = readFileSync(new URL(`../${f}`, import.meta.url), "utf8").replace(/"https:\/\/huggingface\.co\/[^"]+"/g, '"PINNED"');
     assert.doesNotMatch(t, /\bfetch\s*\(|XMLHttpRequest|WebSocket|node:https?|node:net|node:dns|https?:\/\/(?!example\.test)/, f);
   }
-  // the registry source holds no URL at all
-  assert.doesNotMatch(readFileSync(new URL("../electron/registry.ts", import.meta.url), "utf8").replace(/\/\/.*$/gm, ""), /https?:\/\//);
   assert.ok(readdirSync(new URL("../src/", import.meta.url)).includes("ModelPicker.tsx"));
 });

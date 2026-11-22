@@ -7,13 +7,21 @@ or the lockfile, which names npm registry URLs for dev-time installs). Flags:
     relative path or a shiori:// URL
   - import of electron's net, https, http, or the 'autoUpdater'
   - a CSP that is missing or allows a remote source (index.html)
+
+The one exception is the model download (D-100, CLAUDE.md): exactly
+electron/download.ts may import node:https and node:http, and
+electron/registry.ts may hold the pinned https://huggingface.co/ URLs it
+downloads. Both are named below with their reason; nothing else may.
 """
 
 import re
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent / "app"
-SKIP_DIRS = {"node_modules", "dist", "dist-electron", "public"}
+# test/ holds the dev-only node tests: never built or packaged (the two tsconfig
+# files include src and electron only). They name example hosts and run a loopback
+# server on purpose.
+SKIP_DIRS = {"node_modules", "dist", "dist-electron", "public", "test"}
 SKIP_FILES = {"package-lock.json"}
 SUFFIXES = {".ts", ".tsx", ".mts", ".js", ".mjs", ".cjs", ".json", ".html", ".css"}
 
@@ -62,6 +70,32 @@ def test_app_has_sources_to_scan() -> None:
 SIDECAR = "electron/sidecar.ts"  # may name a URL: the sidecar's loopback port (D-83)
 LLAMA = "electron/llama.ts"  # may name a URL (llama-server's loopback port, health check) and import net for a free port (D-84)
 LOOPBACK_FILES = {SIDECAR, LLAMA}
+# The model download exception (D-100): the ONLY file that may import a network
+# module. It takes a registry id, never a URL from the renderer, requires https,
+# and moves a file into place only if its SHA-256 matches the registry.
+DOWNLOAD = "electron/download.ts"
+# The registry holds the pinned download URLs as data (D-100): this host only.
+REGISTRY_FILE = "electron/registry.ts"
+PINNED_HOST = "URL https://huggingface.co/"
+
+
+def download_problems(text: str) -> list[str]:
+    """download.ts: node:https and node:http imports are its point; the rest is not."""
+    return [
+        p
+        for p in problems(text)
+        if not (
+            p.startswith("network import")
+            and re.search(r"""["']node:https?["']""", p + text) is not None
+            and "node:net" not in p
+            and "tls" not in p
+            and "dgram" not in p
+        )
+    ]
+
+
+def registry_problems(text: str) -> list[str]:
+    return [p for p in problems(text) if not p.startswith(PINNED_HOST)]
 
 
 def sidecar_problems(text: str) -> list[str]:
@@ -84,6 +118,10 @@ def test_app_makes_no_network_reference() -> None:
         str(p.relative_to(APP)): (
             sidecar_problems
             if p.relative_to(APP).as_posix() in LOOPBACK_FILES
+            else download_problems
+            if p.relative_to(APP).as_posix() == DOWNLOAD
+            else registry_problems
+            if p.relative_to(APP).as_posix() == REGISTRY_FILE
             else problems
         )(p.read_text())
         for p in app_files()
@@ -155,3 +193,62 @@ def test_detector_catches_bad_code() -> None:
     assert problems('import https from "node:https"')
     assert problems('fetch(remote + "/a")')
     assert not problems('fetch("./fixture.json")')
+
+
+def _own_files() -> list[Path]:
+    """Every .ts/.tsx under electron/, src/ and the dev tests."""
+    return [
+        p
+        for d in ("electron", "src", "test")
+        for p in (APP / d).rglob("*")
+        if p.suffix in {".ts", ".tsx", ".mts"}
+    ]
+
+
+def test_network_import_is_only_in_download_ts() -> None:
+    """Exactly one shipped file imports node:https or node:http (not the dev tests)."""
+    imp = re.compile(r"""(?:from|require\()\s*["'](?:node:)?(?:https?)["']""")
+    shipped = {
+        p.relative_to(APP).as_posix()
+        for p in _own_files()
+        if p.relative_to(APP).parts[0] != "test" and imp.search(p.read_text())
+    }
+    assert shipped == {DOWNLOAD}, shipped
+    assert "node:https" in (APP / DOWNLOAD).read_text()
+
+
+def test_download_checker_catches_other_network_use() -> None:
+    assert not download_problems('import * as https from "node:https";')
+    assert not download_problems('import * as http from "node:http";')
+    assert download_problems('import * as net from "node:net";')
+    assert download_problems('fetch("https://example.com/x")')
+    assert download_problems('const u = "https://example.com/x";')
+    assert download_problems("new WebSocket(u)")
+    assert not registry_problems('url: "https://huggingface.co/a/b/resolve/x/y.gguf",')
+    assert registry_problems('url: "https://example.com/a.gguf",')
+    assert registry_problems('url: "http://huggingface.co/a.gguf",')
+
+
+def test_download_ts_holds_no_url_and_takes_no_url_from_the_renderer() -> None:
+    src = (APP / DOWNLOAD).read_text()
+    code = re.sub(r"//.*", "", src)
+    assert not re.search(r"""(?:https?|wss?|ftp)://""", code), "names a URL"
+    assert "fetch(" not in src
+    main = (APP / "electron" / "main.ts").read_text()
+    # the handler passes the id to start() and nothing else
+    handler = (
+        r'"shiori:download", \(e, id: unknown\) => \{'
+        r"\s*own\(e\);\s*void dl\(\)\.start\(id\);"
+    )
+    assert re.search(handler, main)
+    assert "allowLoopbackHttp" not in main
+
+
+def test_main_uses_the_counting_request_filter() -> None:
+    main = (APP / "electron" / "main.ts").read_text()
+    assert "webRequest.onBeforeRequest(filter.onBeforeRequest)" in main
+    assert main.count("webRequest.onBeforeRequest") == 1
+    nf = (APP / "electron" / "netfilter.ts").read_text()
+    assert "^(shiori|devtools|data|blob):" in nf
+    code = re.sub(r"//.*", "", nf)
+    assert not re.search(r"""https?://|127\.0\.0\.1|localhost""", code)

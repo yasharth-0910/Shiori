@@ -1,7 +1,7 @@
 // Main process. Serves the built renderer from a local shiori:// scheme (PDF.js needs
 // fetch, which file:// blocks) and cancels every request that is not shiori://.
-// The renderer gets five IPC functions (preload.ts); main owns the file picker, the
-// sidecar and its token (D-83).
+// The renderer gets eleven IPC functions (preload.ts); main owns the file picker, the
+// sidecar and its token (D-83), and the model download (D-100).
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -11,6 +11,8 @@ import { CUSTOM_ID, defaultChoice, discover, modelDirs, realWhere, systemFacts, 
 import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
 import { runHighlightCheck } from "./hlcheck";
+import { createDownloader } from "./download";
+import { requestFilter } from "./netfilter";
 import { savedCalendar } from "./saved";
 
 const DIST = path.join(__dirname, "..", "dist");
@@ -49,8 +51,10 @@ const jobs = new Map<string, { posted: boolean; error: string | null; cancelled:
 const busy = () => [...jobs.values()].some((j) => !j.finished && !j.cancelled);
 
 // Where model files are looked for: the repo's models/ in dev, the user data folder when packaged.
+// SHIORI_MODELS_DIR=<dir> replaces that folder in dev runs only (ignored when packaged), so a download can be tried in an empty one.
+const MODELS_DIR = app.isPackaged ? undefined : process.env.SHIORI_MODELS_DIR;
 const here = () => {
-  const dirs = modelDirs(app.isPackaged, path.join(__dirname, "..", ".."), app.getPath("userData"));
+  const dirs = MODELS_DIR ? [MODELS_DIR] : modelDirs(app.isPackaged, path.join(__dirname, "..", ".."), app.getPath("userData"));
   return { found: discover(realWhere(), dirs, app.isPackaged ? "models/ in the app's user data folder" : "models/ in the repo", REGISTRY), dirs };
 };
 const customEntry = (file: string): ModelEntry => {
@@ -238,6 +242,11 @@ const docId = (id: unknown): string => {
   return id;
 };
 
+// The model download (D-100): the only network use in the app. Partial files live in the user data folder; a verified
+// model is moved into the first models folder. The renderer can only name a registry id.
+let downloader: ReturnType<typeof createDownloader> | null = null;
+const dl = () => (downloader ??= createDownloader({ registry: REGISTRY, modelsDir: here().dirs[0] as string, tempDir: path.join(app.getPath("userData"), "downloads") }));
+
 const calendar = savedCalendar((f) => shell.openPath(f));
 
 function registerIpc(): void {
@@ -364,24 +373,44 @@ function registerIpc(): void {
     if (found.custom) models.push({ ...customEntry(found.custom), installed: true });
     return { models, recommended: rec, default: defaultChoice(found, rec, REGISTRY), running: backend?.model ? backend.modelId : null, binaryFound: !!found.binary, expected: found.expected, skipPicker: !!PICK };
   });
+  // Download (D-100): one click in the Setup screen. The argument is a registry id and nothing else; the URL is the registry's.
+  // Returns at once; progress comes from shiori:download-status. A bad id, a model with no url or a second download throws.
+  ipcMain.handle("shiori:download", (e, id: unknown) => {
+    own(e);
+    void dl().start(id);
+  });
+  ipcMain.handle("shiori:download-status", (e) => {
+    own(e);
+    return dl().status();
+  });
+  // "Choose a model file from disk": main shows the picker; the copy happens only when the file's SHA-256 is a registry entry's.
+  ipcMain.handle("shiori:import-model", async (e) => {
+    own(e);
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const opts = { properties: ["openFile" as const], filters: [{ name: "Model", extensions: ["gguf"] }] };
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    const file = r.canceled ? undefined : r.filePaths[0];
+    return file ? dl().importFile(file) : null;
+  });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
     return sidecar.call("GET", `/documents/${docId(id)}/fields`);
   });
 }
 
+const filter = requestFilter();
 void app.whenReady().then(() => {
   registerIpc();
   protocol.handle("shiori", serve);
-  // Belt and braces next to the CSP: nothing but shiori:// (and devtools) leaves the process.
-  session.defaultSession.webRequest.onBeforeRequest((d, cb) =>
-    cb({ cancel: !/^(shiori|devtools|data|blob):/.test(d.url) }),
-  );
+  // Belt and braces next to the CSP: nothing a page asks for but shiori:// (and devtools, data, blob) goes out. Blocked
+  // requests are counted, never listed. The download is main-process code, outside this filter (D-100).
+  session.defaultSession.webRequest.onBeforeRequest(filter.onBeforeRequest);
   session.defaultSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
   void createWindow();
 });
 app.on("window-all-closed", () => app.quit());
 // The sidecar ends with the app: quit, Ctrl+C in the terminal, or a terminate.
+app.on("will-quit", () => console.log(`renderer requests blocked: ${filter.blockedCount()}`));
 const stopAll = () => {
   sidecar.stop();
   llama.stop();
