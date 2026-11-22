@@ -17,7 +17,7 @@ The phase checklists below stay as they are. This plan says which parts of them 
 | 1 | 21 to 27 Nov | **Phase 5 close-out:** notice_date guard; precision audit of the remaining rule fields against the Gemini references; list-field comparison against Gemini (a long model job, run in the morning); issuer rules for bid instructions and specs. Done when no known wrong Verified answer remains on the 50 documents and the coverage table is re-run. **Phase 7:** Yasharth checks click-to-highlight by hand (10 citations on 3 documents); the wrong highlights are listed and fixed. **Phases 3 and 9:** a framing paragraph (public tenders are the test bed, confidential documents are the target users), the hold-out rule, and the Later list. Native-reader outreach starts this week. |
 | 2 | 28 Nov to 4 Dec | **Phase 7:** ~~Deadlines tab~~ (done 2026-11-22) and ~~Export (CSV and .ics)~~ (done 2026-11-22); opening HTML notices (181 documents today). |
 | 3 | 5 to 11 Dec | **Phases 7 and 4:** Setup and model-download screen with pinned URLs and SHA-256; the Wi-Fi-off test; the Windows 16 GB run. |
-| 4 | 12 to 18 Dec | **Phase 3:** the section-path fix and the one EXTRACTOR_VERSION bump, then freeze the rules. Label a small test set of about 10 documents with the same silver plus review process. A native-reader review of a sample. |
+| 4 | 12 to 18 Dec | **Phase 3:** the section-path fix and the one EXTRACTOR_VERSION bump, then freeze the rules. Label a small test set of about 10 documents with the same silver plus review process, excluding 52bba5f9 when choosing the test documents to label and run (D-102). A native-reader review of a sample. |
 | 5 | 19 to 25 Dec | **Phases 4 and 9:** one test-split run for the milestone report (fixes only for bugs, never for tuning); archive old runs in `eval/reports/`; README with real numbers; demo video with Wi-Fi off. |
 | 6 | 26 Dec to 1 Jan | Buffer. **Phase 8:** a Mac installer if easy; repo history cleanup. Outreach to a Japanese engineer with the demo. v0.1 to a first outside tester. |
 
@@ -188,7 +188,7 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - [ ] Network activity screen
 - [ ] Packaging: sidecar via PyInstaller, llama-server binaries per OS, signed builds if possible
 - [ ] License review of every shipped component (PyMuPDF decision must be settled here)
-- [x] Replace real examples from restricted documents in the working tree with open-license ones: `uv run python -m eval.repo_scan --tree-only --public` exits 0 (D-64). Not yet done: drop the git history (fresh repo, D-64), after which plain `--public` must exit 0 and the 15 history-only `known_debt` entries are deleted. The repo is not made public before that (D-60, D-64)
+- [x] Replace real examples from restricted documents in the working tree with open-license ones: `uv run python -m eval.repo_scan --tree-only --public` exits 0 (D-64). Not yet done: drop the git history (fresh repo, D-64), after which plain `--public` must exit 0 and the 15 history-only `known_debt` entries are deleted. The repo was made public anyway with the history debt accepted by the owner (D-101); `--public` is expected to fail until the history is rewritten
   - Progress: the two Funabashi collector fixtures and `tests/test_collector_run.py` now hold invented text only (working tree scans clean). Known debt is still 16 entries / 25 (file, doc) pairs, because the scan also reads git history and the old blobs of those files are still in it. Those entries go stale only after a commit and a history rewrite (or a fresh public repo).
 
 **Exit:** privacy checklist all green, installers for Mac and Windows.
@@ -213,6 +213,7 @@ Parked after the v0.1 plan (2026-11-21), one line each on why:
 - Phase 10, full document translation: it is a reading aid and not needed for the v0.1 exit; it starts after Phase 9 (D-78).
 - Bundle reconciliation (a Q&A overriding the notice): needs links between documents of one tender, and v0.1 reads one document at a time.
 - Pluggable schemas: the 23 v1 fields are still being fixed by the audit, so opening the schema to other users would freeze it too early.
+- "Other notable terms" field: the model lists a few conditions that none of the 23 fields cover, each with a citation checked by the same code, always shown as Needs review, schema 1.2.0 additive. Parked because it needs a schema bump, adds noise on small models and cannot be measured without labels. First item after v0.1.
 
 ## Phase 10: full document translation
 

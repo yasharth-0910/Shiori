@@ -49,6 +49,16 @@ A_2BAF = [
     "申請書記載要領（新規） ",
     "令和８年２月  ",
 ]
+# 52bba5f9 (北海道, bid_instructions): 企画提案指示書 is the second line
+B_52BB = [
+    "令和８年度宇宙関連産業振興事業（衛星データ利活用実証事業）委託業務 ",
+    "企画提案指示書 ",
+    "１ 委託業務名 ",
+]
+
+
+def test_52bba5f9_kikaku_teian_shijisho_is_bid_instructions():
+    assert detect_doc_type(B_52BB) == "bid_instructions"
 
 
 def test_2f2f5bd3_spaced_heading_is_notice():

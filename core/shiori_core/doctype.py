@@ -37,6 +37,7 @@ CUES: dict[str, tuple[str, ...]] = {
         "公募説明書",
         "実施要領",
         "参加者募集",
+        "提案指示書",  # also covers 企画提案指示書
     ),  # fmt: skip
     "notice": ("公告", "公示"),
 }
