@@ -26,6 +26,7 @@ export type Field = {
 export type Fixture = {
   doc_id: string;
   pdf: string;
+  model_id?: string | null; // registry id of the model that produced these answers (D-99); absent for the fixture
   doc_type?: string; // what the sidecar read from the first page (D-92); not part of the stored fields JSON
   fields: Field[];
   sentences: Record<string, Sentence>;

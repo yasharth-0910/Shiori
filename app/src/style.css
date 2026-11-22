@@ -191,3 +191,21 @@ button:disabled { cursor: default; opacity: 0.5; }
 .dlkind { font-weight: 500; }
 .dlwhen { flex-basis: 100%; font-size: 16px; font-weight: 500; }
 .dlrow .ja { font-size: 13px; color: var(--muted); }
+
+/* Model picker (D-99): no script; the card opens on hover or keyboard focus of the i button. */
+.scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: start center; padding-top: 72px; background: rgba(30, 30, 30, 0.25); }
+.dialog { width: min(460px, 92vw); padding: 16px; background: var(--white); border: 1px solid var(--card-line); border-radius: var(--radius-card); box-shadow: 0 4px 12px rgba(30, 30, 30, 0.12); display: flex; flex-direction: column; gap: 10px; }
+.drow { display: flex; justify-content: flex-end; gap: 8px; }
+.mdrop { border: 1px solid var(--stroke); border-radius: var(--radius-box); background: var(--white); }
+.mdrop summary { padding: 8px 12px; cursor: pointer; }
+.mdrop summary:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--indigo); border-radius: var(--radius-box); }
+.mlist { list-style: none; margin: 0; padding: 4px 0; border-top: 1px solid var(--line); }
+.mrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; position: relative; }
+.mrow label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.mrow label.off { color: var(--faint); }
+.mrec { background: var(--indigo-tint); color: var(--indigo); border-color: var(--indigo-line); }
+.infowrap { position: static; }
+.infobtn { width: 20px; height: 20px; padding: 0; border: 1px solid var(--stroke); border-radius: var(--radius-pill); background: var(--paper); color: var(--muted); font-size: 12px; font-style: italic; line-height: 1; }
+.infocard { display: none; position: absolute; right: 12px; top: 100%; z-index: 30; width: 340px; max-width: 80vw; padding: 10px 12px; background: var(--white); border: 1px solid var(--card-line); border-radius: var(--radius-box); box-shadow: 0 4px 12px rgba(30, 30, 30, 0.12); font-size: 12px; }
+.infowrap:hover .infocard, .infowrap:focus-within .infocard { display: block; }
+.infocard dl { margin: 0; } .infocard dt { color: var(--muted); } .infocard dd { margin: 0 0 6px; }

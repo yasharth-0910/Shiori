@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { issuerOf, titleOf } from "./fields";
+import { resultKey } from "./modelinfo";
 import { stateOf, type State } from "./status";
 import { bidDeadline, type Due } from "./summary";
 import type { Fixture } from "./types";
@@ -60,7 +61,7 @@ export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
           {rows.map(({ d, t, issuer, due }) => {
             const n = due ? due.days : null;
             return (
-              <tr key={d.fx.doc_id}>
+              <tr key={resultKey(d.fx.doc_id, d.fx.model_id)}>
                 <td>
                   <div className="t-en">{t.en ?? "Untitled"}</div>
                   {t.ja && <div className="t-ja" lang="ja">{t.ja}</div>}

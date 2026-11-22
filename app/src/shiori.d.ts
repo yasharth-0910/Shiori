@@ -1,4 +1,16 @@
+import type { ModelEntry, Recommendation } from "../electron/registry";
 import type { Fixture } from "./types";
+
+export type ModelInfo = ModelEntry & { installed: boolean };
+export type ModelList = {
+  models: ModelInfo[];
+  recommended: Recommendation | null;
+  default: string | null;
+  running: string | null; // the model id the backend is running now
+  binaryFound: boolean;
+  expected: { file: string; where: string }[];
+  skipPicker: boolean; // dev checks only (SHIORI_PICK)
+};
 
 export type Translated =
   | { ok: true; items: Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }>; done: number; total: number; failed: string[] }
@@ -18,6 +30,7 @@ export type Status = {
   detail: string | null;
   error: string | null;
   model?: string | null; // the model file's name
+  model_id?: string | null; // the registry id of the model that answered (D-99)
   seconds?: Record<string, number>; // per finished sidecar stage
   sentences?: number | null;
   fields_total?: number;
@@ -27,11 +40,12 @@ export type Status = {
   cursor: number;
 };
 
-// The six functions preload.ts exposes. Nothing else crosses the bridge.
+// The seven functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
   interface Window {
     shiori?: {
-      startProcessing(): Promise<{ doc_id: string; name: string } | null>;
+      startProcessing(modelId?: string): Promise<{ doc_id: string; name: string } | { error: "busy" } | null>;
+      listModels(): Promise<ModelList>;
       getStatus(docId: string, since?: number): Promise<Status>;
       cancel(docId: string): Promise<void>;
       getFields(docId: string): Promise<Fixture>;

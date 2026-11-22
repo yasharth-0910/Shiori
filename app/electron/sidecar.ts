@@ -47,9 +47,10 @@ export function start(llama: Llama | null): Promise<void> {
     });
     p.on("error", () => reject(new Error("sidecar_start_failed")));
     p.on("exit", () => {
+      reject(new Error("sidecar_exited"));
+      if (child !== p) return; // stopped on purpose (a model switch): the caller already moved on
       child = null;
       hello = null; // a later start makes a new one
-      reject(new Error("sidecar_exited"));
       died?.();
     });
   });
@@ -71,6 +72,9 @@ export async function call<T>(method: "GET" | "POST", url: string, body?: unknow
 
 /** Quit: closing stdin tells the sidecar to stop, the SIGTERM is the backstop. */
 export function stop(): void {
-  child?.stdin?.end();
-  child?.kill("SIGTERM");
+  const p = child;
+  child = null;
+  hello = null; // the next start makes a new one; this process's exit no longer counts as a death
+  p?.stdin?.end();
+  p?.kill("SIGTERM");
 }

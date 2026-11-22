@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { countStates, titleOf } from "./fields";
 import { Library, type Doc } from "./Library";
+import { ModelPicker } from "./ModelPicker";
+import { resultKey } from "./modelinfo";
+import type { ModelList } from "./shiori.d.ts";
 import { Processing } from "./Processing";
 import { Workspace } from "./Workspace";
 import type { Fixture } from "./types";
@@ -24,16 +27,27 @@ export function App() {
     return () => window.removeEventListener("keydown", esc);
   }, []);
 
-  const add = async () => {
-    const r = await window.shiori?.startProcessing();
+  // Add document opens the model choice first; "Choose PDF" then starts processing with that model (D-99).
+  const [picker, setPicker] = useState<{ list: ModelList; value: string | null; note: string | null } | null>(null);
+  const start = async (modelId?: string) => {
+    const r = await window.shiori?.startProcessing(modelId);
+    if (r && "error" in r) return setPicker((p) => p && { ...p, note: "A document is still processing. Wait for it or cancel it before switching models." });
+    setPicker(null);
     if (r) {
       setOpen(null);
       setAdding(r);
     }
   };
+  const add = async () => {
+    const list = await window.shiori?.listModels();
+    if (!list) return;
+    if (list.skipPicker) return start(); // dev checks (SHIORI_PICK) skip the dialog
+    setPicker({ list, value: list.default, note: null });
+  };
   const finished = useCallback((fx: Fixture) => {
     const d = { fx, counts: countStates(fx) };
-    setDocs((all) => [...(all ?? []), d]);
+    // One result per document and model: the same PDF run with another model is a separate row.
+    setDocs((all) => [...(all ?? []).filter((x) => resultKey(x.fx.doc_id, x.fx.model_id) !== resultKey(fx.doc_id, fx.model_id)), d]);
     setAdding(null);
     setOpen(d);
   }, []);
@@ -54,6 +68,20 @@ export function App() {
         <div className="pop" role="dialog" aria-label="Settings">
           <b>Settings</b>
           <p className="meta">There is nothing to set yet.</p>
+        </div>
+      )}
+      {picker && (
+        <div className="scrim">
+          <div className="dialog" role="dialog" aria-label="Add document">
+            <b>Add document</b>
+            <ModelPicker list={picker.list} value={picker.value} onChange={(id) => setPicker({ ...picker, value: id, note: null })} />
+            {picker.list.running && picker.value && picker.value !== picker.list.running && <p className="meta">The running model is stopped and the new one loads first.</p>}
+            {picker.note && <p className="err">{picker.note}</p>}
+            <div className="drow">
+              <button className="btn" onClick={() => setPicker(null)}>Cancel</button>
+              <button className="btn primary" onClick={() => void start(picker.value ?? undefined)}>Choose PDF</button>
+            </div>
+          </div>
         </div>
       )}
       <main>

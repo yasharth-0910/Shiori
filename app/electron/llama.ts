@@ -22,13 +22,6 @@ export type Config = { binary: string; model: string };
 
 let proc: ChildProcess | null = null;
 
-/** SHIORI_LLAMA_SERVER and SHIORI_MODEL (until the model download screen exists). null = not set up. */
-export function config(): Config | null {
-  const binary = process.env.SHIORI_LLAMA_SERVER;
-  const model = process.env.SHIORI_MODEL;
-  return binary && model ? { binary, model } : null;
-}
-
 const fail = (code: string): never => {
   throw new Error(code);
 };
@@ -112,4 +105,13 @@ export function stop(): void {
   proc?.kill("SIGTERM");
   proc = null;
   fs.rmSync(PIDFILE, { force: true });
+}
+
+/** Stop only the server this app started and wait until it has exited (a model switch must not meet its own dying process). */
+export async function stopAndWait(): Promise<void> {
+  const p = proc;
+  if (!p || p.exitCode !== null) return stop();
+  const gone = new Promise<void>((r) => p.once("exit", () => r()));
+  stop();
+  await Promise.race([gone, new Promise((r) => setTimeout(r, 10_000))]);
 }

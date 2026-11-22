@@ -7,6 +7,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import * as llama from "./llama";
+import { CUSTOM_ID, defaultChoice, discover, modelDirs, realWhere, systemFacts, type Found } from "./discover";
+import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
 import { runHighlightCheck } from "./hlcheck";
 
@@ -38,24 +40,43 @@ const EXPORT_DIR = app.isPackaged ? undefined : process.env.SHIORI_EXPORT_DIR;
 // SHIORI_HLCHECK=<dir> (with SHIORI_PICK) runs the highlight check in hlcheck.ts; dev only, like SHIORI_SHOT.
 const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK;
 
-// One backend for the session: llama-server (when SHIORI_LLAMA_SERVER and SHIORI_MODEL are set)
-// and the sidecar. Started on the first Add document, stopped when the app quits.
-type Backend = { state: "starting" | "ready" | "failed"; model: boolean; note: string | null; error: string | null };
+// One backend for the session: llama-server (when it and a model are found, D-99) and the sidecar.
+// Started on the first Add document, restarted when the user picks another model, stopped when the app quits.
+type Backend = { state: "starting" | "ready" | "failed"; model: boolean; modelId: string | null; modelFile: string | null; note: string | null; error: string | null };
 let backend: Backend | null = null;
-const jobs = new Map<string, { posted: boolean; error: string | null; cancelled: boolean }>();
+const jobs = new Map<string, { posted: boolean; error: string | null; cancelled: boolean; finished: boolean }>();
+const busy = () => [...jobs.values()].some((j) => !j.finished && !j.cancelled);
 
-function ensureBackend(): Backend {
-  if (backend) return backend;
-  const b: Backend = { state: "starting", model: false, note: null, error: null };
+// Where model files are looked for: the repo's models/ in dev, the user data folder when packaged.
+const here = () => {
+  const dirs = modelDirs(app.isPackaged, path.join(__dirname, "..", ".."), app.getPath("userData"));
+  return { found: discover(realWhere(), dirs, app.isPackaged ? "models/ in the app's user data folder" : "models/ in the repo", REGISTRY), dirs };
+};
+const customEntry = (file: string): ModelEntry => {
+  const size = (() => { try { return fs.statSync(file).size; } catch { return 0; } })();
+  const nr = "not yet recorded";
+  return { id: CUSTOM_ID, name: path.basename(file), file: path.basename(file), parameters: nr, quantization: nr, sizeBytes: size, license: nr, minRamGb: 0, recommendedRamGb: 0, platformNotes: [], bestFor: "Set with SHIORI_MODEL", rank: 99, url: "", sha256: "", measured: [] };
+};
+
+function ensureBackend(choice: string | null, found: Found): Backend {
+  if (backend && backend.modelId === choice) return backend;
+  const previous = backend;
+  const b: Backend = { state: "starting", model: false, modelId: choice, modelFile: null, note: null, error: null };
   backend = b;
+  if (previous) jobs.clear(); // a new sidecar does not know the old documents; nothing of the old model is reused
   void (async () => {
-    const cfg = llama.config();
+    if (previous) {
+      sidecar.stop(); // only processes this app started
+      await llama.stopAndWait();
+    }
+    const file = choice === CUSTOM_ID ? found.custom : choice ? found.installed[choice] : undefined;
     let l: llama.Llama | null = null;
-    if (!cfg) b.note = "Model not set up";
+    if (!found.binary || !file) b.note = "Model not set up";
     else {
       b.model = true;
+      b.modelFile = path.basename(file);
       try {
-        l = await llama.start(cfg);
+        l = await llama.start({ binary: found.binary, model: file });
       } catch (e) {
         b.model = false;
         b.note = `Model failed to start (${(e as Error).message})`; // a short code, no path
@@ -127,7 +148,7 @@ async function createWindow(): Promise<void> {
   const shotMedia = app.isPackaged ? undefined : process.env.SHIORI_SHOT_MEDIA;
   if (shot) {
     win.webContents.on("console-message", (e) => console.log("renderer:", e.message));
-    setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, process.env.SHIORI_MODEL ? 900000 : 30000);
+    setTimeout(() => { console.log("shot timeout"); void win.webContents.executeJavaScript(`document.body.innerText.slice(0,300) + " canvases=" + document.querySelectorAll("canvas").length`).then((t) => { console.log(t); app.exit(1); }); }, PICK ? 900000 : 30000);
     if (shotMedia === "reduce") {
       win.webContents.debugger.attach("1.3");
       await win.webContents.debugger.sendCommand("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
@@ -219,8 +240,16 @@ const docId = (id: unknown): string => {
 function registerIpc(): void {
   // Asks the user for a PDF (native picker), posts its path to the sidecar, returns the id.
   // SHIORI_PICK=<pdf> stands in for the picker in dev checks (like SHIORI_SHOT); the renderer cannot set it.
-  ipcMain.handle("shiori:start", async (e) => {
+  ipcMain.handle("shiori:start", async (e, modelId: unknown) => {
     own(e);
+    const { found } = here();
+    const rec = recommend(systemFacts());
+    let choice: string | null;
+    if (modelId === undefined || modelId === null) choice = defaultChoice(found, rec, REGISTRY);
+    else if (typeof modelId === "string" && (found.installed[modelId] || (modelId === CUSTOM_ID && found.custom))) choice = modelId;
+    else throw new Error("model_not_installed");
+    // Switching stops the llama-server this app started, so it waits until nothing is processing.
+    if (backend && backend.modelId !== choice && busy()) return { error: "busy" as const };
     let file = PICK;
     if (!file) {
       const win = BrowserWindow.fromWebContents(e.sender);
@@ -233,8 +262,8 @@ function registerIpc(): void {
     // before the model and the sidecar are up.
     const doc_id = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
     picked.set(doc_id, file);
-    jobs.set(doc_id, { posted: false, error: null, cancelled: false });
-    const b = ensureBackend();
+    const b = ensureBackend(choice, found); // before jobs.set: a model switch clears the old jobs
+    jobs.set(doc_id, { posted: false, error: null, cancelled: false, finished: false });
     void (async () => {
       while (b.state === "starting") await new Promise((r) => setTimeout(r, 200));
       const job = jobs.get(doc_id);
@@ -259,16 +288,20 @@ function registerIpc(): void {
     // No backend means the sidecar died (it is only cleared then); the next Add document starts a new one.
     if (!backend) return { doc_id: doc, pages: null, detail: null, stage: "failed", error: "sidecar_exited", events: [], cursor };
     const b = backend;
-    // The model's file name, read from the path the user configured. Nothing else about the model is known here.
-    const model = b.model ? path.basename(process.env.SHIORI_MODEL ?? "") : null;
-    const base = { doc_id: doc, pages: null, detail: b.note, error: null, model, events: [], cursor };
-    if (job.cancelled && !job.posted) return { ...base, stage: "cancelled" };
+    // The model's file name and registry id, as the backend was started with them. Nothing else about the model is known here.
+    const model = b.model ? b.modelFile : null;
+    const base = { doc_id: doc, pages: null, detail: b.note, error: null, model, model_id: b.model ? b.modelId : null, events: [], cursor };
+    const fin = <T extends { stage: string }>(r: T): T => {
+      if (r.stage === "done" || r.stage === "failed" || r.stage === "cancelled") job.finished = true;
+      return r;
+    };
+    if (job.cancelled && !job.posted) return fin({ ...base, stage: "cancelled" });
     if (b.state === "starting") return { ...base, stage: b.model ? "loading_model" : "queued" };
-    if (b.state === "failed" || job.error) return { ...base, stage: "failed", error: b.error ?? job.error };
+    if (b.state === "failed" || job.error) return fin({ ...base, stage: "failed", error: b.error ?? job.error });
     if (!job.posted) return { ...base, stage: "queued" };
     const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status?since=${cursor}`);
     const running = s.stage !== "done" && s.stage !== "failed" && s.stage !== "cancelled";
-    return { ...s, model, detail: s.detail ?? (running ? b.note : null) };
+    return fin({ ...s, model, model_id: base.model_id, detail: s.detail ?? (running ? b.note : null) });
   });
   // Cancel (D-90): a flag. Before the post it stops the post; after it the sidecar stops at its next stage or model call.
   ipcMain.handle("shiori:cancel", async (e, id: unknown) => {
@@ -311,6 +344,16 @@ function registerIpc(): void {
     if (!file) return false;
     fs.writeFileSync(file, content, "utf8"); // the BOM is U+FEFF in the string and becomes EF BB BF
     return true;
+  });
+  // The picker's data (D-99): the registry with what is installed, this machine's recommendation, the default, and
+  // what is missing. Local file checks and os facts only. skipPicker is the dev-check path (SHIORI_PICK).
+  ipcMain.handle("shiori:models", (e) => {
+    own(e);
+    const { found } = here();
+    const rec = recommend(systemFacts());
+    const models = REGISTRY.map((m) => ({ ...m, installed: !!found.installed[m.id] }));
+    if (found.custom) models.push({ ...customEntry(found.custom), installed: true });
+    return { models, recommended: rec, default: defaultChoice(found, rec, REGISTRY), running: backend?.model ? backend.modelId : null, binaryFound: !!found.binary, expected: found.expected, skipPicker: !!PICK };
   });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);

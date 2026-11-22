@@ -176,6 +176,7 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - [ ] Click citation -> jump to page, highlight, show original Japanese + on-demand English for that sentence
 - [ ] Executive summary panel generated from verified fields only
 - [ ] Progress reporting while a document processes
+- [x] Model registry, automatic llama-server and model discovery, model picker with info card (D-99, 2026-11-22); download in the Setup screen still to do
 
 **Exit:** a full tender processes end to end on the Mac with Wi-Fi off, and on a Windows 16 GB laptop.
 

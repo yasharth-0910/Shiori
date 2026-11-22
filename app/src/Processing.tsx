@@ -131,7 +131,7 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
           const old = queue.current.splice(0, Math.max(0, queue.current.length - VISIBLE));
           if (old.length) setEvents((e) => [...e, ...old].slice(-STORED));
           // The PDF is served by id through shiori://, relative like the cMaps.
-          finished.current = { ...fx, pdf: `doc/${docId}.pdf`, doc_type: s.doc_type };
+          finished.current = { ...fx, pdf: `doc/${docId}.pdf`, doc_type: s.doc_type, model_id: s.model_id ?? null };
           return;
         }
         setTimeout(() => void tick(), 400);
