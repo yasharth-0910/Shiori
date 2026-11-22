@@ -118,6 +118,35 @@ export async function runHighlightCheck(
       save();
       console.log(`hlcheck ${prefix}: ${f.field} clicked, overlay rects ${seen.overlay.length}`);
     }
+    // Deadlines tab: click up to 4 rows. A row carries the compared sentence id in data-sid and its page in the p. chip.
+    if (!only || only === "deadlines") {
+      await js(`document.querySelector(".field.open .fhead")?.click()`);
+      await js(`[...document.querySelectorAll("[role=tab]")].find((x) => x.textContent === "Deadlines")?.click()`);
+      await sleep(500);
+      const n = await js(`document.querySelectorAll(".dlrow").length`);
+      console.log(`hlcheck ${prefix}: deadlines tab rows ${n}, empty state ${await js(`!!document.querySelector(".empty")`)}`);
+      for (let k = 0; k < Math.min(n, 4); k++) {
+        const got = await js(
+          `(() => { const b = document.querySelectorAll(".dlrow")[${k}]; if (!b || b.disabled) return null; b.click(); ` +
+            `return { sid: b.dataset.sid, card: b.querySelector(".pgchip")?.textContent, kind: b.querySelector(".dlkind")?.textContent }; })()`,
+        );
+        if (!got) { console.log(`hlcheck ${prefix}: deadlines row ${k} skipped (disabled)`); continue; }
+        await sleep(1500);
+        const seen = await js(READ);
+        const shot = `${prefix}_deadlines_tab_${k}.png`;
+        fs.writeFileSync(path.join(dir, shot), (await win.webContents.capturePage()).toPNG());
+        const s = fx.sentences[got.sid];
+        rows.push({
+          doc: prefix, field: `deadlines_tab:${k}`, sentence: got.sid,
+          card_page: Number(/\d+/.exec(got.card ?? "")?.[0]) || null,
+          same_sentence: !!s && s.page === (Number(/\d+/.exec(got.card ?? "")?.[0]) || null),
+          toolbar_page: seen.toolbar, overlay: seen.overlay,
+          stored: s?.boxes ?? [], stored_page: s?.page ?? null, shot,
+        });
+        save();
+        console.log(`hlcheck ${prefix}: deadlines row ${k} (${got.kind}) clicked, overlay rects ${seen.overlay.length}`);
+      }
+    }
     console.log(`hlcheck ${prefix}: done, ${rows.length} clicks`);
   } catch (e) {
     console.log(`hlcheck ${prefix}: error ${(e as Error).message}`);

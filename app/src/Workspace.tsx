@@ -3,6 +3,7 @@ import { groupOf, labelOf, STATES } from "./fields";
 import { collapsedLine, notApplicable, scalarAnswer, valueFirst, worthShowing, type En } from "./fieldview";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
+import { DeadlinesPanel } from "./DeadlinesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { deadlineLine } from "./summary";
 import { STATE_TEXT, docTypeText, stateOf, unusualSection, type State } from "./status";
@@ -167,6 +168,11 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
     });
   };
 
+  // One cite function for the Summary and Deadlines tabs: clears any Find and opens the sentence's highlight.
+  const cite = (id: string) => {
+    setFind(null);
+    setSid(id);
+  };
   const sentence = sid ? (fx.sentences[sid] ?? null) : null;
   const doFind = (e: React.FormEvent<HTMLFormElement>, cur: Find | null) => {
     e.preventDefault();
@@ -190,15 +196,9 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
             </span>
           )}
         </div>
-        {tab === "deadlines" && <p className="empty">Nothing here yet.</p>}
+        {tab === "deadlines" && <DeadlinesPanel fx={fx} onCite={cite} />}
         {tab === "summary" && (
-          <SummaryPanel
-            fx={fx}
-            onCite={(id) => {
-              setFind(null);
-              setSid(id);
-            }}
-          />
+          <SummaryPanel fx={fx} onCite={cite} />
         )}
         {tab === "fields" && (
           <>

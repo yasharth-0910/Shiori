@@ -1,0 +1,69 @@
+import type { State } from "./status";
+import type { Field, Fixture } from "./types";
+
+// Pure logic for the Deadlines tab. One row per stored deadline item; nothing is computed from today's date.
+// formatWhen and the state function are passed in so this file has no value imports node's test runner cannot resolve (see summary.ts).
+export const KIND_LABEL: Record<string, string> = {
+  bid_in_person: "Bid, in person",
+  mail_arrival: "Bid, by mail (must arrive)",
+  electronic: "Bid, electronic",
+  bid_opening: "Bid opening",
+  question: "Questions",
+  briefing: "Briefing session",
+  document_request: "Document request",
+  application: "Application or proposal due",
+  other: "Other",
+};
+export const kindLabel = (k: string | null | undefined): string => KIND_LABEL[k ?? "other"] ?? KIND_LABEL.other!;
+
+export type DeadlineRow = {
+  key: string;
+  kind: string; // the readable label
+  when: string | null; // "16 Oct 2026, 17:00 JST", or null when the item stores no date
+  iso: string | null;
+  ja: string | null; // the date text as written in the cited sentence
+  sid: string | null; // the cited sentence the click opens; null when none is in the export
+  page: number | null;
+  state: State; // the deadlines field's pill, the same one the Fields view shows
+};
+
+// Date text as written: 令和6年10月16日(水) 午後5時00分, 2026年10月16日 17時, with full-width digits too.
+const JA_DATE = /(?:令和|平成|昭和)?[0-9０-９元]+年[0-9０-９]+月[0-9０-９]+日(?:[（(][^）)]{1,3}[）)])?(?:\s*(?:午前|午後)?\s*[0-9０-９]+時(?:\s*[0-9０-９]+分)?)?/g;
+const digits = (s: string) => s.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0));
+
+// First date in the cited sentences whose month and day equal the stored date's; else the first date found.
+// Substring of the original text, never rewritten.
+export function jaDateText(texts: string[], iso: string | null): string | null {
+  const hits = texts.flatMap((t) => t.match(JA_DATE) ?? []);
+  const md = iso ? /^\d{4}-(\d{2})-(\d{2})/.exec(iso) : null;
+  const same = md
+    ? hits.find((h) => {
+        const m = /([0-9]+)月([0-9]+)日/.exec(digits(h));
+        return m && Number(m[1]) === Number(md[1]) && Number(m[2]) === Number(md[2]);
+      })
+    : undefined;
+  return same ?? hits[0] ?? null;
+}
+
+export function deadlineRows(fx: Fixture, state: (f: Field) => State, formatWhen: (iso: string) => string | null): DeadlineRow[] {
+  const f = fx.fields.find((x) => x.field === "deadlines");
+  if (!f || f.status === "absent") return [];
+  const st = state(f);
+  const rows = f.items.map((i, n): DeadlineRow => {
+    const sid = i.citations.find((id) => id in fx.sentences) ?? null;
+    const when = i.datetime ? formatWhen(i.datetime) : null;
+    const texts = i.citations.flatMap((id) => fx.sentences[id]?.text_orig ?? []);
+    return {
+      key: `d${n}`,
+      kind: kindLabel(i.kind),
+      when: when ? (i.datetime?.includes("T") ? `${when} JST` : when) : null,
+      iso: when ? (i.datetime ?? null) : null,
+      ja: jaDateText(texts, when ? (i.datetime ?? null) : null),
+      sid,
+      page: sid ? (fx.sentences[sid]?.page ?? null) : null,
+      state: st,
+    };
+  });
+  // By date; items with no stored date go last. Array.sort is stable, so ties keep the extractor's order.
+  return rows.sort((a, b) => (a.iso && b.iso ? (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0) : a.iso ? -1 : b.iso ? 1 : 0));
+}
