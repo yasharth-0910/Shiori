@@ -32,7 +32,7 @@ export function fieldsCsv(fx: Fixture, d: CsvDeps): string {
   const rows = fx.fields.map((f) => {
     const ids = uniq([...f.citations, ...f.items.flatMap((i) => i.citations)]);
     const found = ids.filter((id) => id in fx.sentences);
-    const pages = uniq(found.map((id) => fx.sentences[id]!.page)).sort((a, b) => a - b);
+    const pages = uniq(found.map((id) => fx.sentences[id]!.page).filter((p) => p > 0)).sort((a, b) => a - b);
     let en = "";
     let ja = f.value_ja ?? "";
     if (f.items.length) {

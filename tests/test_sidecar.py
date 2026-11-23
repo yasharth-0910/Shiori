@@ -1043,3 +1043,50 @@ def test_doc_type_is_read_from_the_first_page_unless_given(tmp_path):
             got["plain"]["doc_type"] == "notice" and got["plain"]["fields_total"] == 23
         )
         assert got["given"]["doc_type"] == "bid_instructions"
+
+
+HTML_NOTICE = """<html><body><div id="main_body"><h1>入札公告</h1>
+<p>1 競争入札に参加する者に必要な資格</p>
+<p>(1) 指名停止を受けている期間中の者でないこと。</p>
+<p>2 入札書の提出期限 令和８年10月15日13時30分<br>までに提出すること。</p>
+<h2>５ Summary</h2>
+<p>(1) Contracting entity: Ministry of Invented Affairs</p>
+<script>fetch("http://example.invalid/x")</script>
+</div></body></html>"""
+
+
+def test_html_notice_through_to_fields_with_anchors(tmp_path):
+    f = tmp_path / "invented.html"
+    f.write_text(HTML_NOTICE, encoding="utf-8")
+    with Server(create_app(TOKEN, lists=fake_lists)) as srv:
+        assert (
+            srv.call("POST", "/documents", {"path": str(tmp_path / "x.htm")})[0] == 400
+        )  # missing file
+        doc_id = srv.call("POST", "/documents", {"path": str(f)})[1]["doc_id"]
+        got = wait_for(srv, doc_id, "done")
+        assert got["pages"] is None and got["doc_type"] == "notice"
+        out = srv.call("GET", f"/documents/{doc_id}/fields")[1]
+    assert (
+        out["format"] == "html" and "fetch(" not in out["text"]
+    )  # scripts never reach the text
+    assert out["en_summary"]["start"] < out["en_summary"]["end"] <= len(out["text"])
+    assert out["text"][out["en_summary"]["start"] :].lstrip().startswith("５ Summary")
+    cited = [s for s in out["sentences"].values() if "指名停止" in s["text_orig"]]
+    assert cited
+    for s in out["sentences"].values():
+        a = s["anchor"]
+        assert out["text"][a["start"] : a["end"]].replace("\n", "") == s[
+            "text_orig"
+        ].replace("\n", "")
+        assert s["boxes"] == [] and s["page"] == 0
+
+
+def test_pdf_fields_have_no_html_keys(tmp_path):
+    pdf = make_pdf(tmp_path / "invented.pdf")
+    with Server(create_app(TOKEN)) as srv:
+        doc_id = srv.call("POST", "/documents", {"path": str(pdf)})[1]["doc_id"]
+        wait_for(srv, doc_id, "done")
+        out = srv.call("GET", f"/documents/{doc_id}/fields")[1]
+    assert {"text", "en_summary"}.isdisjoint(out) and all(
+        "anchor" not in s for s in out["sentences"].values()
+    )

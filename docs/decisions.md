@@ -1034,3 +1034,11 @@ Context: the 提案指示書 cue in `core/shiori_core/doctype.py` was written af
 Decision: (1) The rule is kept: it is a generic vocabulary cue, and it changed no type among the 224 non-test documents. (2) 52bba5f9 is excluded from the milestone test-split run and from any test labeling. The milestone report must say so. (3) The split file is not edited.
 Alternatives: removing the cue (rejected: it is generic and changed nothing outside test); editing the split file (rejected: the split is frozen, D-40).
 Consequences: the test set loses one document, so the test count in reports is one lower than the split file's. Anyone choosing test documents to label or run must skip 52bba5f9.
+
+## D-103: The app opens saved HTML notices: sidecar accepts them and returns the text with anchors
+Date: 2026-11-23
+Status: accepted (Yasharth's go-ahead of 2026-11-23)
+Context: the core ingests HTML with sentences anchored by character offsets (D-37), but the sidecar only took PDFs and its `/fields` answer carried no text or anchors, so the app could not show an HTML notice.
+Decision: (1) `POST /documents` accepts `.pdf`, `.html` and `.htm`. For HTML the worker calls `load_html_document` instead of `read_pages` and `segment`, the doc type is `notice` unless given (there is no first page for `detect_doc_type`), and everything after segmentation is unchanged. (2) `Fields` gains optional `format`, `text` and `en_summary`; `SentenceOut` gains optional `anchor`. They are absent for PDFs (`response_model_exclude_unset`), so PDF answers are byte-identical. (3) The app shows the text as plain paragraphs, never the page: only React text nodes, no raw HTML sink anywhere in `app/` (tested). The English Summary is labelled as the page's own text. (4) Offsets in the app are code points, like Python's, so a character outside the BMP does not shift a highlight. No change in `core/`, prompts, schema or EXTRACTOR_VERSION; no new bridge function.
+Alternatives: a new bridge function that reads the HTML in main (rejected: it would put ingest in the Electron process); rendering the page in a sandboxed iframe (rejected: the page could still fetch, and the highlight would not land on character offsets).
+Consequences: one more case in the Library (page 0, "Text" chip). Only cited sentences have an anchor in the payload. Not yet checked in the real app: see the project log.

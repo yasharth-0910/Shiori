@@ -1,8 +1,9 @@
 # ruff: noqa: E501
 """The sidecar: a loopback HTTP server that runs the core pipeline on one PDF at a time.
 
-    POST /documents            {"path": ..., "doc_type": optional} -> {"doc_id": ...}; without doc_type the
-                               type is read from the first page (shiori_core.doctype, D-92)
+    POST /documents            {"path": ..., "doc_type": optional} -> {"doc_id": ...}; path is a .pdf, or a
+                               saved .html / .htm notice (D-37, D-103). Without doc_type a PDF's type is
+                               read from the first page (shiori_core.doctype, D-92); an HTML notice is "notice"
     GET  /documents/{id}/status?since=N -> {"doc_id", "stage", "pages", "detail", "error",
                                             "seconds", "stage_elapsed", "sentences", "fields_total",
                                             "answered", "doc_type", "events", "cursor"} (D-90, D-92)
@@ -34,6 +35,7 @@ from shiori_core.doctype import detect_doc_type, first_page_lines
 from shiori_core.extract import rules
 from shiori_core.extract.rules import Extracted
 from shiori_core.fields import BY_ID, FIELD_IDS, SPECS, Status
+from shiori_core.html_ingest import load_html_document
 from shiori_core.ingest import read_pages
 from shiori_core.models import Sentence
 from shiori_core.segment import segment
@@ -56,6 +58,7 @@ STAGES = (
 MAX_EVENTS = 200  # the live stream keeps this many, newest last (D-90)
 SHOWN_CHARS = 200  # a sentence in an event is cut to this
 VALUE_CHARS = 400  # an answer value in an event is cut to this
+HTML_SUFFIXES = (".html", ".htm")
 DOC_TYPES = {t for s in SPECS for t in s.applies_to}
 
 # (doc_type, Japanese sentences) -> {field: Extracted}. `rules.extract` and, when a
@@ -71,12 +74,18 @@ class Box(BaseModel):
     bbox: tuple[float, float, float, float]
 
 
+class Anchor(BaseModel):
+    start: int
+    end: int
+
+
 class SentenceOut(BaseModel):
     page: int
     text_orig: str
     section_path: list[str]
     section_titles: list[str]
     boxes: list[Box]
+    anchor: Anchor | None = None  # HTML only: offsets into Fields.text (D-37)
 
 
 class Check(BaseModel):
@@ -111,6 +120,11 @@ class Fields(BaseModel):
     pdf: str  # the file's base name; the main process knows where it lives
     fields: list[Field]
     sentences: dict[str, SentenceOut]
+    format: Literal["pdf", "html"] = "pdf"
+    text: str | None = None  # HTML only: the extracted text the anchors index into
+    en_summary: Anchor | None = (
+        None  # HTML only: the page's own English Summary section, when it has one
+    )
 
 
 class TranslateRequest(BaseModel):
@@ -153,6 +167,7 @@ def build_fields(
     doc_type: str,
     sentences: list[Sentence],
     found: dict[str, Extracted],
+    html_text: str | None = None,
 ) -> Fields:
     """One entry per v1 field: found and checked, or absent ("not found"). Checks are
     computed here, once, and stored; the app never recomputes them."""
@@ -183,10 +198,29 @@ def build_fields(
             section_path=ja[i].section_path,
             section_titles=ja[i].section_titles,
             boxes=[Box(page=b.page, bbox=b.bbox) for b in ja[i].boxes],
+            **(
+                {"anchor": Anchor(start=a.start, end=a.end)}
+                if (a := ja[i].anchor)
+                else {}
+            ),
         )
         for i in sorted(cited)
     }
-    return Fields(doc_id=doc_id, pdf=filename, fields=out, sentences=sents)
+    extra: dict = {}
+    if html_text is not None:
+        extra = {"format": "html", "text": html_text}
+        runs: list[list[Sentence]] = [
+            []
+        ]  # the Summary is the longest unbroken run of English sentences (D-37)
+        for s in sentences:
+            if s.language == "en" and s.anchor:
+                runs[-1].append(s)
+            elif runs[-1]:
+                runs.append([])
+        best = [a for x in max(runs, key=len) if (a := x.anchor)]
+        if best:
+            extra["en_summary"] = Anchor(start=best[0].start, end=best[-1].end)
+    return Fields(doc_id=doc_id, pdf=filename, fields=out, sentences=sents, **extra)
 
 
 # --- jobs ------------------------------------------------------------------------------------
@@ -372,9 +406,14 @@ class Worker:
         _running = job
         job.check_cancel()
         job.go("ingest")
-        doc = read_pages(job.path)
-        job.pages = len(doc.pages)
-        if (
+        html = job.path.suffix.lower() in HTML_SUFFIXES
+        doc = load_html_document(job.path) if html else read_pages(job.path)
+        job.pages = len(doc.pages) if not html else None
+        if html:
+            job.doc_type = (
+                "notice" if job.detect else job.doc_type
+            )  # no first page to read (D-103)
+        elif (
             job.detect
         ):  # a rule on the first page's title zone; no cue means notice (D-92)
             job.doc_type = (
@@ -390,7 +429,8 @@ class Worker:
         )
         job.check_cancel()
         job.go("segment")
-        doc.sentences = segment(doc.pages)
+        if not html:
+            doc.sentences = segment(doc.pages)
         sents = doc.sentences
         ja = job.ja = {s.id: s for s in sents if s.language == "ja"}
         job.sentences = len(ja)
@@ -410,7 +450,14 @@ class Worker:
                     emit_answer(got[fid])
         job.check_cancel()
         job.go("verify")
-        job.result = build_fields(job.doc_id, doc.filename, job.doc_type, sents, found)
+        job.result = build_fields(
+            job.doc_id,
+            doc.filename,
+            job.doc_type,
+            sents,
+            found,
+            doc.text if html else None,
+        )
         log.info("verified doc=%s fields=%d", job.doc_id[:8], len(found))
         off = found.get(
             "contracting_officer"
@@ -621,9 +668,9 @@ def create_app(
     @app.post("/documents")
     def post_document(body: NewDocument) -> dict:
         path = Path(body.path)
-        if path.suffix.lower() != ".pdf" or not path.is_file():
+        if path.suffix.lower() not in (".pdf", *HTML_SUFFIXES) or not path.is_file():
             raise HTTPException(
-                400, "not a readable pdf path"
+                400, "not a readable pdf or html path"
             )  # the path is not echoed
         if body.doc_type is not None and body.doc_type not in DOC_TYPES:
             raise HTTPException(400, "unknown doc_type")

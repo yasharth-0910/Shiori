@@ -265,7 +265,7 @@ function registerIpc(): void {
     let file = PICK;
     if (!file) {
       const win = BrowserWindow.fromWebContents(e.sender);
-      const opts = { properties: ["openFile" as const], filters: [{ name: "PDF", extensions: ["pdf"] }] };
+      const opts = { properties: ["openFile" as const], filters: [{ name: "Tender notice (PDF or saved HTML)", extensions: ["pdf", "html", "htm"] }] };
       const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
       file = r.canceled ? undefined : r.filePaths[0];
     }

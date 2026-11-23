@@ -1,4 +1,5 @@
-"""app/ must not make or reference any network URL (CLAUDE.md hard rule, docs/privacy.md).
+"""app/ must not make or reference any network URL (CLAUDE.md hard rule,
+docs/privacy.md).
 
 Scans the app's own source (not node_modules, build output, the gitignored fixture
 or the lockfile, which names npm registry URLs for dev-time installs). Flags:
@@ -68,7 +69,9 @@ def test_app_has_sources_to_scan() -> None:
 
 
 SIDECAR = "electron/sidecar.ts"  # may name a URL: the sidecar's loopback port (D-83)
-LLAMA = "electron/llama.ts"  # may name a URL (llama-server's loopback port, health check) and import net for a free port (D-84)
+# may name a URL (llama-server's loopback port, health check) and import net for a
+# free port (D-84)
+LLAMA = "electron/llama.ts"
 LOOPBACK_FILES = {SIDECAR, LLAMA}
 # The model download exception (D-100): the ONLY file that may import a network
 # module. It takes a registry id, never a URL from the renderer, requires https,
@@ -99,7 +102,8 @@ def registry_problems(text: str) -> list[str]:
 
 
 def sidecar_problems(text: str) -> list[str]:
-    """In electron/sidecar.ts a URL must start with the HOST constant, which must be 127.0.0.1."""
+    """In electron/sidecar.ts a URL must start with the HOST constant, which must be
+    127.0.0.1."""
     out = [
         p
         for p in problems(text)
@@ -109,7 +113,11 @@ def sidecar_problems(text: str) -> list[str]:
         out.append("net imported twice or used for more")
     if 'const HOST = "127.0.0.1";' not in text:
         out.append("HOST is not the 127.0.0.1 constant")
-    out += [f"fetch target {m.group(1)}" for m in FETCH.finditer(text) if not m.group(1).strip().startswith("`http://${HOST}:")]  # fmt: skip
+    out += [
+        f"fetch target {m.group(1)}"
+        for m in FETCH.finditer(text)
+        if not m.group(1).strip().startswith("`http://${HOST}:")
+    ]
     return out
 
 
@@ -141,9 +149,10 @@ def test_csp_present_and_local_only() -> None:
 
 
 def test_renderer_cannot_reach_any_host() -> None:
-    """The renderer (app/src, index.html) names no host and holds no token; the CSP lets it
-    talk to itself only (shiori://); the only other fetch in the app is the main process's call
-    to the sidecar. A page that can only reach 'self' cannot reach 127.0.0.1 either."""
+    """The renderer (app/src, index.html) names no host and holds no token; the CSP
+    lets it talk to itself only (shiori://); the only other fetch in the app is the
+    main process's call to the sidecar. A page that can only reach 'self' cannot
+    reach 127.0.0.1 either."""
     csp = re.search(
         r'Content-Security-Policy"\s+content="([^"]+)"',
         (APP / "index.html").read_text(),

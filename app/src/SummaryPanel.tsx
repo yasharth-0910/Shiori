@@ -14,8 +14,8 @@ export function SummaryPanel({ fx, onCite }: { fx: Fixture; onCite: (sid: string
         {lines.map((l) => (
           <li key={l.key}>
             {l.text}{" "}
-            <button className="btn sq" aria-label={`Show the source on page ${l.page}`} onClick={() => onCite(l.sid)}>
-              p. {l.page}
+            <button className="btn sq" aria-label={l.page ? `Show the source on page ${l.page}` : "Show the source"} onClick={() => onCite(l.sid)}>
+              {l.page ? `p. ${l.page}` : "Source"}
             </button>
           </li>
         ))}

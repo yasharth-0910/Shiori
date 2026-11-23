@@ -26,7 +26,10 @@ def main(prefix: str) -> None:
 
     row = next(
         r
-        for r in map(json.loads, (ROOT / "data/manifests/documents.jsonl").read_text().splitlines())
+        for r in map(
+            json.loads,
+            (ROOT / "data/manifests/documents.jsonl").read_text().splitlines(),
+        )
         if r.get("doc_id") == doc_id
     )
     if row["license_class"] != "open" or row["format"] != "pdf":
@@ -34,32 +37,53 @@ def main(prefix: str) -> None:
 
     sentences = {
         s["id"]: s
-        for s in json.loads((ROOT / f"data/processed/{doc_id}/sentences.json").read_text())["sentences"]
+        for s in json.loads(
+            (ROOT / f"data/processed/{doc_id}/sentences.json").read_text()
+        )["sentences"]
     }
 
     fields = []
     cited: dict[str, dict] = {}  # sentence id -> what the viewer needs; cited ids only
     for line in labels[0].read_text().splitlines():
         lab = json.loads(line)
-        items = (lab["normalized"] or {}).get("items") if isinstance(lab["normalized"], dict) else None
-        # datetime (deadlines), kind (deadlines, eligibility) and polarity (eligibility) are copied
-        # as the label stores them, only when it has them (D-80); nothing is parsed from text here.
+        items = (
+            (lab["normalized"] or {}).get("items")
+            if isinstance(lab["normalized"], dict)
+            else None
+        )
+        # datetime (deadlines), kind (deadlines, eligibility) and polarity
+        # (eligibility) are copied as the label stores them, only when it has them
+        # (D-80); nothing is parsed from text here.
         items = [
-            {"text_ja": i.get("text_ja"), "text_en": i.get("text_en"), "citations": i.get("citations", [])}
-            | {k: i[k] for k in ("datetime", "kind", "polarity") if i.get(k) is not None}
+            {
+                "text_ja": i.get("text_ja"),
+                "text_en": i.get("text_en"),
+                "citations": i.get("citations", []),
+            }
+            | {
+                k: i[k]
+                for k in ("datetime", "kind", "polarity")
+                if i.get(k) is not None
+            }
             for i in items or []
         ]
-        ids = list(dict.fromkeys(lab["citations"] + [c for i in items for c in i["citations"]]))
+        ids = list(
+            dict.fromkeys(lab["citations"] + [c for i in items for c in i["citations"]])
+        )
         for sid in ids:
             s = sentences.get(sid)
-            if s:  # a cited id that does not exist stays out: the app shows it as missing
+            if (
+                s
+            ):  # a cited id that does not exist stays out: the app shows it as missing
                 cited[sid] = {
                     "page": s["page"],
                     "text_orig": s["text_orig"],
                     "section_path": s["section_path"],
                     "section_titles": s["section_titles"],
                     # PDF points, origin top-left, as displayed (core/models.py)
-                    "boxes": [{"page": b["page"], "bbox": b["bbox"]} for b in s["boxes"]],
+                    "boxes": [
+                        {"page": b["page"], "bbox": b["bbox"]} for b in s["boxes"]
+                    ],
                 }
         fields.append(
             {
@@ -69,17 +93,27 @@ def main(prefix: str) -> None:
                 "value_ja": lab["value_ja"],
                 "items": items,
                 "citations": lab["citations"],
-                # the pipeline's own results, copied as stored; the app never recomputes them
-                "checks": [{"name": c["name"], "passed": c["passed"]} for c in lab["provenance"]["auto_checks"]],
+                # the pipeline's own results, copied as stored; the app never
+                # recomputes them
+                "checks": [
+                    {"name": c["name"], "passed": c["passed"]}
+                    for c in lab["provenance"]["auto_checks"]
+                ],
             }
         )
 
     OUT.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / row["path"], OUT / "doc.pdf")
     (OUT / "fixture.json").write_text(
-        json.dumps({"doc_id": doc_id, "pdf": "doc.pdf", "fields": fields, "sentences": cited}, ensure_ascii=False, indent=1)
+        json.dumps(
+            {"doc_id": doc_id, "pdf": "doc.pdf", "fields": fields, "sentences": cited},
+            ensure_ascii=False,
+            indent=1,
+        )
     )
-    print(f"doc {doc_id[:8]}: {len(fields)} fields, {len(cited)} cited sentences -> {OUT}")
+    print(
+        f"doc {doc_id[:8]}: {len(fields)} fields, {len(cited)} cited sentences -> {OUT}"
+    )
 
 
 if __name__ == "__main__":

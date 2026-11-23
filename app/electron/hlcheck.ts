@@ -10,9 +10,11 @@ import { createHash } from "node:crypto";
 
 type Bbox = [number, number, number, number];
 type Box = { page: number; bbox: Bbox };
+type Anchor = { start: number; end: number };
 type Fx = {
   fields: { field: string; value_ja?: string | null; citations?: string[]; items?: { citations?: string[] }[] }[];
-  sentences: Record<string, { page: number; text_orig: string; boxes: Box[] }>;
+  sentences: Record<string, { page: number; text_orig: string; boxes: Box[]; anchor?: Anchor }>;
+  text?: string;
 };
 
 // Card labels, copied from app/src/fields.ts (only the fields this check can click).
@@ -45,12 +47,46 @@ const READ = `(() => {
   };
 })()`;
 
+// The HTML text viewer: each highlighted piece is a .thl span with data-start and data-end, offsets in code points
+// (app/src/textmath.ts). Returns the pieces' offsets, their text, and whether the first one is on screen.
+const READ_TEXT = `(() => {
+  const holder = document.querySelector(".textscroll").getBoundingClientRect();
+  const pieces = [...document.querySelectorAll(".thl")];
+  const r = pieces[0]?.getBoundingClientRect();
+  return {
+    toolbar: null, overlay: [],
+    pieces: pieces.map((x) => ({ start: Number(x.dataset.start), end: Number(x.dataset.end), text: x.textContent })),
+    visible: !!r && r.bottom > holder.top && r.top < holder.bottom,
+  };
+})()`;
+
+// Exact comparison against the stored anchor. Pieces must cover every character of [start, end) except the line breaks
+// between paragraphs, start where the anchor starts and end where it ends, and spell the cited sentence. Only booleans
+// and offsets leave this function, never text.
+function htmlRow(seen: { pieces: { start: number; end: number; text: string }[]; visible: boolean }, fx: Fx, s: { text_orig: string; anchor?: Anchor } | undefined) {
+  const a = s?.anchor ?? null;
+  const cps = Array.from(fx.text ?? "");
+  const ps = seen.pieces;
+  const got = ps.length ? { start: Math.min(...ps.map((x) => x.start)), end: Math.max(...ps.map((x) => x.end)) } : null;
+  const want = a ? cps.slice(a.start, a.end).filter((c) => c !== "\n").length : 0;
+  const have = ps.reduce((n, x) => n + (x.end - x.start), 0);
+  const strip = (t: string) => t.replace(/\n/g, "");
+  return {
+    html: {
+      highlighted: got, stored: a, pieces: ps.length, visible: seen.visible,
+      offsets_exact: !!a && !!got && got.start === a.start && got.end === a.end && have === want,
+      text_matches: !!s && strip(ps.map((x) => x.text).join("")) === strip(s.text_orig),
+    },
+  };
+}
+
 export async function runHighlightCheck(
   win: BrowserWindow,
   dir: string,
   pdf: string,
   getFields: (docId: string) => Promise<unknown>,
 ): Promise<void> {
+  const isHtml = /\.html?$/i.test(pdf);
   const docId = createHash("sha256").update(fs.readFileSync(pdf)).digest("hex");
   const prefix = docId.slice(0, 8);
   fs.mkdirSync(dir, { recursive: true });
@@ -64,7 +100,7 @@ export async function runHighlightCheck(
     await waitFor(`[...document.querySelectorAll("button")].some((x) => x.textContent === "Add document")`, 30000);
     await js(`[...document.querySelectorAll("button")].find((x) => x.textContent === "Add document").click()`);
     console.log(`hlcheck ${prefix}: added, waiting for extraction`);
-    await waitFor(`document.querySelector(".fhead") && document.querySelector(".page canvas")`, 900000);
+    await waitFor(`document.querySelector(".fhead") && document.querySelector("${isHtml ? ".textdoc" : ".page canvas"}")`, 900000);
     await sleep(2000); // let the first pages draw
     const fx = (await getFields(docId)) as Fx;
     console.log(`hlcheck ${prefix}: workspace up, ${fx.fields.length} fields`);
@@ -105,7 +141,7 @@ export async function runHighlightCheck(
       );
       if (!clicked) { console.log(`hlcheck ${prefix}: ${f.field} skipped (no card or no chip)`); continue; }
       await sleep(1500); // scroll to the highlight, then the toolbar page settles
-      const seen = await js(READ);
+      const seen = await js(isHtml ? READ_TEXT : READ);
       const shot = `${prefix}_${f.field}.png`;
       fs.writeFileSync(path.join(dir, shot), (await win.webContents.capturePage()).toPNG());
       rows.push({
@@ -114,9 +150,10 @@ export async function runHighlightCheck(
         same_sentence: clicked.ja === s.text_orig, // the chip clicked is the sentence whose boxes are compared
         toolbar_page: seen.toolbar, overlay: seen.overlay,
         stored: s.boxes, stored_page: s.page, shot,
+        ...(isHtml ? htmlRow(seen, fx, s) : {}),
       });
       save();
-      console.log(`hlcheck ${prefix}: ${f.field} clicked, overlay rects ${seen.overlay.length}`);
+      console.log(`hlcheck ${prefix}: ${f.field} clicked, ${isHtml ? `pieces ${seen.pieces.length}` : `overlay rects ${seen.overlay.length}`}`);
     }
     // Deadlines tab: click up to 4 rows. A row carries the compared sentence id in data-sid and its page in the p. chip.
     if (!only || only === "deadlines") {
@@ -133,19 +170,20 @@ export async function runHighlightCheck(
         );
         if (!got) { console.log(`hlcheck ${prefix}: deadlines row ${k} skipped (disabled)`); continue; }
         await sleep(1500);
-        const seen = await js(READ);
+        const seen = await js(isHtml ? READ_TEXT : READ);
         const shot = `${prefix}_deadlines_tab_${k}.png`;
         fs.writeFileSync(path.join(dir, shot), (await win.webContents.capturePage()).toPNG());
         const s = fx.sentences[got.sid];
         rows.push({
           doc: prefix, field: `deadlines_tab:${k}`, sentence: got.sid,
           card_page: Number(/\d+/.exec(got.card ?? "")?.[0]) || null,
-          same_sentence: !!s && s.page === (Number(/\d+/.exec(got.card ?? "")?.[0]) || null),
+          same_sentence: !!s && (isHtml ? !!s.anchor : s.page === (Number(/\d+/.exec(got.card ?? "")?.[0]) || null)),
           toolbar_page: seen.toolbar, overlay: seen.overlay,
           stored: s?.boxes ?? [], stored_page: s?.page ?? null, shot,
+          ...(isHtml ? htmlRow(seen, fx, s) : {}),
         });
         save();
-        console.log(`hlcheck ${prefix}: deadlines row ${k} (${got.kind}) clicked, overlay rects ${seen.overlay.length}`);
+        console.log(`hlcheck ${prefix}: deadlines row ${k} (${got.kind}) clicked, ${isHtml ? `pieces ${seen.pieces.length}` : `overlay rects ${seen.overlay.length}`}`);
       }
     }
     // With SHIORI_EXPORT_DIR set (main.ts writes there instead of opening the dialog), click Export and report the note shown.

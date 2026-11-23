@@ -3,7 +3,7 @@
 
 For each document: launches the app with SHIORI_PICK, the model on and SHIORI_HLCHECK (app/electron/hlcheck.ts),
 which clicks up to 12 citation chips and saves a screenshot per click. This script then reads the raw records and
-writes data/cache/highlight_check/results.tsv and prints the summary. After the field cards it also opens the Deadlines tab and clicks up to 4 rows (rows named deadlines_tab:N, screenshots <prefix>_deadlines_tab_N.png). Run: uv run python scripts/highlight_check.py
+writes data/cache/highlight_check/results.tsv and prints the summary. After the field cards it also opens the Deadlines tab and clicks up to 4 rows (rows named deadlines_tab:N, screenshots <prefix>_deadlines_tab_N.png). An HTML document (.html) is checked in the text viewer: the highlighted character range must equal the stored anchor exactly. Run: uv run python scripts/highlight_check.py
 [--no-build] [--only <doc prefix>[:<field>]]. Quit any other running Shiori app first (a second llama-server is refused).
 """
 
@@ -21,11 +21,14 @@ DOCS = [
     "data/raw/_samples/wakayama_pref/2f2f5bd332965253eed43d739e56e7859b149afa0d157ea3c89dfdd7d0d8b419.pdf",
     "data/raw/digital/74aed2a543b8a0af2e09f02b9887244c8c1d1f67f7bdca8f31af2ff68e812873.pdf",
     "data/raw/wakayama_pref/53320d90cf87d7db2f0caef75e1b10061f26f67d00af1f8597e4be9dbbf4d9bb.pdf",
+    # HTML notice (p-portal, open licence, dev split): the text viewer, compared by character offsets, not IoU
+    "data/raw/p-portal/136dfba9ee5931a6913c268344daa03160bfd2623b75fc76eb6da34181f4303c.html",
 ]
 MODEL = ROOT / "models" / "Qwen3.5-9B-Q4_K_M.gguf"
 COLS = [
     "doc", "field", "card_page", "opened_page", "overlay_rect", "stored_box", "iou", "in_page", "screenshot",
     "sentence", "overlay_page", "toolbar_page", "in_view", "n_overlay", "n_stored", "same_sentence",
+    "html_highlight", "html_stored", "offsets_exact", "text_matches",
 ]  # fmt: skip
 
 
@@ -54,7 +57,23 @@ def fmt(b: list[float] | None) -> str:
     return "" if b is None else "[" + ", ".join(f"{v:.1f}" for v in b) + "]"
 
 
+def html_row_of(r: dict) -> dict:
+    """An HTML document row: the highlighted character range against the stored anchor. Exact match, no IoU."""
+    h = r["html"]
+    rng = lambda x: "" if not x else f"[{x['start']}, {x['end']}]"  # noqa: E731
+    return {
+        "doc": r["doc"], "field": r["field"], "card_page": "", "opened_page": "", "overlay_rect": "", "stored_box": "",
+        "iou": "", "in_page": "", "screenshot": r["shot"], "sentence": r["sentence"], "overlay_page": "", "toolbar_page": "",
+        "in_view": str(h["visible"]).lower(), "n_overlay": h["pieces"], "n_stored": 0,
+        "same_sentence": str(r["same_sentence"]).lower(), "html_highlight": rng(h["highlighted"]),
+        "html_stored": rng(h["stored"]), "offsets_exact": str(h["offsets_exact"]).lower(),
+        "text_matches": str(h["text_matches"]).lower(),
+    }  # fmt: skip
+
+
 def row_of(r: dict) -> dict:
+    if "html" in r:
+        return html_row_of(r)
     ov = r["overlay"]
     opage = ov[0]["page"] if ov else None
     opened = opage if opage is not None else r["toolbar_page"]
@@ -76,6 +95,7 @@ def row_of(r: dict) -> dict:
         "toolbar_page": r["toolbar_page"],
         "in_view": "" if not ov else str(any(x["visible"] for x in ov)).lower(),
         "n_overlay": len(ov), "n_stored": len(r["stored"]), "same_sentence": str(r["same_sentence"]).lower(),
+        "html_highlight": "", "html_stored": "", "offsets_exact": "", "text_matches": "",
     }  # fmt: skip
 
 
@@ -131,6 +151,12 @@ def main() -> int:
         + "\n"
         + "".join("\t".join(str(r[c]) for c in COLS) + "\n" for r in rows)
     )
+    html = [r for r in rows if r["offsets_exact"] != ""]
+    rows = [r for r in rows if r["offsets_exact"] == ""]
+    if html:
+        print(
+            f"html clicks {len(html)} | offset mismatches {sum(r['offsets_exact'] != 'true' for r in html)} | highlighted text differs from the sentence {sum(r['text_matches'] != 'true' for r in html)} | not in view {sum(r['in_view'] != 'true' for r in html)} | chip not the compared sentence {sum(r['same_sentence'] != 'true' for r in html)}"
+        )
     wrong = [r for r in rows if r["opened_page"] != r["card_page"]]
     low = [r for r in rows if r["iou"] != "" and float(r["iou"]) < 0.5]
     none = [r for r in rows if r["n_overlay"] == 0]

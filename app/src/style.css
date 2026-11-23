@@ -223,3 +223,13 @@ button:disabled { cursor: default; opacity: 0.5; }
 .hash { font-size: 11px; word-break: break-all; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 .drow.l { justify-content: flex-start; align-items: center; }
 .mcard progress { width: 100%; }
+
+/* Text viewer (HTML notices) */
+.textscroll { flex: 1; overflow: auto; padding: 12px 0; background: var(--canvas); }
+.textdoc { max-width: 760px; margin: 0 auto; padding: 16px 20px; background: #fff; box-shadow: 0 1px 4px rgba(30, 30, 30, 0.25); }
+.tp { margin: 0 0 8px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thl { background: rgba(186, 51, 36, 0.14); outline: 1px solid var(--red); border-radius: 3px; }
+.thit { background: rgba(43, 66, 99, 0.14); outline: 1px solid var(--indigo-line); border-radius: 3px; }
+.thit.cur { outline: 2px solid var(--indigo); }
+.ensum { margin-top: 16px; padding: 10px 14px; border-left: 3px solid var(--indigo-line); background: var(--indigo-tint); }
+.ensumlabel { margin-bottom: 8px; font-size: 11px; font-weight: 500; color: var(--indigo); }

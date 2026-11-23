@@ -91,7 +91,7 @@ export function deadlineRows(fx: Fixture, state: (f: Field) => State, formatWhen
       local: when && i.datetime ? yourTime(i.datetime, Intl.DateTimeFormat().resolvedOptions().timeZone) : null,
       ja,
       sid,
-      page: sid ? (fx.sentences[sid]?.page ?? null) : null,
+      page: sid ? (fx.sentences[sid]?.page || null) : null, // HTML sentences have page 0: no page
       state: st,
     };
   });

@@ -3,6 +3,7 @@ import { groupOf, labelOf, STATES } from "./fields";
 import { collapsedLine, notApplicable, scalarAnswer, valueFirst, worthShowing, type En } from "./fieldview";
 import { MachineEn } from "./MachineEn";
 import { PdfView, type Find } from "./PdfView";
+import { TextView } from "./TextView";
 import { DeadlinesPanel } from "./DeadlinesPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { deadlineRows } from "./deadlines";
@@ -144,7 +145,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
         <span className="ja" lang="ja">{s?.text_orig ?? "Sentence missing from this export."}</span>
         {s && (
           <span className="srcmeta">
-            <span className="pgchip">p. {s.page}</span>
+            <span className="pgchip">{s.page ? `p. ${s.page}` : "Text"}</span>
             <span className="meta">{s.section_path.map((p, i) => `${p} ${s.section_titles[i] ?? ""}`.trim()).join(" > ") || "No section"}</span>
           </span>
         )}
@@ -317,7 +318,11 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
           </>
         )}
       </section>
-      <PdfView url={fx.pdf} active={sentence} find={find} onFindCount={setHitCount} />
+      {fx.format === "html" ? (
+        <TextView text={fx.text ?? ""} enSummary={fx.en_summary ?? null} active={sentence?.anchor ?? null} find={find} onFindCount={setHitCount} />
+      ) : (
+        <PdfView url={fx.pdf} active={sentence} find={find} onFindCount={setHitCount} />
+      )}
     </div>
   );
 }
