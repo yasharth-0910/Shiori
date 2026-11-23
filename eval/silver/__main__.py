@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""uv run python -m eval.silver [--local-focused] {keys,probe,status,plan,run,daemon,shadow,repair,resolve,report,reopen,export,import,calibrate,show,review-stats,replay}
+"""uv run python -m eval.silver [--local-focused] {keys,probe,status,plan,run,daemon,shadow,repair,resolve,report,reopen,export,import,calibrate,show,review-stats,replay,webimport}
 (see --help)."""
 
 import argparse
@@ -278,6 +278,10 @@ def main(argv: list[str]) -> int:
     cal.add_argument("answers_a", type=Path)
     cal.add_argument("answers_b", type=Path)
     sub.add_parser(
+        "webimport",
+        help="store Gemini web-chat answers (<dir>/<prefix>.md) as the raw answers of labeler web (D-104)",
+    ).add_argument("folder", type=Path)
+    sub.add_parser(
         "show", help="print a document's Japanese sentences (id | section | text)"
     ).add_argument("doc", help="doc id prefix")
     a = ap.parse_args(argv)
@@ -419,6 +423,13 @@ def main(argv: list[str]) -> int:
         print(calibrate(a.answers_a.read_text(), a.answers_b.read_text(),
                         a.answers_a.name, a.answers_b.name), end="")  # fmt: skip
         return 0
+    if a.cmd == "webimport":
+        from eval.silver.webimport import REPORT, webimport
+
+        text, n = webimport(a.folder)
+        print(text)
+        print(f"wrote {REPORT}; {n} failures or refusals")
+        return 1 if n else 0
     if a.cmd == "show":
         from eval.silver.prompt import line
         from eval.silver.run import ja_sentences
