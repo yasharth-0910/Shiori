@@ -132,3 +132,55 @@ Count: 23 of 190 asked fields (23 without the 5 settled).
 - Silver labels, 10 documents, one run, one machine. Small n: a single field moves a rate by several points.
 - The 5 settled items wait for a native reader; the second column shows what they change.
 - Item-level precision and recall for the three list fields are in the dev reports only; here a list field counts as one field (every item must pair).
+
+## Breakdown of the 190 fields (added after the run)
+
+Computed from this report's own tables (verified and not found per field, and the Wrong Verified answers list) plus the status of each test label line (present, absent, see_other_document; read only, counts only). No re-run, no model call. The run did not save per-field predictions (the partial file holds document ids and a record count only), so nothing here comes from the model's raw answers.
+
+How the parts are derived per field: shown = asked minus not found; shown wrong = rows in the Wrong Verified answers list; shown fully right = shown minus shown wrong; Not found correct = verified minus shown fully right (label says absent, answer absent); Not found over-abstained = not found minus Not found correct minus see_other_document (label has a value, answer absent); the last column is Not found where the label says "see other document", which the scorer does not count as a match.
+
+| field | asked | shown, fully right | shown, wrong | Not found, correct | Not found, over-abstained | Not found, label says see other document |
+|---|---|---|---|---|---|---|
+| award_method | 8 | 2 | 0 | 0 | 5 | 1 |
+| bid_bond | 8 | 2 | 0 | 1 | 2 | 3 |
+| contact | 8 | 0 | 0 | 0 | 8 | 0 |
+| contracting_officer | 8 | 3 | 0 | 3 | 2 | 0 |
+| deadlines | 8 | 1 | 6 | 0 | 1 | 0 |
+| delivery_deadline | 10 | 0 | 0 | 9 | 1 | 0 |
+| delivery_location | 10 | 0 | 0 | 4 | 4 | 2 |
+| eligibility | 8 | 1 | 6 | 1 | 0 | 0 |
+| issuer_org | 10 | 1 | 0 | 1 | 8 | 0 |
+| item_category | 5 | 0 | 0 | 2 | 3 | 0 |
+| language_currency | 8 | 3 | 0 | 5 | 0 | 0 |
+| notice_date | 5 | 5 | 0 | 0 | 0 | 0 |
+| performance_bond | 8 | 2 | 0 | 1 | 2 | 3 |
+| performance_period | 10 | 0 | 0 | 1 | 8 | 1 |
+| procurement_type | 8 | 3 | 0 | 1 | 4 | 0 |
+| required_documents | 8 | 1 | 6 | 0 | 1 | 0 |
+| scope_summary | 10 | 0 | 0 | 0 | 3 | 7 |
+| spec_access | 8 | 0 | 0 | 1 | 2 | 5 |
+| submission_modes | 8 | 0 | 3 | 0 | 5 | 0 |
+| tax_basis | 8 | 7 | 0 | 1 | 0 | 0 |
+| title | 10 | 5 | 1 | 0 | 4 | 0 |
+| unified_qualification | 8 | 2 | 1 | 5 | 0 | 0 |
+| wto_covered | 8 | 2 | 0 | 6 | 0 | 0 |
+| total | 190 | 40 | 23 | 42 | 63 | 22 |
+
+Totals, all 190 asked fields:
+
+| part | count |
+|---|---|
+| Shown, fully right (value matches, cited sentence in common with the label) | 40 |
+| Shown, wrong | 23 |
+| Shown, total | 63 |
+| Not found, correct (label absent, answer absent) | 42 |
+| Not found, over-abstained (label has a value) | 63 |
+| Not found, label says see other document | 22 |
+| Not found, total | 127 |
+| All asked | 190 |
+
+Reproducing the 82: 40 shown fully right + 42 Not found correct = 82 of 190 (43%). The other 108 = 23 shown wrong + 63 over-abstained + 22 see other document. The 63 over-abstained matches "63 of 126" in the headline table and the 23 matches "Wrong value shown".
+
+Partly right (list fields): not measured here. Scoring is all or nothing per field: a list field is right only when every item pairs, so a list that got some items right is counted in "shown, wrong". Of the 23 shown wrong, 18 are in the three list fields (eligibility 6, deadlines 6, required_documents 6); the other 5 are submission_modes 3, title 1, unified_qualification 1. How many of those 18 were partly right cannot be recovered without the saved predictions, and re-running was out of scope. Verified on a list field means each shown item is cited, not that the list is complete.
+
+All numbers above are for all items (190). The "without the 5 settled" figures are in the Headline table: 81 of 185 (44%).

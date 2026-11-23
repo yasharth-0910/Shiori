@@ -89,6 +89,8 @@ The app's own quit line was "renderer requests blocked: 0". Sampled, not a packe
 and it does not cover other processes on the machine.
 <!-- net_sample:end -->
 
+Real model download (2026-11-22): through the Setup screen, Gemma 4 E4B, 4.98 GB, about 18 minutes, SHA-256 verified against the registry hash. The terminal log shows the `download_done` event. Figures are from the terminal log of that run; no packet capture was taken during it.
+
 ## Checklist (must all pass before release)
 
 - [ ] Packet capture (e.g. Little Snitch on Mac, Wireshark) during a full session shows zero outbound connections after model setup

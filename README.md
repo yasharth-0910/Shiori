@@ -62,10 +62,10 @@ What was measured:
 - A network sample (2026-11-23, [`scripts/net_sample.py`](scripts/net_sample.py), result in `docs/privacy.md`): during one full extraction of the Wakayama notice above, every 2 seconds the script listed the internet sockets of the app, the sidecar and llama-server. 103 samples, no remote endpoint outside this machine, no socket listening on a non-loopback address, and the app's quit line said "renderer requests blocked: 0". This is a sample, not a packet capture, so a connection shorter than 2 seconds could be missed.
 - A test scans the app code for network use and allows exactly one file, the model download (`tests/test_app_no_network.py`, `tests/test_security_static.py`).
 - The model download is tested against a local fake server: a good hash installs, a bad hash deletes the file, an interrupted transfer resumes (`app/test/download.test.ts`). The three registry hashes and sizes were also compared with the hub's headers once (D-100).
+- A real model download through the Setup screen was done on 22 Nov: Gemma 4 E4B, 4.98 GB, about 18 minutes, hash verified (`docs/privacy.md`, "Measured so far").
 
 What has not been done yet:
 - A packet capture during a full session.
-- A full real download of a model through the Setup screen (the tests use a fake server).
 - The Wi-Fi-off demo run.
 - The Windows 16 GB laptop run.
 - Encrypted local storage and the user-visible network activity list from `docs/privacy.md` are designs, not built features (`docs/roadmap.md`).
@@ -75,10 +75,29 @@ What has not been done yet:
 Read this before trusting any output.
 
 - **Early.** There is no installer. It has been run from source on one Mac only.
-- **The labels are silver.** The reference answers used for scoring were made by two models plus code checks, with a model reviewing the disagreements. A native Japanese reader has not checked them, so nothing is marked human-audited (`docs/eval_protocol.md`).
-- **The test split has not been run.** All scores so far are on the 15 development documents, and the rules were tuned on them, so those scores are fits, not forecasts (D-96). One test document, 52bba5f9, is excluded from the planned test run because a rule was written after reading its title (D-102).
-- **The one model-quality figure in the repo:** on the list fields (eligibility, deadlines, required documents) of the development documents, Qwen3.5-9B got 19 of 42 rows right and Gemma 4 E4B got 18 of 42, measured against the silver labels (D-74). That is a small, tuned-on set, so read it as a rough picture and not as an accuracy rate.
-- **Speed:** the median was about 70 s per document, measured on 50 short tenders on an M4 Mac with Qwen3.5-9B (D-99; the report behind it is a local file, not in the repo). Slower machines and longer documents were not measured.
+- **The labels are silver.** The reference answers were built by Gemini and a local model, with code checks, and then reviewed by Claude. Five label lines are marked "native check pending" because no native Japanese reader has checked them yet. Nothing is marked human-audited (`docs/eval_protocol.md`).
+- **Frozen before the test run.** The rules, prompts and label files were frozen at extractor 0.3.0 before the one test run (D-109), and nothing was tuned afterwards. The code hash and `git status` were identical before and after the run. Scores on the development documents are fits, not forecasts (D-96).
+
+**Test numbers (v0.1, one run on 2026-11-23, 10 test documents: 5 notices, 3 bid instructions, 2 specs).** Source: `eval/reports/test_milestone_v0_1.md`. Pipeline: rules plus local Qwen3.5-9B. Each rate is given for all items and without the 5 native-check-pending lines.
+
+| rate | all items | without the 5 |
+|---|---|---|
+| Verified field accuracy | 82 of 190 (43%) | 81 of 185 (44%) |
+| Citation precision | 136 of 155 (88%) | 136 of 155 (88%) |
+| Citation recall | 136 of 356 (38%) | 136 of 350 (39%) |
+| Not found | 127 of 190 (67%) | 122 of 185 (66%) |
+| Wrong value shown | 23 of 190 (12%) | 23 of 185 (12%) |
+| Shown value not in its cited sentences | 0 of 63 (0%) | 0 of 63 (0%) |
+| Over-abstention (label has a value, answer Not found) | 63 of 126 (50%) | 61 of 124 (49%) |
+
+How the 82 is made up (same report, section "Breakdown of the 190 fields"): 40 shown values fully right, plus 42 correct Not found (the label says absent). The other 108 are 23 shown wrong, 63 over-abstained and 22 where the label points to another document. The scores are against silver labels and Qwen3.5-9B was one of the two labelers, so they lean optimistic.
+
+Known limits:
+- **List fields are the weak spot.** Verified field accuracy in the report: eligibility 2 of 8 (25%), deadlines 1 of 8 (12%), required_documents 1 of 8 (12%). 18 of the 23 wrong answers are in these three fields. Verified there means each item is cited, not that the list is complete. A list that got some items right still counts as wrong; partly right was not measured.
+- **About half of the values that exist come out Not found** (over-abstention above).
+- **issuer_org** was right on 2 of 10 documents and Not found on 9 of 10. It gives Not found for 北海道 documents because the rule only knows 県 and 市. There was no dev example, so the rule was not added (D-96).
+- **Dates go through code, not the model**, because the local model gets some 令和 year conversions wrong.
+- **Speed and memory were measured on a MacBook Air M4 only.** Per document: mean 104 s, median 119 s, max 212 s (total 1038 s for 10; the two specs took 0 s, they ran no model call). Peak memory: 85 MiB for the app process and 7042 MiB for llama-server, which is rough because the model is memory-mapped (`eval/reports/test_milestone_v0_1.md`). The run on a 16 GB Windows laptop has not been done.
 - **English lines for cited sentences are machine translation** by a small local model and can be wrong. Always check the Japanese sentence next to it. The app marks these lines "Machine translation".
 - **Not every document type is covered.** It is built around tender notices and bid instructions. Specs and other types give fewer answers, and a field it cannot support with a verified sentence says Not found.
 - Verified means the value was found in the cited sentence by code. It does not mean the answer is complete or that the document says what you need.
