@@ -78,6 +78,17 @@ On a finding:
 - Settings -> Network activity: lists every outbound request attempt since launch (should be empty) and every blocked attempt.
 - Demo test: turn off Wi-Fi, process a document end to end.
 
+## Measured so far
+
+<!-- net_sample:start -->
+Network sample (2026-11-23, `scripts/net_sample.py`): one full extraction of the open Wakayama notice 2f2f5bd3
+(Qwen3.5-9B, English queue included) on the dev Mac. Every 2 seconds `lsof` listed the internet sockets of the Electron
+process tree (Electron, the sidecar, llama-server). 103 samples. Distinct remote endpoints that were not loopback:
+none. Distinct loopback endpoints seen: 27. Sockets listening on a non-loopback address: none.
+The app's own quit line was "renderer requests blocked: 0". Sampled, not a packet capture: a connection shorter than 2 seconds can be missed,
+and it does not cover other processes on the machine.
+<!-- net_sample:end -->
+
 ## Checklist (must all pass before release)
 
 - [ ] Packet capture (e.g. Little Snitch on Mac, Wireshark) during a full session shows zero outbound connections after model setup
