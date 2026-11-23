@@ -954,3 +954,53 @@ def test_title_glued_with_a_definition_in_the_middle_is_not_a_title() -> None:
 def test_heading_cue_2f2f5bd3_業務の期間_is_a_period_cue() -> None:
     ss = sents("（5）業務の期間", "契約締結日から令和15年9月30日（金）まで")
     assert _cue("notice", ss, "performance_period") is True
+
+
+# --- issuer_org under a department heading, and a spec's opening sentence (D-108) -----------
+
+
+def test_issuer_2ed05ba9_city_under_契約担当部局_address_line_in_between() -> None:
+    ss = sents("第3 契約担当部局", "〒070-8525 旭川市7条通9丁目総合庁舎7階", "旭川市防災安全部防災課", "電 話  0166-25-9840")  # fmt: skip
+    a = got("bid_instructions", ss, "issuer_org")
+    assert a and a.value_ja == "旭川市" and a.citations == ["h_s1", "h_s3"]
+    assert _cue("bid_instructions", ss, "issuer_org") is True
+
+
+def test_issuer_34ea5d0b_a_date_line_under_the_heading_is_skipped() -> None:
+    ss = sents("第3 契約担当部局", "(1)令和5年11月2日まで", "〒070-8525 旭川市6条通9丁目 旭川市総合庁舎4階", "旭川市市民生活部地域活動推進課")  # fmt: skip
+    a = got("bid_instructions", ss, "issuer_org")
+    assert a and a.value_ja == "旭川市" and a.citations == ["h_s1", "h_s4"]
+
+
+def test_issuer_081d2756_prefecture_under_業務担当部局_cuts_the_unit_below() -> None:
+    ss = sents("(4) 業務担当部局", "和歌山県会計局会計課", "和歌山市小松原通一丁目1番地", "(5) 契約期間")  # fmt: skip
+    a = got("bid_instructions", ss, "issuer_org")
+    assert a and a.value_ja == "和歌山県"
+
+
+def test_issuer_d4000027_prefecture_under_部局の名称及び所在地_after_a_label_line() -> (
+    None
+):
+    ss = sents("(4)調達業務を委託する部局の名称及び所在地", "ア 名称", "和歌山県教育庁生涯学習局生涯学習課(以下「生涯学習課」という。)", "イ 所在地")  # fmt: skip
+    a = got("bid_instructions", ss, "issuer_org")
+    assert a and a.value_ja == "和歌山県" and a.citations == ["h_s1", "h_s3"]
+
+
+def test_issuer_department_heading_with_only_an_address_under_it_answers_nothing() -> (
+    None
+):
+    ss = sents("(4) 業務担当部局", "和歌山市小松原通一丁目1番地")
+    assert got("bid_instructions", ss, "issuer_org") is None
+
+
+def test_issuer_6387bfc3_spec_opening_sentence_names_the_city() -> None:
+    ss = sents("本仕様書は、旭川市が受託事業者(以下、「受託者」という。)に委託する業務について定める。")  # fmt: skip
+    a = got("spec", ss, "issuer_org")
+    assert a and a.value_ja == "旭川市" and a.citations == ["h_s1"]
+    assert _cue("spec", ss, "issuer_org") is True
+
+
+def test_issuer_9b6a573a_spec_opening_sentence_with_a_definition() -> None:
+    ss = sents("本仕様書は、旭川市(以下「甲」という。)が整備する災害時緊急情報配信システムについて定める。")  # fmt: skip
+    a = got("spec", ss, "issuer_org")
+    assert a and a.value_ja == "旭川市"

@@ -694,7 +694,54 @@ def issuer_org(ss: list[Sentence]) -> Hit | None:
             off = len(nxt.text_norm) - len(nxt.text_norm.lstrip())
             q, ids = Joined([nxt]).cut(off + m.start(), off + m.end())
             hits.append(({}, q.strip(), ids))
+    hits += _dept_org(ss)
     return agreed(hits)
+
+
+# A local notice names the issuing body in the line under its department heading (契約担当部局,
+# 業務担当部局, 調達業務を委託する部局の名称及び所在地): `旭川市経済部経済総務課` -> 旭川市. The body
+# is the prefecture or city only (a unit below it is never the org, docs/labeling_guide.md).
+_DEPT_HEAD = re.compile(
+    r"^[\s(（第]*(?:[0-9０-９一二三四五六七八九十]{1,2}[)）.．、]?\s*)?"
+    r"(?:(?:契約|業務)?担当部局|(?:調達業務を委託する)?部局の名称(?:及び所在地)?)$"
+)
+_NOT_NAME = r"[^\s\u3000（()、。0-9０-９〒]"
+_DEPT_LINE = re.compile(
+    rf"(?:[ア-オ]\s*)?(?P<org>北海道|東京都|(?:大阪|京都)府|{_NOT_NAME}{{1,4}}?県|{_NOT_NAME}{{1,5}}?市)"
+    r"(?=\S*?(?:部|課|局|係|室|庁|センター))"
+)  # ponytail: first 市 or 県 ends the name (四日市市 is cut to 四日市); a list of names if it matters
+
+
+# A spec that names its client in the opening sentence: 本仕様書は、旭川市が受託事業者 ... / 旭川市(以下「甲」という。)が整備する.
+_SPEC_CLIENT = re.compile(
+    rf"本仕様書は[、,]\s*(?P<org>北海道|東京都|(?:大阪|京都)府|{_NOT_NAME}{{1,4}}?県|{_NOT_NAME}{{1,5}}?市)(?=が|[(（]以下)"
+)
+
+
+def _dept_org(ss: list[Sentence]) -> list[Hit]:
+    hits: list[Hit] = []
+    for s in ss:
+        if m := _SPEC_CLIENT.match(s.text_norm.strip()):
+            t = s.text_norm
+            off = len(t) - len(t.lstrip()) + m.start("org")
+            q, ids = Joined([s]).cut(off, off + len(m["org"]))
+            hits.append(({}, q.strip(), ids))
+    for i, s in enumerate(ss):
+        if not _DEPT_HEAD.match(s.text_norm.strip()):
+            continue
+        for nxt in ss[
+            i + 1 : i + 5
+        ]:  # skip a date, 〒 address or ア 名称 line in between
+            t = nxt.text_norm
+            m = _DEPT_LINE.match(t.strip())
+            if m:
+                off = len(t) - len(t.lstrip()) + m.start("org")
+                q, ids = Joined([nxt]).cut(off, off + len(m["org"]))
+                hits.append(
+                    ({}, q.strip(), [s.id, *ids])
+                )  # the heading too: the section parser misses a glued 第3契約担当部局
+                break
+    return hits
 
 
 # --- the extractor -----------------------------------------------------------------------

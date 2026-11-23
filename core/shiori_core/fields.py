@@ -277,7 +277,11 @@ SPECS: tuple[FieldSpec, ...] = (
         "title", "text", ALL_LABELED,
         ("件名", "調達件名", "購入等件名", "業務名", "業務の名称"),
     ),
-    _spec("issuer_org", "text", ALL_LABELED, ("発注機関", "調達機関")),
+    _spec(
+        "issuer_org", "text", ALL_LABELED,
+        ("発注機関", "調達機関", "契約担当部局", "業務担当部局", "部局の名称",
+         "本仕様書は"),
+    ),
     _spec(
         "contracting_officer", "structured", NOTICE_LIKE,
         ("支出負担行為担当官", "契約担当官", "契約責任者"), ContractingOfficer,
