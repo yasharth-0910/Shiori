@@ -1057,3 +1057,70 @@ def test_parse_reply_grammar():
         "F-12 | accept A\nF-0001 | accept A | extra\nF-0002 | absent | status=present"
     )
     assert len(errs) == 3
+
+
+# --- cited sentences that follow each other are also read as one text (D-107) ---
+
+
+def _deadline(dt: str, cites: list[str], kind: str = "electronic"):
+    return cand(
+        "deadlines",
+        normalized={
+            "items": [{"kind": kind, "datetime": dt, "flags": [], "citations": cites}]
+        },
+        citations=cites,
+    )
+
+
+def test_roundtrip_time_split_across_two_adjacent_records_262e3a41_h_s77_h_s78():
+    by = {
+        "h_s77": sent("h_s77", "令和８年12月８日午後"),
+        "h_s78": sent("h_s78", "５時00分"),
+    }
+    c = _deadline("2026-12-08T17:00:00+09:00", ["h_s77", "h_s78"])
+    assert checks.values_roundtrip(c, by) is True
+    # read alone, neither record has the time: the join is what makes it pass
+    assert checks.values_roundtrip(_deadline("2026-12-08T17:00:00+09:00", ["h_s77"]), by) is False  # fmt: skip
+
+
+def test_roundtrip_time_split_inside_午後_262e3a41_h_s79_h_s80():
+    by = {
+        "h_s79": sent("h_s79", "令和８年12月９日午"),
+        "h_s80": sent("h_s80", "後１時15分"),
+    }
+    c = _deadline("2026-12-09T13:15:00+09:00", ["h_s79", "h_s80"], "bid_opening")
+    assert checks.values_roundtrip(c, by) is True
+
+
+def test_roundtrip_tax_phrase_split_across_four_records_262e3a41_h_s43_to_h_s46():
+    by = {
+        "h_s43": sent("h_s43", "とするので、入札者は、消費税に係る課税事"),
+        "h_s44": sent("h_s44", "業者であるか免税事業者であるかを問わず、"),
+        "h_s45": sent("h_s45", "見積もった契約金額の110分の100に相当する"),
+        "h_s46": sent("h_s46", "金額を入札書に記載すること。"),
+    }
+    ids = list(by)
+    ok = cand("tax_basis", normalized={"basis": "bid_excludes_tax"}, citations=ids)
+    assert checks.values_roundtrip(ok, by) is True
+    # the first record alone has no tax wording to read
+    alone = cand("tax_basis", normalized={"basis": "bid_excludes_tax"}, citations=["h_s43"])  # fmt: skip
+    assert checks.values_roundtrip(alone, by) is False
+
+
+def test_roundtrip_does_not_join_sentences_that_are_not_adjacent():
+    by = {
+        "h_s77": sent("h_s77", "令和８年12月８日午後"),
+        "h_s78": sent("h_s78", "他の記載事項"),
+        "h_s79": sent("h_s79", "５時00分"),
+    }
+    c = _deadline("2026-12-08T17:00:00+09:00", ["h_s77", "h_s79"])  # h_s78 not cited
+    assert checks.values_roundtrip(c, by) is False
+
+
+def test_roundtrip_time_in_no_cited_run_still_fails():
+    by = {
+        "h_s77": sent("h_s77", "令和８年12月８日午後"),
+        "h_s78": sent("h_s78", "５時00分"),
+    }
+    c = _deadline("2026-12-08T09:30:00+09:00", ["h_s77", "h_s78"])
+    assert checks.values_roundtrip(c, by) is False

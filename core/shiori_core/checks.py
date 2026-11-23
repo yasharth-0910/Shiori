@@ -92,6 +92,41 @@ def _has(ss: list[Sentence], needle: str) -> bool:
     )
 
 
+_SEQ_ID = re.compile(r"^(.+_s)(\d+)$")
+
+
+def _with_joins(ss: list[Sentence]) -> list[Sentence]:
+    """`ss` plus, for every run of cited Japanese sentences with consecutive ids on
+    one page (`h_s77`, `h_s78`), one sentence holding the run's text joined with
+    nothing in between, the way the segmenter joins wrapped Japanese lines (D-32). It
+    only adds readings, so a value that passed on single sentences still passes.
+    Sentences that are not neighbours are never joined; ids across a page break are
+    not treated as neighbours (the ids do not say the pages are adjacent)."""
+    keyed: dict[tuple[str, int], Sentence] = {}
+    for s in ss:
+        m = _SEQ_ID.match(s.id)
+        if m and s.language == "ja":
+            keyed[(m.group(1), int(m.group(2)))] = s
+    out = list(ss)
+    for (pre, n), first in sorted(keyed.items()):
+        if (pre, n - 1) in keyed:
+            continue  # not the start of a run
+        run = [first]
+        while (pre, n + len(run)) in keyed:
+            run.append(keyed[(pre, n + len(run))])
+        if len(run) > 1:
+            out.append(
+                first.model_copy(
+                    update={
+                        "id": f"{run[0].id}+{run[-1].id}",
+                        "text_orig": "".join(r.text_orig for r in run),
+                        "text_norm": "".join(r.text_norm for r in run),
+                    }
+                )
+            )
+    return out
+
+
 def check_deadline_item(item, ss: list[Sentence]) -> list[str]:
     errs: list[str] = []
     if item.datetime:
@@ -118,7 +153,11 @@ def check_values(
     ss_of: Callable[[list[str]], list[Sentence]],
     cites: list[str],
 ) -> list[str]:
-    """Re-run the converters on the cited sentences. `ss_of` maps ids to sentences."""
+    """Re-run the converters on the cited sentences. `ss_of` maps ids to sentences.
+    Sentences that follow each other in the document are also read as one text
+    (`_with_joins`), because a line wrap can cut a time or a tax phrase in two."""
+    ss_one = ss_of
+    ss_of = lambda ids: _with_joins(ss_one(ids))  # noqa: E731
     ss = ss_of(cites)
     errs: list[str] = []
     if field in ("notice_date", "delivery_deadline"):
