@@ -319,6 +319,9 @@ def resolve_cached(rows: list[ManifestRow]) -> dict[str, int]:
         a = assign(row)
         if not isinstance(a, str):
             used[row.doc_id] = {s: (k, raw_for(row, k)) for s, k in a.keys.items()}
+            web = load_raw(raw_path(row.doc_id, "web", "gemini-web", "sv4-web"))  # D-104
+            if web["chunks"]:  # the web-chat answer is side A in place of the API provider's
+                used[row.doc_id]["A"] = ("web", web)
     return resolve_docs(rows, used, print)
 
 

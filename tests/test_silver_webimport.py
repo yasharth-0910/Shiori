@@ -114,3 +114,34 @@ def test_missing_field_is_a_structure_failure(web):
     )
     text, n = webimport(d, rep)
     assert n == 1 and "- 2f2f5bd3 title structure: missing" in text
+
+
+# --- D-105: a web answer is side A; a web-labeled document gets no label file at resolve ---
+
+
+def test_resolve_cached_uses_the_web_answer_as_side_a_only_where_there_is_one(web, monkeypatch):  # fmt: skip
+    d, rep = web
+    (d / "2f2f5bd3.md").write_text(reply(), encoding="utf-8")
+    webimport(d, rep)
+    g = pipeline.raw_path("d1", "gemini", config.PROVIDERS["gemini"].model)
+    g.parent.mkdir(parents=True)
+    g.write_text(json.dumps({"chunks": {"0": {"response": "{}"}}}))
+    seen = {}
+    monkeypatch.setattr(run, "resolve_docs", lambda rows, used, say: seen.update(used) or {})  # fmt: skip
+    run.resolve_cached([row(doc_id=DOC), row(doc_id="d1")])
+    assert seen[DOC]["A"][0] == "web" and seen[DOC]["A"][1]["prompt_version"] == "sv4-web"  # fmt: skip
+    assert seen["d1"]["A"][0] == "gemini" and seen["d1"]["A"][1]["chunks"]  # sv4 file
+
+
+def _store(r, labelers):
+    lines = {f: {"field": f} for f in pipeline.FIELD_IDS}
+    pipeline.write_resolved(r.doc_id, lines)  # every field already agreed and stored
+    return pipeline.store_resolution(r, [], labelers, {"北海道": "dev"})
+
+
+def test_store_resolution_writes_no_label_file_for_a_web_labeled_document(env):
+    web_doc, normal = row(doc_id=DOC), row(doc_id="d1")
+    assert _store(web_doc, [("web", "gemini-web", "2026-11-23", "sv4-web"), ("local", "m", "2026-11-23", "sv4")]) is None  # fmt: skip
+    assert not pipeline.label_file(web_doc, {"北海道": "dev"}).exists()
+    path = _store(normal, [("gemini", "g", "2026-11-23", "sv4"), ("local", "m", "2026-11-23", "sv4")])  # fmt: skip
+    assert path is not None and path.exists()

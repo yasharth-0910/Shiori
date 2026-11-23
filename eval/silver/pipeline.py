@@ -880,4 +880,6 @@ def store_resolution(row: ManifestRow, res: list[Resolved], labelers: list, spli
     write_resolved(row.doc_id, have)
     _write(decisions_path(row.doc_id), json.dumps({"items": items}, ensure_ascii=False))
     rebuild_flagged()
+    if any(x[0] == "web" for x in labelers):
+        return None  # D-104: a web-labeled test document gets its label file at review import
     return materialize(row, splits)
