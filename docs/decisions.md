@@ -62,7 +62,7 @@ Decision: Org-level train/dev/test split. Test used only at milestones.
 
 ## D-08: PyMuPDF for research, licensing decision deferred
 Date: 2026-10-02
-Status: proposed
+Status: resolved by D-110 (AGPL-3.0)
 Context: PyMuPDF is the best tool for char boxes but is AGPL-3.0, which matters for a distributed desktop app.
 Decision: Use it in Phases 2 to 7. Before Phase 8, either get a commercial license, release Shiori under AGPL, or switch to pypdfium2/pdfplumber. Keep PDF access behind one interface in `extract_text` so switching is cheap.
 
@@ -1100,6 +1100,65 @@ Alternatives: adding a test mode to `eval/run.py` (rejected: `tests/test_eval_ru
 Consequences: scores are against model-reviewed silver labels (D-41), not human-verified ones. No cloud call. The report holds ids, counts and seconds, never document text. Rules and prompts stay as they are until the milestone report is read.
 Run log: `eval.milestone` ran once on 10 test documents (5 notices, 3 bid_instructions, 2 specs), about 17 minutes, report `eval/reports/test_milestone_v0_1.md`. Verified field accuracy 82 of 190 (43%), 81 of 185 (44%) without the 5 settled lines; 23 wrong shown answers, 0 shown with a value missing from its citation. The code digest and `git status` were identical before and after the run. No bug found, nothing fixed, no re-run.
 
+## D-110: Shiori is AGPL-3.0-only (PyMuPDF), with a license table for the v0.1 components
+
+Date: 2026-11-24
+Status: accepted (Yasharth's task of 2026-11-24); resolves D-08 and the licensing note of D-28
+Context: D-08 left open whether to buy the Artifex commercial license, release under AGPL, or switch PDF backends. PyMuPDF 1.28.2 is dual-licensed GNU AGPL 3.0 or Artifex commercial (its `METADATA`). It is a runtime dependency (D-28). No commercial license is bought.
+Decision: Shiori is released under AGPL-3.0-only, free of charge. `LICENSE` holds the AGPL-3.0 text, `pyproject.toml` and `app/package.json` say `AGPL-3.0-only`, and the README says so. Commits before this date predate the license (D-101); downloaded models keep their own licenses. In shipped code (`core/`, `sidecar/`, `app/`), PyMuPDF is imported in one place, `core/shiori_core/pdf/__init__.py` (enforced by `tests/test_import_boundaries.py`, D-28). `collector/collect.py` (dev-time) and three test files also import it; they do not ship. Replacing it later means rewriting that one module, and it would need a new `EXTRACTOR_VERSION` and a re-run of the frozen numbers (D-109), because chars, boxes and page kinds feed every extraction result.
+LICENSE file: the text is a copy of the AGPL-3.0 text found in an installed package's `licenses/LICENSE` on this machine (ultralytics-thop 2.0.20, outside this repo; no download was made). Checked: 661 lines, 34,523 bytes, title and "Version 3, 19 November 2007", the 17 numbered sections, "END OF TERMS AND CONDITIONS", the "How to Apply" appendix. A second copy (ultralytics 8.3.0) has the same length and differs only in where two lines of the appendix wrap, so the one whose wrapping matches the text as published was used. Not compared with gnu.org (no network): unconfirmed byte for byte against the FSF original.
+Table of what ships in v0.1. "Confirmed" means read from the package's own files on this machine (`METADATA`, a license file, `package.json`); AGPL compatibility is the usual reading (FSF list) and is not legal advice.
+
+| Component | Version | License | Where confirmed | Compatible with AGPL-3.0 |
+|---|---|---|---|---|
+| Shiori core, sidecar, app | 0.0.0 | AGPL-3.0-only | this decision | n/a |
+| Electron | 44.4.5 | MIT | `app/node_modules/electron/package.json`, LICENSE; Chromium's own notices are in `dist/LICENSES.chromium.html`, not reviewed one by one | yes (MIT); Chromium parts unconfirmed |
+| React, react-dom | 19.3.1 | MIT | package.json, LICENSE | yes |
+| pdf.js (pdfjs-dist) | 6.5.438 | Apache-2.0 | package.json, LICENSE | yes (Apache-2.0 into GPLv3/AGPLv3) |
+| llama.cpp (`llama-server`) | b12651 | MIT | LICENSE of the installed Homebrew build 11146 ("The ggml authors"); b12651 itself is not on this machine, so its license file is unconfirmed | yes |
+| PyMuPDF | 1.28.2 | AGPL-3.0 or Artifex commercial | `METADATA`; its `COPYING` is a one-line stub, the full text is not in the package | yes (we use the AGPL option) |
+| fastapi | 0.165.0 | MIT | METADATA, LICENSE | yes |
+| starlette | 1.10.0 | BSD-3-Clause | METADATA, LICENSE | yes |
+| uvicorn | 0.54.0 | BSD-3-Clause | METADATA, LICENSE | yes |
+| pydantic, pydantic-core | 2.13.5, 2.46.5 | MIT | METADATA, LICENSE | yes |
+| annotated-types, annotated-doc, typing-inspection, anyio, h11, click | 0.8.0, 0.0.7, 0.4.4, 4.15.1, 0.16.0, 8.5.1 | MIT (click: BSD-3-Clause) | METADATA, LICENSE | yes |
+| idna | 3.20 | BSD-3-Clause | METADATA, LICENSE.md | yes |
+| typing-extensions | 4.16.0 | PSF-2.0 | METADATA, LICENSE | yes |
+| opentelemetry-api | 1.45.2 | Apache-2.0 | METADATA, LICENSE (pulled in by fastapi) | yes |
+| packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | METADATA, LICENSE files | yes |
+| numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | METADATA, LICENSE.txt | yes |
+| onnxruntime | 1.23.2 | MIT | METADATA only (no license file in the dist-info) | yes; file unconfirmed |
+| flatbuffers | 25.12.19 | Apache-2.0 | METADATA only (no license file in the dist-info) | yes; file unconfirmed |
+| protobuf | 7.36.2 | BSD-3-Clause | METADATA, LICENSE | yes |
+| coloredlogs, humanfriendly | 15.0.1, 10.0 | MIT | METADATA, LICENSE.txt | yes |
+| sympy, mpmath | 1.14.0, 1.3.0 | BSD | METADATA, LICENSE | yes |
+| opencv-python-headless | 5.0.0.93 | Apache-2.0 (wheel also bundles third-party code, see `LICENSE-3RD-PARTY.txt`, not reviewed) | METADATA, LICENSE.txt | yes; bundled parts unconfirmed |
+| pillow | 12.3.0 | MIT-CMU | METADATA, LICENSE | yes (HPND-style, permissive) |
+| lxml | 6.1.3 | BSD-3-Clause | METADATA, LICENSE.txt | yes |
+| networkx | 3.7 | BSD-3-Clause | METADATA, LICENSE.txt | yes |
+| pyyaml | 6.0.3 | MIT | METADATA, LICENSE | yes |
+| tqdm | 4.70.1 | MPL-2.0 AND MIT | METADATA, LICENCE | yes (MPL-2.0 section 3.3 allows combining with AGPL); file headers were not checked for an "Incompatible with Secondary Licenses" notice |
+| colorama, pyreadline3 | 0.4.6, 3.5.6 | not read: they install only on Windows (`sys_platform == 'win32'`) and are not installed here | unconfirmed (believed BSD-3-Clause) | unconfirmed |
+| CPython (bundled by PyInstaller) | 3.12 | PSF-2.0 | not checked: no packaged build exists yet | yes; unconfirmed |
+| PyInstaller (build tool, not shipped as a library) | not pinned in `uv.lock` | GPL-2.0-or-later with a bootloader exception that lets the built program use any license | unconfirmed: not installed here, nothing read | build tool only |
+| NDLOCR-Lite (OCR, D-36) | not in v0.1 | CC BY 4.0 | `docs/sources.md` | optional later; not shipped in v0.1 |
+| Model files (Qwen3.5-9B, Gemma 4 E4B, ...) | n/a | their own licenses (D-99) | n/a | not part of the app's license; downloaded by the user |
+
+Dev-only packages (pytest, ruff, pyright, openpyxl, httpx, beautifulsoup4, vite, typescript) are not shipped and are not in the table.
+Alternatives: buy the Artifex commercial license (rejected: cost); switch to pypdfium2 before release (rejected for v0.1: it would change the frozen numbers, D-109).
+Consequences: anyone who runs a modified Shiori for other users over a network must offer them the source (AGPL section 13). The README license paragraph states this plainly. Open items: compare `LICENSE` with the FSF original, read the Windows-only package licenses, check the PyInstaller and CPython versions when a build exists, read the Chromium notices.
+
+## D-111: Gemini web chat uploads of documents that are not open license
+
+Date: 2026-11-24
+Status: accepted (Yasharth's task of 2026-11-24); one step pending, see the end
+Context: on 2026-11-20, 50 documents were uploaded to the Gemini web chat as reference extractions (`data/cache/gemini_ref/gemini_fields.csv`, 50 document prefixes checked against `data/manifests/documents.jsonl`): 15 open, 28 restricted, 7 unknown license class. A separate 10-document friend batch (`friend_batch.zip`) was all open, checked the same way. D-42 recorded the API free-tier terms only. D-44 and D-50 turned that into code for the API path (`may_train_on_inputs`, checked before each document), and D-62 (2026-11-16) added the gold daemon rule that only open dev documents reach a cloud provider. None of them covered manual web chat uploads, and no test can see them. D-104 (2026-11-23) made the later web chat batch open-only, in `webimport`, after this upload.
+Fact check, from the raw cache `data/cache/labeling/raw/` and the manifest: through the API, no restricted or unknown document went to Gemini (every Gemini answer there is for an open document). Five restricted documents went to Groq (gpt-oss-120b, cache files dated 2026-10-11), which D-44 and D-50 allow because Groq does not train on inputs.
+Issue: the 35 restricted and unknown documents (unknown counts as restricted, D-44) were sent to a service whose consumer terms may use chat content to improve its products. All these documents are public pages, so this is not a confidentiality problem. The problem is the reserved-rights terms of the source sites (D-22, D-42).
+Decision: (1) New read-only command `uv run python -m eval.silver webcheck --docs <ids>` (`eval/silver/webcheck.py`, test `tests/test_silver_webcheck.py`). It prints each prefix with its license class from `data/manifests/documents.jsonl` and exits 1, naming every document that is not open (restricted, unknown, missing). (2) A step in `docs/labeling_guide.md` and a standing rule in `CLAUDE.md`: run webcheck before any upload to a chat or any provider; only open-license documents go to a chat. (3) The 50 reference extractions stay in `data/cache/` (gitignored) and are not used as a result in any committed report.
+Alternatives: a hook that blocks uploads (rejected: the upload happens in a browser, outside this repo's code); doing nothing because the pages are public (rejected: the source sites reserve rights).
+Consequences: the guard only works when it is run. It cannot see an upload made by hand. Pending, not done by this entry: Yasharth checks the Gemini Apps Activity setting for 2026-11-20 and deletes those conversations, then reports the outcome, which is added here.
+
 ## Open questions
 
 - The local labeler failed `schema_valid` on one field in 6 of the 10 web documents after `repair` reported 0 problems, so the two checks disagree (found 2026-11-23, not yet looked into).
@@ -1112,3 +1171,6 @@ Run log: `eval.milestone` ran once on 10 test documents (5 notices, 3 bid_instru
 - `contact.phone` must be copied from the sentence to pass `values_roundtrip`, so a phone written （086）286‐9600 becomes (086)286-9600, not 086-286-9600. The labeling guide's form 03-3592-7516 only works when the source has no brackets. Used as copied in F-0301 and F-0303; the candidates with 086-... failed the check (2026-11-23).
 - issuer_org for a body that is a school or a centre of a prefecture (新潟県立柏崎常盤高等学校 in 99044e93 and f31471b2, 新潟県放射線監視センター in 070b894e; 発注者(新潟県) appears in 99044e93 p3 and 070b894e p3): by the org rule the answer would be 新潟県, but no label exists and the rule was not written. Is the body the prefecture or the school? (Dev, found 2026-11-24, D-108.)
 - Cover line that is only a prefecture or city name (旭川市 in e81e9338 p1_s2, 新潟県 in 94b7145f p1_s3, after the title or the year): probably the issuer, but nothing in the text says so. Not turned into a rule (D-108).
+- Dev deadline relabel to kind `application` (2026-11-24, answers in data/cache/labeling/answers/dev-relabel-application.txt, not yet imported): 563042df (h_s48, 提案書等のシステムへの提出期限) and 4b0b9d82 (h_s38, 研究提案書等提出期限) were judged by cue words only and need a native check.
+- Five model-proposed `application` rows were left unchanged in the dev labels (not relabeled, not checked against the sentences): d230e51e h_s58, 28ad40ea p2_s24 and p3_s20, 84e9d0c8 h_s66, a81e99fe h_s66.
+- Dev reports whose deadline numbers use the old labels (before this relabel is imported): the `run_*` and `hybrid_*` files in eval/reports/ that score the dev split, and the dev rows of `rules_v4_side_by_side.md`. Not re-run or recomputed.

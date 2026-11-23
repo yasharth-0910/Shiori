@@ -812,7 +812,9 @@ def read_resolved(doc_id: str) -> dict[str, dict]:
     if not p.exists():
         return {}
     lines = [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
-    return {ln["field"]: ln for ln in lines}
+    # D-97 bumped the label files to 1.1.0 but not this store; materialize writes the
+    # whole label file from it, so a 1.0.0 line here would undo the bump (1.1.0 is additive).
+    return {ln["field"]: {**ln, "schema_version": SCHEMA_VERSION} for ln in lines}
 
 
 def labeled_by_earlier_prompt(doc_id: str) -> bool:

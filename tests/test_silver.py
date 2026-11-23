@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import date
 
 import pytest
-from shiori_core.fields import FIELD_IDS
+from shiori_core.fields import FIELD_IDS, SCHEMA_VERSION
 from shiori_core.models import Sentence
 from shiori_core.normalize import normalize
 
@@ -1124,3 +1124,19 @@ def test_roundtrip_time_in_no_cited_run_still_fails():
     }
     c = _deadline("2026-12-08T09:30:00+09:00", ["h_s77", "h_s78"])
     assert checks.values_roundtrip(c, by) is False
+
+
+def test_import_keeps_schema_version_on_lines_of_an_old_resolved_store(env):
+    """The resolved store of the dev documents still holds 1.0.0 lines (D-97 bumped only
+    the label files). An import rewrites the whole label file from that store, so every
+    line must come out at the current version, not just the reviewed one."""
+    flagged_env(env)
+    p = pipeline.resolved_path(row().doc_id)
+    old = [json.loads(x) for x in p.read_text().splitlines()]
+    assert old
+    p.write_text("".join(json.dumps({**x, "schema_version": "1.0.0"}) + "\n" for x in old))  # fmt: skip
+    out, errs = review.import_answers("F-0001 | accept A\n")
+    assert (out, errs) == (1, [])
+    path = pipeline.label_file(row(), {"北海道": "dev"})
+    versions = {json.loads(x)["schema_version"] for x in path.read_text().splitlines()}
+    assert versions == {SCHEMA_VERSION}

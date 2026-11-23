@@ -2,6 +2,19 @@
 
 The promise: **no document, extracted text, or result ever leaves the user's machine.** Local storage is allowed and encrypted. The user can wipe any document permanently.
 
+## What privacy means in Shiori
+
+**In scope (the shipped app):**
+- Your documents are processed only on your own machine. Text, results and the PDF viewer never touch a remote server.
+- The language model runs locally (llama.cpp, a GGUF file on disk).
+- The app makes zero network requests while you work. The page that shows your document is blocked from the network, and tests scan the app code for network use.
+- No telemetry, analytics, crash reporting, remote fonts or auto-update calls.
+- The first-run model download is the only network use. It fetches a model file by pinned URL and SHA-256 hash and sends none of your documents.
+
+**Out of scope (not covered by the promise above):**
+- How the project was built. During development, some public tender documents were sent to cloud AI services to prepare reference labels, including some whose source sites reserve rights. The rules and the exact facts are in D-42, D-44, D-50 and D-111 (`docs/decisions.md`). The shipped app does not call any cloud service.
+- The licenses of downloaded models. Each model keeps its own license, and the user is responsible for accepting it.
+
 ## Threats we design for
 
 | Threat | Mitigation |

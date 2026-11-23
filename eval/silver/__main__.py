@@ -1,5 +1,5 @@
 # ruff: noqa: E501
-"""uv run python -m eval.silver [--local-focused] {keys,probe,status,plan,run,daemon,shadow,repair,resolve,report,reopen,export,import,calibrate,show,review-stats,replay,webimport}
+"""uv run python -m eval.silver [--local-focused] {keys,probe,status,plan,run,daemon,shadow,repair,resolve,report,reopen,export,import,calibrate,show,review-stats,replay,webimport,webcheck}
 (see --help)."""
 
 import argparse
@@ -282,6 +282,10 @@ def main(argv: list[str]) -> int:
         help="store Gemini web-chat answers (<dir>/<prefix>.md) as the raw answers of labeler web (D-104)",
     ).add_argument("folder", type=Path)
     sub.add_parser(
+        "webcheck",
+        help="read-only: license class of each doc prefix; exit 1 unless all are open (D-111)",
+    ).add_argument("--docs", required=True, help="comma-separated doc id prefixes")
+    sub.add_parser(
         "show", help="print a document's Japanese sentences (id | section | text)"
     ).add_argument("doc", help="doc id prefix")
     a = ap.parse_args(argv)
@@ -430,6 +434,14 @@ def main(argv: list[str]) -> int:
         print(text)
         print(f"wrote {REPORT}; {n} failures or refusals")
         return 1 if n else 0
+    if a.cmd == "webcheck":
+        from eval.silver.webcheck import webcheck
+
+        lines, bad = webcheck([x for x in a.docs.split(",") if x])
+        print("\n".join(lines))
+        if bad:
+            print(f"NOT open, do not upload: {', '.join(bad)}")
+        return 1 if bad else 0
     if a.cmd == "show":
         from eval.silver.prompt import line
         from eval.silver.run import ja_sentences

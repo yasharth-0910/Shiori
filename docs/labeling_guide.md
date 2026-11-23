@@ -27,6 +27,10 @@ The block between the two `prompt` markers below is sent, word for word, to both
 - value_ja is copied exactly. Never shorten it with an ellipsis (… or ...). If the value needs two separate parts, cite both sentences and join the two parts with a line break, never with ; or other added characters.
 <!-- prompt:end -->
 
+## Before any upload (D-111)
+
+Run `uv run python -m eval.silver webcheck --docs <ids>` before uploading any document to a chat or sending it to any provider. It exits 1 and names every document that is not open license (restricted, unknown and missing all fail). Only open-license documents go to a chat. Do not upload until it exits 0.
+
 ## Examples from the pilot
 
 Documents: `f19cddbd4cba` (法務省 notice, p-portal), `563042df9941` (内閣府 notice, p-portal), `4b0b9d8229c7` (和歌山県 tender page). All open, dev split. Item ids are the review items of the pilot export.

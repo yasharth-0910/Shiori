@@ -187,7 +187,7 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 - [ ] Encrypted per-document storage, crypto-shred delete, ephemeral mode
 - [ ] Network activity screen
 - [ ] Packaging: sidecar via PyInstaller, llama-server binaries per OS, signed builds if possible
-- [ ] License review of every shipped component (PyMuPDF decision must be settled here)
+- [x] License review of every shipped component (PyMuPDF decision settled: AGPL-3.0, D-110; items marked unconfirmed in D-110 stay open)
 - [x] Replace real examples from restricted documents in the working tree with open-license ones: `uv run python -m eval.repo_scan --tree-only --public` exits 0 (D-64). Not yet done: drop the git history (fresh repo, D-64), after which plain `--public` must exit 0 and the 15 history-only `known_debt` entries are deleted. The repo was made public anyway with the history debt accepted by the owner (D-101); `--public` is expected to fail until the history is rewritten
   - Progress: the two Funabashi collector fixtures and `tests/test_collector_run.py` now hold invented text only (working tree scans clean). Known debt is still 16 entries / 25 (file, doc) pairs, because the scan also reads git history and the old blobs of those files are still in it. Those entries go stale only after a commit and a history rewrite (or a fresh public repo).
 

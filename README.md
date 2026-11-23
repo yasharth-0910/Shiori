@@ -2,7 +2,9 @@
 
 **Drop in a Japanese tender. Get the answer, with receipts.**
 
-Japanese public tenders are long, dense and written in official-document Japanese. Shiori is a desktop app that reads one for you on your own computer and shows, in English, the things you need before you bid: the title, who issued it, the deadlines, who may bid, which documents to send, and so on. Every value points at the sentence it came from. Click it and the PDF opens on that page with the source sentence highlighted, so you can check it against the original.
+Japanese public tenders are long, dense and written in official-document Japanese. Shiori is a desktop app that reads one for you on your own computer\* and shows, in English, the things you need before you bid: the title, who issued it, the deadlines, who may bid, which documents to send, and so on. Every value points at the sentence it came from. Click it and the PDF opens on that page with the source sentence highlighted, so you can check it against the original.
+
+\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is the first-run model download, which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
 
 > Early work in progress. There is no installer yet. You can run it from source (see below).
 
@@ -33,7 +35,7 @@ Source of the document in these screenshots: Wakayama Prefecture, tender notice 
 ## What it does
 
 - **Every field has a receipt.** The model only points at numbered sentences. Code then checks that the value really appears in the sentences it cited. A value that fails the check is dropped instead of shown as a guess, and some checks (for example a heading that looks unusual for that field) downgrade Verified to Needs review (`CLAUDE.md`, `docs/architecture.md`, D-76).
-- **Runs locally.** A small quantized model (Qwen3.5-9B by default) runs on your machine through llama.cpp. There is no cloud model and no upload in the app.
+- **Runs locally.** A small quantized model (Qwen3.5-9B by default) runs on your machine through llama.cpp. There is no cloud model and no upload in the app.\*
 - **Built for Japanese documents.** Era dates (令和8年), 万/億 amounts, fiscal years and tax wording are handled by tested rules, not left to the model (`docs/japanese_rules.md`). Rules do what they can, and the model is used for the lists: eligibility, deadlines and required documents.
 - **Hover to translate.** A sentence in the viewer can be translated to English on demand.
 - **Export.** All fields go to a CSV file and the deadlines to a calendar (.ics) file, which you save yourself.
@@ -55,7 +57,9 @@ Details: `app/electron/registry.ts` (models, URLs, hashes) and `docs/decisions.m
 
 ## Privacy: what the app does, what was measured, what was not
 
-What the app does (`docs/privacy.md`, `docs/threat_model.md`): the document, its text and the results stay on your machine. The page that shows your document is not allowed to make any network request. The local services bind to 127.0.0.1 only, on a random port with a per-launch token. Logs hold event names, timings and counts, not document text.
+What the app does (`docs/privacy.md`, `docs/threat_model.md`): the document, its text and the results stay on your machine.\* The page that shows your document is not allowed to make any network request. The local services bind to 127.0.0.1 only, on a random port with a per-launch token. Logs hold event names, timings and counts, not document text.
+
+\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is the first-run model download, which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
 
 What was measured:
 - A counting request filter in the app cancels every request from the page except its own app address. A test runs it in a real Electron session and checks that a page's request to an outside host is cancelled (`tests/test_app_filter_electron.py`, D-100). In the screenshot runs above, the app reported 0 blocked requests.
@@ -124,5 +128,9 @@ Docs: start with `docs/roadmap.md`, then `architecture.md`, `field_schema.md`, `
 ## Sources and licenses
 
 The open-license documents used here come from the Digital Agency, the Japan Meteorological Agency, the Government Procurement Portal (p-portal), Hokkaido, Wakayama Prefecture and Okayama Prefecture. They are published under the Public Data License 1.0 (PDL1.0), the Government Standard Terms of Use 2.0, or terms compatible with CC BY 4.0, which ask for the source to be named. Short sentences from them appear in tests and docs, and labels for some of them are in `data/eval/`, in some cases shortened or edited. Documents whose terms do not allow redistribution are used locally. Some short sentences from them remain in older commits of this repo (D-101), and they will be removed on request. Details in `docs/sources.md`.
+
+## License
+
+Shiori is released under the GNU Affero General Public License v3.0 (AGPL-3.0-only, see `LICENSE`). It uses PyMuPDF, which is AGPL-3.0, so the whole app is AGPL-3.0 (D-110 lists every component and its license). Old commits predate the license (D-101). Models you download keep their own licenses.
 
 A personal project by Yasharth Singh.

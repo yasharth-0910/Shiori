@@ -2,6 +2,7 @@
   "name": "shiori-app",
   "version": "0.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "npm run build && electron .",
