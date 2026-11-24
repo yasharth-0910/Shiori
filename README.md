@@ -42,11 +42,19 @@ Source of the document in these screenshots: Wakayama Prefecture, tender notice 
 
 ## Install
 
-Installers are built by GitHub Actions (`.github/workflows/release.yml`) and attached to each release. Each release also has a `SHA256SUMS-*.txt` file per platform; compare it with your download (`shasum -a 256 <file>` on macOS and Linux, `certutil -hashfile <file> SHA256` on Windows).
+Installers are built by GitHub Actions (`.github/workflows/release.yml`) and attached to each release. Every push to main that changes code or packaging files also builds installers for four platforms and keeps them as run artifacts for 14 days. Each release also has a `SHA256SUMS-*.txt` file per platform; compare it with your download (`shasum -a 256 <file>` on macOS and Linux, `certutil -hashfile <file> SHA256` on Windows).
 
-**The builds are not signed.** Signing needs paid developer accounts (Apple Developer, a Windows code-signing certificate) and this is a solo project without them. Your OS will warn you the first time. Only macOS on Apple Silicon (arm64) has been tested, by me. The macOS Intel, Windows and Linux builds are made by CI from the same pinned inputs and have not been run by anyone.
+**The builds are not notarized or signed by a known developer.** That needs paid accounts (Apple Developer, a Windows code-signing certificate) and this is a solo project without them. The macOS app has an ad-hoc signature, which only seals the bundle so macOS does not call it damaged; it does not make Apple trust it. Your OS will warn you the first time. Only macOS on Apple Silicon (arm64) has been tested, by me. The macOS Intel, Windows and Linux builds are made by CI from the same pinned inputs and have not been run by anyone.
 
-- **macOS.** Download `Shiori-<version>-mac-arm64.dmg` for Apple Silicon (M1 and newer) or `Shiori-<version>-mac-x64.dmg` for Intel. Open the .dmg and drag Shiori to Applications. The first launch is blocked: open System Settings, Privacy & Security, scroll down and click Open Anyway next to the Shiori message, then confirm.
+- **macOS.** Download `Shiori-<version>-mac-arm64.dmg` for Apple Silicon (M1 and newer) or `Shiori-<version>-mac-x64.dmg` for Intel (same signing, but nobody has run it).
+  1. Open the .dmg and drag Shiori to Applications.
+  2. Double-click Shiori in Applications. macOS says it cannot verify the app. Click Done (or OK).
+  3. Open System Settings, Privacy & Security, scroll down to the message about Shiori and click Open Anyway. Enter your password or Touch ID, then click Open.
+  After that it opens normally. If macOS still says "Shiori is damaged and can't be opened", the download flag is the cause. Clear it and try again:
+  ```bash
+  xattr -cr /Applications/Shiori.app
+  ```
+  The app is not notarized because notarizing needs a paid Apple Developer account, which this project does not have.
 - **Windows.** Run `Shiori-<version>-win-x64.exe`. If SmartScreen says it protected your PC, click More info, then Run anyway.
 - **Linux.** Download `Shiori-<version>-linux-x64.AppImage`, then `chmod +x Shiori-*.AppImage` and run it. On Ubuntu 22.04 and later it will not start without FUSE 2: `sudo apt install libfuse2`.
 

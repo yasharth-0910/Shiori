@@ -1,4 +1,4 @@
-// electron-builder config (D-112, D-113). Unsigned on purpose: no paid developer accounts.
+// electron-builder config (D-112, D-113). No paid developer accounts: macOS is ad-hoc signed (D-114), Windows and Linux unsigned.
 // Inputs, built before this runs (see .github/workflows/release.yml):
 //   packaging/build/sidecar/shiori-sidecar/   PyInstaller onedir build of the sidecar
 //   packaging/build/llama/<target>/           llama.cpp release, from packaging/fetch_llama.py
@@ -46,7 +46,10 @@ module.exports = {
     { from: need(path.join(build, "THIRD_PARTY_NOTICES.txt")), to: "THIRD_PARTY_NOTICES.txt" },
   ],
   artifactName: "Shiori-${version}-${os}-${arch}.${ext}",
-  mac: { target: [{ target: "dmg" }], identity: null, category: "public.app-category.productivity" },
+  // Ad-hoc signature ("-", D-114): seals the whole bundle so a quarantined download is not "damaged".
+  // Not notarized, so Gatekeeper still asks once (Open Anyway). hardenedRuntime must stay off: library
+  // validation would reject the frozen sidecar's and llama.cpp's differently signed libraries.
+  mac: { target: [{ target: "dmg" }], identity: "-", hardenedRuntime: false, gatekeeperAssess: false, category: "public.app-category.productivity" },
   dmg: { sign: false },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },

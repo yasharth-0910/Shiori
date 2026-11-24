@@ -1,4 +1,4 @@
-# Builds unsigned installers for macOS (arm64, Intel), Windows x64 and Linux x64 (D-113).
+# Builds installers (macOS ad-hoc signed, D-114; Windows and Linux unsigned) for macOS (arm64, Intel), Windows x64 and Linux x64 (D-113).
 # Run by hand (workflow_dispatch) for a test build, or push a v* tag for a draft GitHub Release.
 # No secrets: nothing is signed and nothing is published automatically.
 name: release
@@ -6,7 +6,22 @@ name: release
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    # Docs-only pushes do not build. Path filters are not applied to tag pushes.
+    paths:
+      - "core/**"
+      - "sidecar/**"
+      - "app/**"
+      - "packaging/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/release.yml"
     tags: ["v*"]
+
+# A newer push on the same branch cancels the older run. Tag runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -50,6 +65,10 @@ jobs:
       - name: Build the installer
         working-directory: app
         run: npm run dist -- ${{ matrix.flags }}
+      - name: Check the macOS signature (D-114)
+        if: startsWith(matrix.name, 'macos')
+        working-directory: app/release
+        run: codesign --verify --deep --strict --verbose=2 mac*/Shiori.app
       - name: SHA-256 file
         working-directory: app/release
         run: |
@@ -66,6 +85,8 @@ jobs:
         with:
           name: shiori-${{ matrix.name }}
           if-no-files-found: error
+          # 14 days for branch builds; 0 means the repository default, used for tag builds.
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 0 || 14 }}
           path: |
             app/release/Shiori-*.dmg
             app/release/Shiori-*.exe
@@ -88,4 +109,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${{ github.ref_name }}" out/* --draft --title "${{ github.ref_name }}" --notes "Unsigned builds. Only macOS arm64 is tested. Checksums are in the SHA256SUMS files."
+        run: gh release create "${{ github.ref_name }}" out/* --draft --title "${{ github.ref_name }}" --notes "Not notarized (macOS builds are ad-hoc signed, Windows and Linux are unsigned). Only macOS arm64 is tested. Checksums are in the SHA256SUMS files."
