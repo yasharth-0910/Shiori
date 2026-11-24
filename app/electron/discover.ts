@@ -5,12 +5,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { Facts, ModelEntry, Recommendation } from "./registry";
 
-export type Where = { env: NodeJS.ProcessEnv; platform: string; exists: (p: string) => boolean; pathDirs: string[] };
+// `bundled`: the llama-server inside a packaged app (paths.ts bundledLlama); null in dev.
+export type Where = { env: NodeJS.ProcessEnv; platform: string; exists: (p: string) => boolean; pathDirs: string[]; bundled?: string | null };
 
-/** SHIORI_LLAMA_SERVER, then PATH, then /opt/homebrew/bin and /usr/local/bin. null = not found. */
+/** SHIORI_LLAMA_SERVER, then (packaged) the bundled one only, else PATH, /opt/homebrew/bin, /usr/local/bin. null = not found. */
 export function findLlamaServer(w: Where): string | null {
   if (w.env.SHIORI_LLAMA_SERVER) return w.env.SHIORI_LLAMA_SERVER; // an override is used as given; start() reports a bad one
-  const exe = w.platform === "win32" ? "llama-server.exe" : "llama-server";
+  if (w.bundled) return w.exists(w.bundled) ? w.bundled : null; // a packaged app never looks at the PATH
+  const exe = w.platform === "win32" ? "llama-server.exe" : "llama-server"; // same rule as paths.ts exeName (no runtime import: node --test needs extensions)
   for (const d of [...w.pathDirs, "/opt/homebrew/bin", "/usr/local/bin"]) {
     const p = path.join(d, exe);
     if (w.exists(p)) return p;
@@ -64,8 +66,8 @@ export function systemFacts(): Facts {
   return { totalRamGb: os.totalmem() / 2 ** 30, arch: os.arch(), platform: os.platform() };
 }
 
-export function realWhere(): Where {
-  return { env: process.env, platform: process.platform, exists: fs.existsSync, pathDirs: (process.env.PATH ?? "").split(path.delimiter).filter(Boolean) };
+export function realWhere(bundled: string | null = null): Where {
+  return { env: process.env, platform: process.platform, exists: fs.existsSync, pathDirs: (process.env.PATH ?? "").split(path.delimiter).filter(Boolean), bundled };
 }
 
 /** The picker's default: the override, else the recommended model if installed, else the best-ranked installed one, else null. */

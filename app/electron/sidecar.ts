@@ -3,9 +3,11 @@
 // the sidecar's own 127.0.0.1 port. Nothing here logs a path or document text.
 import { spawn, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
+import { app } from "electron";
 import type { Llama } from "./llama";
+import { sidecarCommand, type Layout } from "./paths";
 
-const ROOT = path.join(__dirname, "..", ".."); // repo root; dev only, packaging comes in Phase 9
+const ROOT = path.join(__dirname, "..", ".."); // repo root; used in dev only
 const HOST = "127.0.0.1";
 
 type Hello = { port: number; token: string };
@@ -20,16 +22,17 @@ export function onDeath(fn: () => void): void {
 }
 
 /**
- * Start `uv run python -m sidecar` once and read its first stdout line: {"port", "token"}.
+ * Start the sidecar once (the frozen binary when packaged, `uv run python -m sidecar` in dev) and read its first stdout line: {"port", "token"}.
  * With `llama`, it gets --llama-url (the port is not secret) and the API key in its
  * environment (SHIORI_LLAMA_KEY), never argv.
  */
 export function start(llama: Llama | null): Promise<void> {
   hello ??= new Promise<Hello>((resolve, reject) => {
-    const args = ["run", "python", "-m", "sidecar", ...(llama ? ["--llama-url", `http://${HOST}:${llama.port}`] : [])];
+    const layout: Layout = { isPackaged: app.isPackaged, platform: process.platform, resourcesPath: process.resourcesPath, userData: app.getPath("userData"), repoRoot: ROOT };
+    const cmd = sidecarCommand(layout, llama ? ["--llama-url", `http://${HOST}:${llama.port}`] : []);
     const env = llama ? { ...process.env, SHIORI_LLAMA_KEY: llama.key } : process.env;
     // stdin stays open (a pipe): when this process dies the sidecar sees EOF and exits.
-    const p = spawn("uv", args, { cwd: ROOT, env, stdio: ["pipe", "pipe", "inherit"] });
+    const p = spawn(cmd.command, cmd.args, { cwd: cmd.cwd, env, stdio: ["pipe", "pipe", "inherit"] });
     child = p;
     let buf = "";
     p.stdout?.on("data", (d: Buffer) => {

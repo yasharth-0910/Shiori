@@ -26,7 +26,13 @@ collector = [
     "beautifulsoup4>=4.15.0",
     "httpx>=0.28.1",
 ]
-dev = ["openpyxl", "pyright", "pytest", "ruff"]
+dev = [
+    "openpyxl",
+    "pyinstaller>=6.22.3",
+    "pyright",
+    "pytest",
+    "ruff",
+]
 
 [tool.ruff]
 target-version = "py312"

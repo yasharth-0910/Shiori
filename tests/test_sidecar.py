@@ -1090,3 +1090,9 @@ def test_pdf_fields_have_no_html_keys(tmp_path):
     assert {"text", "en_summary"}.isdisjoint(out) and all(
         "anchor" not in s for s in out["sentences"].values()
     )
+
+
+def test_health_answers_with_the_token_only():
+    with Server(create_app(TOKEN)) as srv:
+        assert srv.call("GET", "/health") == (200, {"ok": True})
+        assert srv.call("GET", "/health", token=None)[0] == 401

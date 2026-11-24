@@ -195,6 +195,17 @@ Can start in parallel once Phase 2 is done, using gold labels as fake model outp
 
 ## Phase 9: Write-up and public benchmark
 
+Packaging for v0.1 (D-112). The generic "Packaging" line of Phase 8 above is done here for v0.1; it stays unchecked there until an installer exists.
+
+- [x] Packaged-mode paths (sidecar, llama-server, models in userData) as tested pure functions; llama.ts tracks its own child
+- [x] Scans refused whole with `scan_not_supported` and a plain message; OCR deferred to an optional pinned-hash download after v0.1
+- [x] `packaging/sidecar.spec` (PyInstaller onedir); frozen sidecar answers `/health` and gives the same JSON as the unfrozen one on two dev documents
+- [x] `packaging/fetch_llama.py` and `packaging/llama_pins.json` (b12651, four targets, SHA-256 pinned)
+- [ ] electron-builder config that copies `dist/sidecar/shiori-sidecar` and the flattened llama folder into `resources/`, and builds an unsigned macOS arm64 app
+- [ ] Run the packaged app on macOS arm64 with Wi-Fi off; pdf.js worker and cMaps load from the bundle
+- [ ] macOS Intel, Windows x64 and Linux x64 builds (built from the same pins, not tested by the author)
+- [ ] Frozen build on Windows 16 GB laptop (not tested)
+
 - [ ] Public README with real numbers and limitations
 - [ ] Publish the eval set (public documents, labels, scripts) if source terms allow
 - [ ] Short technical write-up / blog post

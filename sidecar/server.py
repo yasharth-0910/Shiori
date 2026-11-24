@@ -38,6 +38,7 @@ from shiori_core.fields import BY_ID, FIELD_IDS, SPECS, Status
 from shiori_core.html_ingest import load_html_document
 from shiori_core.ingest import read_pages
 from shiori_core.models import Sentence
+from shiori_core.ocr import OcrUnavailableError
 from shiori_core.segment import segment
 from shiori_core.translate import Translation, find_abbreviations
 
@@ -57,6 +58,7 @@ STAGES = (
 )
 MAX_EVENTS = 200  # the live stream keeps this many, newest last (D-90)
 SHOWN_CHARS = 200  # a sentence in an event is cut to this
+SCAN_NOT_SUPPORTED = "scan_not_supported"  # job.error when a page needs OCR and no engine is installed (D-112)
 VALUE_CHARS = 400  # an answer value in an event is cut to this
 HTML_SUFFIXES = (".html", ".htm")
 DOC_TYPES = {t for s in SPECS for t in s.applies_to}
@@ -387,7 +389,12 @@ class Worker:
                 job.go("cancelled")
                 log.info("job_cancelled doc=%s", job.doc_id[:8])
             except Exception as e:  # noqa: BLE001  any failure ends this job, not the server
-                job.error = type(e).__name__
+                # No OCR engine and a page that needs one: refuse the whole document (D-112).
+                job.error = (
+                    SCAN_NOT_SUPPORTED
+                    if isinstance(e, OcrUnavailableError)
+                    else type(e).__name__
+                )
                 job.go("failed")
                 log.warning("job_failed doc=%s error=%s", job.doc_id[:8], job.error)
             else:
@@ -664,6 +671,11 @@ def create_app(
         if doc_id not in worker.jobs:
             raise HTTPException(404, "unknown document")
         return worker.jobs[doc_id]
+
+    @app.get("/health")
+    def health() -> dict:
+        """For the packaging check (D-112): the server is up and the token works."""
+        return {"ok": True}
 
     @app.post("/documents")
     def post_document(body: NewDocument) -> dict:

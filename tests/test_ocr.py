@@ -15,7 +15,8 @@ from shiori_core.pdf import PdfFile
 from shiori_core.value_normalize import find_dates, find_times
 
 PDF_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "pdf"
-HAVE_NDLOCR = (ndlocr_dir() / "src" / "ocr.py").is_file()
+_NDL = ndlocr_dir()
+HAVE_NDLOCR = _NDL is not None and (_NDL / "src" / "ocr.py").is_file()
 needs_ndlocr = pytest.mark.skipif(not HAVE_NDLOCR, reason="NDLOCR-Lite not in models/")
 
 

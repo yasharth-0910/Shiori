@@ -10,6 +10,7 @@ import * as llama from "./llama";
 import { CUSTOM_ID, defaultChoice, discover, modelDirs, realWhere, systemFacts, type Found } from "./discover";
 import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
+import { bundledLlama } from "./paths";
 import { runHighlightCheck } from "./hlcheck";
 import { createDownloader } from "./download";
 import { requestFilter } from "./netfilter";
@@ -55,7 +56,7 @@ const busy = () => [...jobs.values()].some((j) => !j.finished && !j.cancelled);
 const MODELS_DIR = app.isPackaged ? undefined : process.env.SHIORI_MODELS_DIR;
 const here = () => {
   const dirs = MODELS_DIR ? [MODELS_DIR] : modelDirs(app.isPackaged, path.join(__dirname, "..", ".."), app.getPath("userData"));
-  return { found: discover(realWhere(), dirs, app.isPackaged ? "models/ in the app's user data folder" : "models/ in the repo", REGISTRY), dirs };
+  return { found: discover(realWhere(bundledLlama({ isPackaged: app.isPackaged, platform: process.platform, resourcesPath: process.resourcesPath, userData: app.getPath("userData"), repoRoot: "" })), dirs, app.isPackaged ? "models/ in the app's user data folder" : "models/ in the repo", REGISTRY), dirs };
 };
 const customEntry = (file: string): ModelEntry => {
   const size = (() => { try { return fs.statSync(file).size; } catch { return 0; } })();

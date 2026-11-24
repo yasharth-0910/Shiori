@@ -255,3 +255,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-21 (D-97): schema 1.1.0, deadline kind `application`, two cues (公募期間, 応募期間). Dev eval stopped at 4 right-to-wrong `deadlines` rows (see Open questions); changes left in the working tree, not tuned further.
 
 - 2026-11-23 (D-103): HTML notices in the app. Built the sidecar change, the text viewer and the highlight check for HTML (136dfba9, p-portal, dev split, open licence). Unit and sidecar tests pass. Real-app highlight check passed on 136dfba9: 8 clicks, 0 offset mismatches. The Deadlines click and the English Summary screenshot are covered in the v0.1 wrap-up checks.
+
+- 2026-11-24 (D-112): packaging path. Packaged-mode paths, llama.ts child tracking, `scan_not_supported`, PyInstaller spec, `fetch_llama.py` with pinned hashes. Frozen sidecar (macOS arm64) gave the same fields JSON as the unfrozen one on two dev documents. OCR dropped from v0.1 (optional download after). No installer yet. A llama-server left by a SIGKILLed app is no longer cleaned up on the next start.

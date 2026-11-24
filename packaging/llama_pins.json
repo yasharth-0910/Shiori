@@ -1,0 +1,13 @@
+{
+  "tag": "b12651",
+  "assets": {
+    "llama-b12651-bin-macos-arm64.tar.gz": "264fd872de61679c45ad57e1e21c2a2a54e29b35734ecf3d50f24166447ab8d2",
+    "llama-b12651-bin-macos-x64.tar.gz": "34c19771545479a783d3b68c446383ab703033890c052d3ff0b860a5c9f59e56",
+    "llama-b12651-bin-win-cpu-x64.zip": "b2d794fa7587aba29f654d717ff9b73e31caeabf50a7766692903008bbe0855d",
+    "llama-b12651-bin-ubuntu-x64.tar.gz": "17b242259181d5b1b1f7719aba27929700a8b0dab39bfaef1b971a992b397b38"
+  },
+  "license": {
+    "url": "https://raw.githubusercontent.com/ggml-org/llama.cpp/b12651/LICENSE",
+    "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+  }
+}

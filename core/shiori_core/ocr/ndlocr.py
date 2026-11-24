@@ -24,21 +24,32 @@ import numpy as np
 from shiori_core.ocr import OcrLine, OcrUnavailableError
 
 ENV_VAR = "SHIORI_NDLOCR_DIR"
-_REPO = Path(__file__).resolve().parents[3]
 
 
-def ndlocr_dir() -> Path:
-    return Path(os.environ.get(ENV_VAR) or _REPO / "models" / "ndlocr-lite")
+def ndlocr_dir() -> Path | None:
+    """`$SHIORI_NDLOCR_DIR`, else models/ndlocr-lite in the repo when run from source.
+    None in a frozen (PyInstaller) build without the variable: no repo to look in, and
+    OCR is not shipped in v0.1 (D-112)."""
+    if os.environ.get(ENV_VAR):
+        return Path(os.environ[ENV_VAR])
+    if getattr(sys, "frozen", False):
+        return None
+    return Path(__file__).resolve().parents[3] / "models" / "ndlocr-lite"
 
 
 class NdlocrEngine:
     name = "ndlocr-lite"
 
     def __init__(self) -> None:
-        src = ndlocr_dir() / "src"
-        if not (src / "ocr.py").is_file() or not (src / "model").is_dir():
+        root = ndlocr_dir()
+        src = (root or Path()) / "src"
+        if (
+            root is None
+            or not (src / "ocr.py").is_file()
+            or not (src / "model").is_dir()
+        ):
             raise OcrUnavailableError(
-                f"NDLOCR-Lite not found at {src.parent}. Clone "
+                f"NDLOCR-Lite not found at {root}. Clone "
                 "https://github.com/ndl-lab/ndlocr-lite there or set "
                 f"{ENV_VAR} (see docs/decisions.md, D-36)."
             )

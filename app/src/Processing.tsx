@@ -14,6 +14,9 @@ const STEPS: [key: string, name: string][] = [
   ["verify", "Checking every citation"],
 ];
 
+// The sidecar refuses a document with pages that need OCR; v0.1 ships no OCR (D-112).
+export const SCAN_MESSAGE = "This PDF is a scan or print-to-PDF image. This version cannot read scans yet.";
+
 const VISIBLE = 6; // cards shown in the live stream
 const STORED = 200; // events kept in memory
 const label = (id: string) => labelOf({ field: id } as Field);
@@ -184,7 +187,7 @@ export function Processing({ docId, name, onDone, onBack }: Props) {
       <div className="processing one">
         <div className="pcard">
           <h2 className="pname">{name}</h2>
-          <p className="err">Processing failed ({error}).</p>
+          <p className="err">{error === "scan_not_supported" ? SCAN_MESSAGE : `Processing failed (${error}).`}</p>
           <button className="btn" onClick={back.current}>Back to Library</button>
         </div>
       </div>

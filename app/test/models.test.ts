@@ -129,3 +129,60 @@ test("model code makes no network call except the app's own loopback", () => {
   }
   assert.ok(readdirSync(new URL("../src/", import.meta.url)).includes("ModelPicker.tsx"));
 });
+
+// --- packaged paths and llama.ts (D-112) ---
+import { bundledLlama, exeName, modelsDir, sidecarCommand, type Layout } from "../electron/paths.ts";
+import { buildArgs } from "../electron/llama.ts";
+
+const lay = (platform: string, isPackaged: boolean): Layout => ({
+  isPackaged,
+  platform,
+  resourcesPath: platform === "win32" ? "C:\\Apps\\Shiori\\resources" : platform === "darwin" ? "/Applications/Shiori.app/Contents/Resources" : "/opt/Shiori/resources",
+  userData: platform === "win32" ? "C:\\Users\\a\\AppData\\Roaming\\Shiori" : "/home/a/.config/Shiori",
+  repoRoot: "/repo",
+});
+
+test("exeName adds .exe on Windows only", () => {
+  assert.equal(exeName("llama-server", "win32"), "llama-server.exe");
+  assert.equal(exeName("llama-server", "darwin"), "llama-server");
+  assert.equal(exeName("shiori-sidecar", "linux"), "shiori-sidecar");
+});
+
+test("sidecar command: frozen binary with no cwd when packaged, uv in the repo in dev", () => {
+  const x = ["--llama-url", "http://127.0.0.1:1"];
+  assert.deepEqual(sidecarCommand(lay("darwin", true), x), { command: "/Applications/Shiori.app/Contents/Resources/sidecar/shiori-sidecar", args: x, cwd: undefined });
+  assert.deepEqual(sidecarCommand(lay("win32", true), []), { command: "C:\\Apps\\Shiori\\resources\\sidecar\\shiori-sidecar.exe", args: [], cwd: undefined });
+  assert.equal(sidecarCommand(lay("linux", true), []).command, "/opt/Shiori/resources/sidecar/shiori-sidecar");
+  assert.deepEqual(sidecarCommand(lay("darwin", false), x), { command: "uv", args: ["run", "python", "-m", "sidecar", ...x], cwd: "/repo" });
+});
+
+test("bundled llama-server and models folder by platform", () => {
+  assert.equal(bundledLlama(lay("darwin", true)), "/Applications/Shiori.app/Contents/Resources/llama/llama-server");
+  assert.equal(bundledLlama(lay("win32", true)), "C:\\Apps\\Shiori\\resources\\llama\\llama-server.exe");
+  assert.equal(bundledLlama(lay("linux", true)), "/opt/Shiori/resources/llama/llama-server");
+  assert.equal(bundledLlama(lay("darwin", false)), null);
+  assert.equal(modelsDir(lay("win32", true)), "C:\\Users\\a\\AppData\\Roaming\\Shiori\\models");
+  assert.equal(modelsDir(lay("linux", true)), "/home/a/.config/Shiori/models");
+  assert.equal(modelsDir(lay("darwin", false)), "/repo/models");
+});
+
+test("packaged: only the bundled llama-server counts, the PATH is ignored; the override still wins", () => {
+  const b = "/res/llama/llama-server";
+  assert.equal(findLlamaServer(w({ bundled: b, has: [b, "/fake/bin/llama-server"] })), b);
+  assert.equal(findLlamaServer(w({ bundled: b, has: ["/fake/bin/llama-server"] })), null);
+  assert.equal(findLlamaServer(w({ bundled: b, env: { SHIORI_LLAMA_SERVER: "/x/ls" } })), "/x/ls");
+});
+
+test("llama-server arguments: no key in argv, per-model extras, Windows model paths", () => {
+  const a = buildArgs("/m/Qwen3.5-9B-Q4_K_M.gguf", 8123);
+  assert.deepEqual(a.slice(0, 6), ["-m", "/m/Qwen3.5-9B-Q4_K_M.gguf", "--host", "127.0.0.1", "--port", "8123"]);
+  assert.ok(!a.some((x) => /key/i.test(x)));
+  assert.ok(buildArgs("C:\\m\\LFM2.5-8B-x.gguf", 1).includes("--reasoning-budget"));
+  assert.ok(!a.includes("--reasoning-budget"));
+});
+
+test("Processing shows the scan message for the scan_not_supported code (D-112)", () => {
+  const src = readFileSync(new URL("../src/Processing.tsx", import.meta.url), "utf8");
+  assert.ok(src.includes('"This PDF is a scan or print-to-PDF image. This version cannot read scans yet."'));
+  assert.ok(src.includes('error === "scan_not_supported"'));
+});

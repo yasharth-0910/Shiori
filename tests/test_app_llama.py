@@ -25,8 +25,14 @@ def test_shiori_pick_only_works_when_not_packaged() -> None:
 def test_shot_stage_and_shot_open_only_work_when_not_packaged() -> None:
     """The two screenshot dev options are read once each, in constants gated on app.isPackaged."""
     main = read("main.ts")
-    assert "const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE" in main
-    assert "const shotOpen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_OPEN" in main
+    assert (
+        "const shotStage = app.isPackaged ? undefined : process.env.SHIORI_SHOT_STAGE"
+        in main
+    )
+    assert (
+        "const shotOpen = app.isPackaged ? undefined : process.env.SHIORI_SHOT_OPEN"
+        in main
+    )
     for name in ("main.ts", "sidecar.ts", "llama.ts", "preload.ts"):
         for line in read(name).splitlines():
             if "process.env.SHIORI_SHOT_" in line:
@@ -35,7 +41,10 @@ def test_shot_stage_and_shot_open_only_work_when_not_packaged() -> None:
 
 def test_highlight_check_hook_only_works_when_not_packaged() -> None:
     main = read("main.ts")
-    assert "const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK" in main
+    assert (
+        "const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK"
+        in main
+    )
     assert main.count("process.env.SHIORI_HLCHECK") == 1
 
 
@@ -53,10 +62,10 @@ def test_llama_server_is_loopback_one_at_a_time_and_stopped() -> None:
     llama, main = read("llama.ts"), read("main.ts")
     assert 'const HOST = "127.0.0.1";' in llama and '"--host", HOST' in llama
     assert "listen(0, HOST" in llama  # a random free port
-    assert (
-        'pgrep(["-x", "llama-server"])' in llama
-        and "another_llama_server_running" in llama
-    )
+    # one server at a time is the module's own `proc`; it never looks for other processes by name (D-112)
+    assert "llama_already_started" in llama
+    code = "\n".join(x for x in llama.splitlines() if not x.lstrip().startswith("//"))
+    assert not re.search(r"pgrep|execFileSync|\"ps\"", code)
     assert (
         'stdio: "ignore"' in llama
     )  # its output (which could hold prompts) is discarded

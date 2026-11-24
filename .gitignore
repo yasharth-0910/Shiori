@@ -33,3 +33,8 @@ CLAUDE.md
 app/dist/
 app/dist-electron/
 app/public/
+
+# Packaging build output (D-112): PyInstaller (dist/, build/) and downloaded llama.cpp archives
+/dist/
+/build/
+packaging/build/
