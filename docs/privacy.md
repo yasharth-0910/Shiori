@@ -10,6 +10,7 @@ The promise: **no document, extracted text, or result ever leaves the user's mac
 - The app makes zero network requests while you work. The page that shows your document is blocked from the network, and tests scan the app code for network use.
 - No telemetry, analytics, crash reporting, remote fonts or auto-update calls.
 - The first-run model download is the only network use. It fetches a model file by pinned URL and SHA-256 hash and sends none of your documents.
+- "Find models on this computer" (D-115) reads files locally, only after a click, and only in the app's models folder, the Hugging Face cache, LM Studio and Ollama folders, or one folder you pick. It compares size and SHA-256 with the pinned models. It makes no network request, keeps its result in memory only, and writes no file path or file name to any log.
 
 **Out of scope (not covered by the promise above):**
 - How the project was built. During development, some public tender documents were sent to cloud AI services to prepare reference labels, including some whose source sites reserve rights. The rules and the exact facts are in D-42, D-44, D-50 and D-111 (`docs/decisions.md`). The shipped app does not call any cloud service.

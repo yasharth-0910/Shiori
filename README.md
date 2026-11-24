@@ -106,6 +106,7 @@ What was measured:
 - A network sample (2026-11-23, [`scripts/net_sample.py`](scripts/net_sample.py), result in `docs/privacy.md`): during one full extraction of the Wakayama notice above, every 2 seconds the script listed the internet sockets of the app, the sidecar and llama-server. 103 samples, no remote endpoint outside this machine, no socket listening on a non-loopback address, and the app's quit line said "renderer requests blocked: 0". This is a sample, not a packet capture, so a connection shorter than 2 seconds could be missed.
 - A test scans the app code for network use and allows exactly one file, the model download (`tests/test_app_no_network.py`, `tests/test_security_static.py`).
 - The model download is tested against a local fake server: a good hash installs, a bad hash deletes the file, an interrupted transfer resumes (`app/test/download.test.ts`). The three registry hashes and sizes were also compared with the hub's headers once (D-100).
+- First launch with no model shows a short onboarding. "Scan this computer for models" (only after a click) looks in the app's models folder, the Hugging Face cache, LM Studio and Ollama, and lists a file only when its size and SHA-256 match a pinned model (D-115).
 - A real model download through the Setup screen was done on 22 Nov: Gemma 4 E4B, 4.98 GB, about 18 minutes, hash verified (`docs/privacy.md`, "Measured so far").
 
 What has not been done yet:

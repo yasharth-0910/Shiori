@@ -1157,7 +1157,11 @@ Fact check, from the raw cache `data/cache/labeling/raw/` and the manifest: thro
 Issue: the 35 restricted and unknown documents (unknown counts as restricted, D-44) were sent to a service whose consumer terms may use chat content to improve its products. All these documents are public pages, so this is not a confidentiality problem. The problem is the reserved-rights terms of the source sites (D-22, D-42).
 Decision: (1) New read-only command `uv run python -m eval.silver webcheck --docs <ids>` (`eval/silver/webcheck.py`, test `tests/test_silver_webcheck.py`). It prints each prefix with its license class from `data/manifests/documents.jsonl` and exits 1, naming every document that is not open (restricted, unknown, missing). (2) A step in `docs/labeling_guide.md` and a standing rule in `CLAUDE.md`: run webcheck before any upload to a chat or any provider; only open-license documents go to a chat. (3) The 50 reference extractions stay in `data/cache/` (gitignored) and are not used as a result in any committed report.
 Alternatives: a hook that blocks uploads (rejected: the upload happens in a browser, outside this repo's code); doing nothing because the pages are public (rejected: the source sites reserve rights).
-Consequences: the guard only works when it is run. It cannot see an upload made by hand. Pending, not done by this entry: Yasharth checks the Gemini Apps Activity setting for 2026-11-20 and deletes those conversations, then reports the outcome, which is added here.
+Consequences: the guard only works when it is run. It cannot see an upload made by hand.
+- On 2026-11-24 Yasharth deleted all Gemini Apps activity for 2026-11-20 from his Google account (My Activity), which covers the 50-document reference uploads and the 10-document friend batch.
+- Whether Gemini Apps Activity was on at the time of the upload, and whether Google used the uploads before deletion, was not confirmed. Deletion does not undo any use that already happened.
+- The current setting state was not recorded.
+- Status: the upload guard (webcheck) and the standing rule in CLAUDE.md are the prevention; nothing further is pending.
 
 ## Open questions
 
@@ -1205,3 +1209,19 @@ Status: accepted (Yasharth's task of 2026-11-24)
 Context: the CI macOS arm64 build (D-113, `identity: null`) downloaded through Chrome showed "Shiori is damaged and can't be opened" with no Open Anyway button. The same app built locally and opened without the quarantine flag ran. The main executable only had the linker's ad-hoc signature and the bundle had no seal (no `_CodeSignature`), so on Apple Silicon a quarantined, unsealed bundle is treated as damaged instead of unidentified.
 Decision: `mac.identity: "-"` in `app/electron-builder.config.cjs`, with `hardenedRuntime: false` and `gatekeeperAssess: false`. electron-builder 26.18.0 documents `"-"` as the explicit ad-hoc opt-in, and its signer (osx-sign) walks the whole bundle and signs nested code inside-out, so no afterPack hook or script was needed. The hardened runtime stays off: library validation would reject the frozen sidecar's and llama.cpp's libraries, which carry other ad-hoc identities. No notarization (no paid Apple account), so Gatekeeper still asks once (Open Anyway). CI runs `codesign --verify --deep --strict` on both macOS jobs. The README gives the first-open steps and `xattr -cr /Applications/Shiori.app` as the fallback if macOS still says damaged.
 Consequences: Windows and Linux config unchanged. Intel gets the same signing and is untested. Checked locally on arm64 (verify, signatures, spctl on a quarantined copy); not confirmed by opening a downloaded dmg through the GUI. `EXTRACTOR_VERSION` stays 0.3.0.
+
+## D-115: First-run onboarding and "Find models on this computer"
+
+Date: 2026-11-24
+Status: accepted (Yasharth's task of 2026-11-24)
+Context: a first launch showed only the download screen. Many users already have one of the pinned models on disk (Hugging Face cache, LM Studio, Ollama), and a 5 GB download is the worst first impression.
+Decision:
+- Onboarding is three short screens (what Shiori does with the README privacy footnote, find a model, ready). It shows only when no model is installed. The Models page gets a "Find models on this computer" button that opens screen two.
+- Click to scan, never automatic. Nothing reads the disk until the user clicks, and the screen says what it will look at.
+- Known folders only: the app's models folder, `~/.cache/huggingface/hub`, `~/.lmstudio/models`, `~/.ollama/models` (the same under the user profile on Windows). Downloads, Documents and Desktop are never scanned on their own; "Search a folder..." scans one folder the user picks, depth limit 6, symlink loops skipped by real path.
+- Per file: name filter (`.gguf`, or an Ollama blob `blobs/sha256-<hash>`), then exact byte size against the pinned catalog, and only then the streamed SHA-256. Size first because hashing a 5 GB file takes about a minute and nearly every other file is a different size. A size match with a wrong hash is not listed.
+- Only exact hash matches are listed. Other model files are a count ("N other model files were found that this version does not support"), with no names. An Ollama blob that fits no catalog size is counted only if it starts with `GGUF`.
+- The result lives in memory in the main process. The renderer gets an index per match, never a path, and "Use this one" sends the index. No path or file name goes to any log (log lines hold event names and numbers).
+- "Use this one" calls the same `importFile` as "Choose a model file from disk": it hashes the file again and COPIES it into the models folder (no in-place use). The screen shows the size and the free space before the copy and blocks it when the disk is too small. `importFile` only accepts a name ending in `.gguf`, so for an Ollama blob main makes a temporary symlink (hard link if symlinks are refused) with a `.gguf` name, calls `importFile`, then removes it. `download.ts` is unchanged.
+- Cost accepted: a model found by the scan is hashed twice (scan, then import) and exists twice on disk afterwards. Using a file in place would need a models-folder setting; not done.
+Consequences: bridge grows from eleven to fifteen functions (`scanModels`, `scanStatus`, `scanCancel`, `useScanned`; `tests/test_app_ipc.py` updated). Not run against real multi-GB files; the tests use a small fake catalog. Windows and Ollama blob handling are tested on macOS only. `EXTRACTOR_VERSION` stays 0.3.0.
