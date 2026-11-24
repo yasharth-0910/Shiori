@@ -157,6 +157,8 @@ def scan(dirs: list[Path], base: Path = REPO_ROOT) -> dict[str, list[str]]:
     for d in dirs:
         for path in sorted(d.rglob("*.py")) if d.is_dir() else []:
             rel = path.relative_to(base).as_posix()
+            if "node_modules" in path.parts:
+                continue
             rules = find_violations(
                 path, in_sidecar=path.is_relative_to(base / "sidecar")
             )
@@ -305,7 +307,7 @@ _TS_NET_IMPORT = re.compile(
 
 
 def _ts_network_importers(app: Path) -> set[str]:
-    skip = {"node_modules", "dist", "dist-electron", "public"}
+    skip = {"node_modules", "dist", "dist-electron", "public", "release"}
     return {
         p.relative_to(app.parent).as_posix()
         for p in app.rglob("*")

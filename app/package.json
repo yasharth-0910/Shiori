@@ -8,7 +8,8 @@
     "dev": "npm run build && electron .",
     "build": "node -e \"require('fs').cpSync('node_modules/pdfjs-dist/cmaps','public/cmaps',{recursive:true})\" && tsc -p tsconfig.json && tsc -p tsconfig.electron.json && vite build",
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never"
   },
   "dependencies": {
     "pdfjs-dist": "^6.5.438",
@@ -21,7 +22,10 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "44.4.5",
+    "electron-builder": "^26.18.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
-  }
+  },
+  "description": "Offline reader for Japanese public tender documents.",
+  "author": "Yasharth Singh"
 }

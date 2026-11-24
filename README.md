@@ -40,6 +40,38 @@ Source of the document in these screenshots: Wakayama Prefecture, tender notice 
 - **Hover to translate.** A sentence in the viewer can be translated to English on demand.
 - **Export.** All fields go to a CSV file and the deadlines to a calendar (.ics) file, which you save yourself.
 
+## Install
+
+Installers are built by GitHub Actions (`.github/workflows/release.yml`) and attached to each release. Each release also has a `SHA256SUMS-*.txt` file per platform; compare it with your download (`shasum -a 256 <file>` on macOS and Linux, `certutil -hashfile <file> SHA256` on Windows).
+
+**The builds are not signed.** Signing needs paid developer accounts (Apple Developer, a Windows code-signing certificate) and this is a solo project without them. Your OS will warn you the first time. Only macOS on Apple Silicon (arm64) has been tested, by me. The macOS Intel, Windows and Linux builds are made by CI from the same pinned inputs and have not been run by anyone.
+
+- **macOS.** Download `Shiori-<version>-mac-arm64.dmg` for Apple Silicon (M1 and newer) or `Shiori-<version>-mac-x64.dmg` for Intel. Open the .dmg and drag Shiori to Applications. The first launch is blocked: open System Settings, Privacy & Security, scroll down and click Open Anyway next to the Shiori message, then confirm.
+- **Windows.** Run `Shiori-<version>-win-x64.exe`. If SmartScreen says it protected your PC, click More info, then Run anyway.
+- **Linux.** Download `Shiori-<version>-linux-x64.AppImage`, then `chmod +x Shiori-*.AppImage` and run it. On Ubuntu 22.04 and later it will not start without FUSE 2: `sudo apt install libfuse2`.
+
+The installer does not contain a language model. On first run the app shows a Setup screen and downloads the model (about 5.7 GB, SHA-256 checked, see below). That is the only network use. Scanned PDFs (pages that are images) are not supported yet: the app refuses them with a message instead of giving partial answers (D-112).
+
+Manual test list (for the author, per platform):
+1. Install on a clean user account (not the one used for development).
+2. With Wi-Fi on, start the app and download the model on the Setup screen.
+3. Turn Wi-Fi off.
+4. Add a sample tender PDF and wait for it to finish.
+5. Click a field's citation and check that the PDF opens on that page with the sentence highlighted.
+
+Build an installer yourself (macOS arm64 shown; run from the repo root):
+
+```
+uv sync
+uv run pyinstaller packaging/sidecar.spec --noconfirm --distpath packaging/build/sidecar --workpath build/pyi
+uv run python packaging/fetch_llama.py --target macos-arm64
+cd app && npm ci && cd ..
+uv run python packaging/third_party_notices.py
+cd app && npm run dist
+```
+
+The installer ends up in `app/release/`.
+
 ## Run it from source
 
 You need: macOS (the only machine it has been run on), Python 3.12 with [uv](https://docs.astral.sh/uv/), Node 20 or newer, and `llama-server` from llama.cpp (for example `brew install llama.cpp`).
@@ -78,7 +110,7 @@ What has not been done yet:
 
 Read this before trusting any output.
 
-- **Early.** There is no installer. It has been run from source on one Mac only.
+- **Early.** Unsigned installers exist (see Install), but the app has been run on one Mac only (Apple Silicon).
 - **The labels are silver.** The reference answers were built by Gemini and a local model, with code checks, and then reviewed by Claude. Five label lines are marked "native check pending" because no native Japanese reader has checked them yet. Nothing is marked human-audited (`docs/eval_protocol.md`).
 - **Frozen before the test run.** The rules, prompts and label files were frozen at extractor 0.3.0 before the one test run (D-109), and nothing was tuned afterwards. The code hash and `git status` were identical before and after the run. Scores on the development documents are fits, not forecasts (D-96).
 

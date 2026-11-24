@@ -38,3 +38,4 @@ app/public/
 /dist/
 /build/
 packaging/build/
+app/release/

@@ -22,7 +22,7 @@ APP = Path(__file__).resolve().parent.parent / "app"
 # test/ holds the dev-only node tests: never built or packaged (the two tsconfig
 # files include src and electron only). They name example hosts and run a loopback
 # server on purpose.
-SKIP_DIRS = {"node_modules", "dist", "dist-electron", "public", "test"}
+SKIP_DIRS = {"node_modules", "dist", "dist-electron", "public", "test", "release"}
 SKIP_FILES = {"package-lock.json"}
 SUFFIXES = {".ts", ".tsx", ".mts", ".js", ".mjs", ".cjs", ".json", ".html", ".css"}
 

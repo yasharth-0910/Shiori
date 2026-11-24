@@ -88,6 +88,7 @@ def main() -> None:
         action="store_true",
         help="write hashes for entries not in the pins file yet",
     )
+    ap.add_argument("--target", choices=sorted(TARGETS), help="only this target (CI uses one per runner)")
     a = ap.parse_args()
     pins = (
         json.loads(PINS.read_text())
@@ -97,6 +98,8 @@ def main() -> None:
     if pins.get("tag") != TAG:
         sys.exit(f"pins file is for {pins.get('tag')}, this script for {TAG}")
     for target, name in TARGETS.items():
+        if a.target and a.target != target:
+            continue
         dest = OUT / "dl" / name
         download(BASE + name, dest)
         got = sha256(dest)
