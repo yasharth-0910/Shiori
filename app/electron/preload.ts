@@ -1,5 +1,5 @@
-// The whole bridge between the renderer and the main process: eleven functions (D-83, D-85, D-90, D-98, D-99, D-100).
-// None takes a path, a URL or a token (download takes a registry id). The renderer asks; main picks the file, talks to
+// The whole bridge between the renderer and the main process: fifteen functions (D-83, D-85, D-90, D-98, D-99, D-100, D-115).
+// None takes a path (scanModels takes only the word computer or folder), a URL or a token (download takes a registry id). The renderer asks; main picks the file, talks to
 // the sidecar and answers. Sandboxed preload: only "electron" may be required here.
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld("shiori", {
   downloadModel: (modelId: string) => ipcRenderer.invoke("shiori:download", modelId),
   downloadStatus: () => ipcRenderer.invoke("shiori:download-status"),
   chooseModelFile: () => ipcRenderer.invoke("shiori:import-model"),
+  scanModels: (kind: "computer" | "folder") => ipcRenderer.invoke("shiori:scan", kind),
+  scanStatus: () => ipcRenderer.invoke("shiori:scan-status"),
+  scanCancel: () => ipcRenderer.invoke("shiori:scan-cancel"),
+  useScanned: (index: number) => ipcRenderer.invoke("shiori:scan-use", index),
 });

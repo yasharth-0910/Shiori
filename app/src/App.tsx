@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { countStates, titleOf } from "./fields";
 import { Library, type Doc } from "./Library";
 import { ModelPicker } from "./ModelPicker";
+import { Onboarding } from "./Onboarding";
+import { showOnboarding, type Stage } from "./firstrun";
 import { resultKey } from "./modelinfo";
 import type { ModelList } from "./shiori.d.ts";
 import { Processing } from "./Processing";
@@ -15,6 +17,7 @@ export function App() {
   const [settings, setSettings] = useState(false);
   // Setup (D-100): opens by itself when no model is installed, and from the Models link. `null` = not showing.
   const [setup, setSetup] = useState<ModelList | null>(null);
+  const [stage, setStage] = useState<Stage>("intro"); // intro | find | ready are the onboarding (D-115); models is the Models page
   const [adding, setAdding] = useState<{ doc_id: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -26,7 +29,10 @@ export function App() {
 
   useEffect(() => {
     void window.shiori?.listModels().then((l) => {
-      if (!l.skipPicker && !l.models.some((m) => m.installed)) setSetup(l);
+      if (showOnboarding(l)) {
+        setStage("intro");
+        setSetup(l);
+      }
     });
   }, []);
 
@@ -68,7 +74,7 @@ export function App() {
         <span className="logo" aria-hidden>栞</span>
         <b className="brand">Shiori</b>
         <button className={`navlink${open ? "" : " on"}`} onClick={() => { setOpen(null); setAdding(null); setSetup(null); }}>Library</button>
-        {window.shiori && <button className={`navlink${setup ? " on" : ""}`} onClick={() => void window.shiori?.listModels().then(setSetup)}>Models</button>}
+        {window.shiori && <button className={`navlink${setup ? " on" : ""}`} onClick={() => void window.shiori?.listModels().then((l) => { setStage("models"); setSetup(l); })}>Models</button>}
         {open && <span className="docname" title={name?.ja ?? undefined}>{name?.en ?? name?.ja ?? "Document"}</span>}
         <span className="grow" />
         {open && <button className="btn" disabled title="Export is not available yet">Export</button>}
@@ -96,7 +102,10 @@ export function App() {
       )}
       <main>
         {!docs && <div className="err">Loading</div>}
-        {setup && <Setup list={setup} onRefresh={async () => setSetup((await window.shiori?.listModels()) ?? null)} onClose={() => setSetup(null)} />}
+        {setup && stage === "models" && <Setup list={setup} onRefresh={async () => setSetup((await window.shiori?.listModels()) ?? null)} onClose={() => setSetup(null)} onFind={() => setStage("find")} />}
+        {setup && stage !== "models" && (
+          <Onboarding list={setup} stage={stage} onStage={setStage} onRefresh={async () => setSetup((await window.shiori?.listModels()) ?? null)} onAdd={() => { setSetup(null); void add(); }} onClose={() => setSetup(null)} />
+        )}
         {docs && !setup && adding && <Processing docId={adding.doc_id} name={adding.name} onDone={finished} onBack={() => setAdding(null)} />}
         {docs && !setup && !adding && !open && <Library docs={docs} onOpen={setOpen} onAdd={add} canAdd={!!window.shiori} />}
         {open && !setup && <Workspace fx={open.fx} counts={open.counts} />}

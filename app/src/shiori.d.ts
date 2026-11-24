@@ -1,7 +1,8 @@
 import type { ModelEntry, Recommendation } from "../electron/registry";
 import type { Fixture } from "./types";
+import type { ScanMatch, ScanState, UseResult } from "../electron/scantypes";
 import type { DownloadError, DownloadState, ImportResult } from "../electron/downloadtypes";
-export type { DownloadError, DownloadState, ImportResult };
+export type { DownloadError, DownloadState, ImportResult, ScanMatch, ScanState, UseResult };
 
 export type ModelInfo = ModelEntry & { installed: boolean };
 export type ModelList = {
@@ -42,7 +43,7 @@ export type Status = {
   cursor: number;
 };
 
-// The eleven functions preload.ts exposes. Nothing else crosses the bridge.
+// The fifteen functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
   interface Window {
     shiori?: {
@@ -61,6 +62,12 @@ declare global {
       downloadStatus(): Promise<DownloadState>;
       // Native file dialog in main; null when cancelled. A .gguf is copied in only if its SHA-256 is a registry entry's.
       chooseModelFile(): Promise<ImportResult | null>;
+      // Find models on this computer (D-115). Starts only on a click. "folder" opens a native folder dialog in main; false = cancelled.
+      scanModels(kind: "computer" | "folder"): Promise<boolean>;
+      scanStatus(): Promise<ScanState>;
+      scanCancel(): Promise<void>;
+      // Registers a match by its index (never a path), through the same import as chooseModelFile: the file is copied in.
+      useScanned(index: number): Promise<UseResult>;
     };
   }
 }

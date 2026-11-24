@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { InfoCard } from "./ModelPicker";
 import type { DownloadError, ImportResult, ModelInfo, ModelList } from "./shiori.d.ts";
 
-type Props = { list: ModelList; onRefresh: () => Promise<void>; onClose: () => void };
+type Props = { list: ModelList; onRefresh: () => Promise<void>; onClose: () => void; onFind: () => void };
 
 const ERRORS: Record<DownloadError, string> = {
   offline: "No internet connection. Try again when you are online, or choose a model file from disk.",
@@ -28,7 +28,7 @@ const host = (url: string) => {
   }
 };
 
-export function Setup({ list, onRefresh, onClose }: Props) {
+export function Setup({ list, onRefresh, onClose, onFind }: Props) {
   const [dl, setDl] = useState<Awaited<ReturnType<NonNullable<typeof window.shiori>["downloadStatus"]>> | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const bridge = window.shiori;
@@ -114,6 +114,7 @@ export function Setup({ list, onRefresh, onClose }: Props) {
       {note && <p className="err">{note}</p>}
       <div className="drow l">
         <button className="btn" disabled={!!active} onClick={() => void choose()}>Choose a model file from disk</button>
+        <button className="btn" disabled={!!active} onClick={onFind}>Find models on this computer</button>
         <span className="grow" />
         <button className="btn" onClick={onClose}>{anyInstalled ? "Done" : "Skip for now"}</button>
       </div>

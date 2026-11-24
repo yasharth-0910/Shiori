@@ -1,13 +1,14 @@
 // Main process. Serves the built renderer from a local shiori:// scheme (PDF.js needs
 // fetch, which file:// blocks) and cancels every request that is not shiori://.
-// The renderer gets eleven IPC functions (preload.ts); main owns the file picker, the
+// The renderer gets fifteen IPC functions (preload.ts); main owns the file picker, the
 // sidecar and its token (D-83), and the model download (D-100).
 import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import * as llama from "./llama";
-import { CUSTOM_ID, defaultChoice, discover, modelDirs, realWhere, systemFacts, type Found } from "./discover";
+import { CUSTOM_ID, createScanner, defaultChoice, discover, importAsGguf, knownRoots, modelDirs, realWhere, systemFacts, type Found } from "./discover";
 import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
 import { bundledLlama } from "./paths";
@@ -15,6 +16,7 @@ import { runHighlightCheck } from "./hlcheck";
 import { createDownloader } from "./download";
 import { requestFilter } from "./netfilter";
 import { savedCalendar } from "./saved";
+import type { UseResult } from "./scantypes";
 
 const DIST = path.join(__dirname, "..", "dist");
 const MIME: Record<string, string> = {
@@ -248,6 +250,9 @@ const docId = (id: unknown): string => {
 let downloader: ReturnType<typeof createDownloader> | null = null;
 const dl = () => (downloader ??= createDownloader({ registry: REGISTRY, modelsDir: here().dirs[0] as string, tempDir: path.join(app.getPath("userData"), "downloads") }));
 
+// "Find models on this computer" (D-115): local reads only, started by a click. Matches stay in memory; the renderer only names an index.
+const scanner = createScanner({ catalog: REGISTRY, modelsDir: () => here().dirs[0] as string });
+
 const calendar = savedCalendar((f) => shell.openPath(f));
 
 function registerIpc(): void {
@@ -392,6 +397,35 @@ function registerIpc(): void {
     const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     const file = r.canceled ? undefined : r.filePaths[0];
     return file ? dl().importFile(file) : null;
+  });
+  // Scan (D-115): "computer" = the known folders only; "folder" = one folder the user picks in a native dialog (main shows it).
+  ipcMain.handle("shiori:scan", async (e, kind: unknown): Promise<boolean> => {
+    own(e);
+    if (kind === "computer") scanner.start(knownRoots(os.homedir(), here().dirs));
+    else if (kind === "folder") {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const opts = { properties: ["openDirectory" as const] };
+      const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      const dir = r.canceled ? undefined : r.filePaths[0];
+      if (!dir) return false;
+      scanner.start([dir]);
+    } else throw new Error("bad_scan_kind");
+    return true;
+  });
+  ipcMain.handle("shiori:scan-status", (e) => {
+    own(e);
+    return scanner.status();
+  });
+  ipcMain.handle("shiori:scan-cancel", (e) => {
+    own(e);
+    scanner.cancel();
+  });
+  // "Use this one": the same importFile as "Choose a model file from disk" (hash again, then COPY into the models folder).
+  ipcMain.handle("shiori:scan-use", async (e, index: unknown): Promise<UseResult> => {
+    own(e);
+    const file = scanner.fileOf(index);
+    if (!file) return { ok: false, reason: "gone" };
+    return importAsGguf(file, path.join(app.getPath("userData"), "downloads"), (f) => dl().importFile(f));
   });
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
