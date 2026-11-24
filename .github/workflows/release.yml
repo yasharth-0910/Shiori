@@ -101,6 +101,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4 # for docs/release_notes_<tag>.md
+        with:
+          sparse-checkout: docs
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -109,4 +112,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${{ github.ref_name }}" out/* --draft --title "${{ github.ref_name }}" --notes "Not notarized (macOS builds are ad-hoc signed, Windows and Linux are unsigned). Only macOS arm64 is tested. Checksums are in the SHA256SUMS files."
+        run: gh release create "${{ github.ref_name }}" out/* --draft --title "${{ github.ref_name }}" --notes-file "docs/release_notes_${{ github.ref_name }}.md"

@@ -92,7 +92,7 @@ export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
           })}
         </tbody>
       </table>
-      {rows.length === 0 && <p className="empty">No documents.</p>}
+      {rows.length === 0 && <p className="empty">Documents are kept only while the app is open. Saving them between sessions is not in this version yet.</p>}
     </div>
   );
 }

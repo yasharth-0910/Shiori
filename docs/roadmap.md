@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Working to the v0.1 plan below (2026-11-21), week 1 of 6: Phase 5 close-out, with the Phase 7 highlight check and the Phase 3 and 9 framing and hold-out text alongside. Phase 7 is in progress. Phase 5 is closed by decision (D-74): fixes 1 to 5 on the list fields (D-71, D-72, D-73), Qwen3.5-9B 19 of 42 and Gemma 4 E4B 18 of 42 rows right on dev, the exit criterion not met by the numbers. Phase 6 is not started (blocked by D-10, the providers' output terms for training on cloud labels). The app is built through the Processing screen (live results, cancel), the Workspace, the Summary tab, English for cited sentences, and the Title and Issuer cards. The Deadlines tab is built (2026-11-22). Export (CSV and .ics) is built (2026-11-22, D-98). Still to do in Phase 7: Setup and model download, the Wi-Fi-off test, the Windows 16 GB run, and more documents. Phase 4 leftovers: the Windows 16 GB run and the base-model decision entry are not done. Phase 3 is closed except the native-speaker audit and the test split labeling (both stay for the end; D-68).**
+**v0.1.0 is ready to tag (2026-11-24). The app is built end to end: Processing, Workspace, Summary, Deadlines, Export (CSV and .ics), HTML notices, and first-run onboarding with a model scan and a pinned-hash download (D-99, D-100, D-103, D-115). Installers come from electron-builder in CI for macOS arm64, macOS Intel, Windows and Linux (D-112 to D-114); only macOS arm64 has been run by hand, the other three are built in CI and untested. Phase 5 is closed by decision (D-74). Phase 6 is not started (blocked by D-10). Not done: the Windows 16 GB run, the base-model decision entry, the native-speaker audit and the test split labeling (D-68), the test-split milestone run, and scanned PDFs (refused with a message, D-112). The Library is in memory only and is lost on quit. See "After v0.1" below.**
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
 
@@ -24,6 +24,23 @@ The phase checklists below stay as they are. This plan says which parts of them 
 Cut order if time runs short: Windows installer and Windows polish first, then test labels down to 5 documents, then video polish. Never cut the highlight check, Export or the hold-out run.
 
 Hold-out rule (D-96): a new rule needs an example from outside the 15 dev documents. The test split is run once, for the milestone, after the rules freeze.
+
+## After v0.1
+
+From the open questions in `docs/decisions.md` (numbered there, not repeated here): the labeler `schema_valid` versus `repair` mismatch, the roster and spec_access pointer questions, the Hokkaido numbering check, the two-office contact rule, the weekday typo in the Okayama notice, `contact.phone` copying, issuer_org for schools and centres, cover-line issuers, and the pending dev relabel to kind `application` (answers not yet imported, so the old-label reports are stale).
+
+Also:
+
+- Library persistence: processed documents are kept only in memory and are gone after a quit or reinstall (found 2026-11-24).
+- Windows 16 GB run.
+- Native review of the 5 test items settled by rule.
+- Line-join and section-path fix, with an EXTRACTOR_VERSION bump.
+- Title cue misses: need a new example from outside the 15 dev documents (D-96).
+- Use models in place instead of copying them (D-115).
+- Optional OCR download.
+- Models page restyle.
+- Orphaned llama-server after a force-quit (D-112).
+- Spacing gap on the model scan results screen.
 
 ## Ground rules for the whole plan
 
@@ -201,9 +218,9 @@ Packaging for v0.1 (D-112). The generic "Packaging" line of Phase 8 above is don
 - [x] Scans refused whole with `scan_not_supported` and a plain message; OCR deferred to an optional pinned-hash download after v0.1
 - [x] `packaging/sidecar.spec` (PyInstaller onedir); frozen sidecar answers `/health` and gives the same JSON as the unfrozen one on two dev documents
 - [x] `packaging/fetch_llama.py` and `packaging/llama_pins.json` (b12651, four targets, SHA-256 pinned)
-- [ ] electron-builder config that copies `dist/sidecar/shiori-sidecar` and the flattened llama folder into `resources/`, and builds an unsigned macOS arm64 app
-- [ ] Run the packaged app on macOS arm64 with Wi-Fi off; pdf.js worker and cMaps load from the bundle
-- [ ] macOS Intel, Windows x64 and Linux x64 builds (built from the same pins, not tested by the author)
+- [x] electron-builder config that copies `dist/sidecar/shiori-sidecar` and the flattened llama folder into `resources/`, and builds an unsigned macOS arm64 app
+- [x] Run the packaged app on macOS arm64 with Wi-Fi off; pdf.js worker and cMaps load from the bundle
+- [x] macOS Intel, Windows x64 and Linux x64 builds: built in CI, untested
 - [ ] Frozen build on Windows 16 GB laptop (not tested)
 
 - [ ] Public README with real numbers and limitations

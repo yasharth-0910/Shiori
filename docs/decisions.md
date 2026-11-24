@@ -1225,3 +1225,11 @@ Decision:
 - "Use this one" calls the same `importFile` as "Choose a model file from disk": it hashes the file again and COPIES it into the models folder (no in-place use). The screen shows the size and the free space before the copy and blocks it when the disk is too small. `importFile` only accepts a name ending in `.gguf`, so for an Ollama blob main makes a temporary symlink (hard link if symlinks are refused) with a `.gguf` name, calls `importFile`, then removes it. `download.ts` is unchanged.
 - Cost accepted: a model found by the scan is hashed twice (scan, then import) and exists twice on disk afterwards. Using a file in place would need a models-folder setting; not done.
 Consequences: bridge grows from eleven to fifteen functions (`scanModels`, `scanStatus`, `scanCancel`, `useScanned`; `tests/test_app_ipc.py` updated). Not run against real multi-GB files; the tests use a small fake catalog. Windows and Ollama blob handling are tested on macOS only. `EXTRACTOR_VERSION` stays 0.3.0.
+
+## D-116: v0.1 keeps results in memory only
+
+Date: 2026-11-24
+Status: accepted (Yasharth's task of 2026-11-24)
+Context: after a reinstall the Library showed "No documents". The Library is React state in the renderer and the main process keeps its job list in memory; nothing is written to disk except models and downloads.
+Decision: v0.1 keeps processed results in memory only, and the empty Library says so. Reason: stored results contain document text, and encrypted per-document storage is Phase 8 (`docs/privacy.md`, `docs/roadmap.md`). Saving between sessions is planned, not decided: where, whether encrypted, and whether the PDF is kept are open.
+Consequences: results are lost when the app quits. Fixture loading, the sidecar and `EXTRACTOR_VERSION` (0.3.0) are unchanged.
