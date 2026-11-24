@@ -74,7 +74,7 @@ The installer ends up in `app/release/`.
 
 ## Run it from source
 
-You need: macOS (the only machine it has been run on), Python 3.12 with [uv](https://docs.astral.sh/uv/), Node 20 or newer, and `llama-server` from llama.cpp (for example `brew install llama.cpp`).
+You need: macOS (the only machine it has been run on), Python 3.12 with [uv](https://docs.astral.sh/uv/), Node 22.13 or newer, and `llama-server` from llama.cpp (for example `brew install llama.cpp`).
 
 ```
 uv sync
