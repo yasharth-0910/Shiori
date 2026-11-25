@@ -131,7 +131,7 @@ test("model code makes no network call except the app's own loopback", () => {
 });
 
 // --- packaged paths and llama.ts (D-112) ---
-import { bundledLlama, exeName, modelsDir, sidecarCommand, type Layout } from "../electron/paths.ts";
+import { bundledLlama, exeName, modelsDir, sidecarCommand, sidecarEnv, type Layout } from "../electron/paths.ts";
 import { buildArgs } from "../electron/llama.ts";
 
 const lay = (platform: string, isPackaged: boolean): Layout => ({
@@ -154,6 +154,12 @@ test("sidecar command: frozen binary with no cwd when packaged, uv in the repo i
   assert.deepEqual(sidecarCommand(lay("win32", true), []), { command: "C:\\Apps\\Shiori\\resources\\sidecar\\shiori-sidecar.exe", args: [], cwd: undefined });
   assert.equal(sidecarCommand(lay("linux", true), []).command, "/opt/Shiori/resources/sidecar/shiori-sidecar");
   assert.deepEqual(sidecarCommand(lay("darwin", false), x), { command: "uv", args: ["run", "python", "-m", "sidecar", ...x], cwd: "/repo" });
+});
+
+test("the sidecar environment drops every telemetry variable and keeps the rest", () => {
+  const env = { PATH: "/bin", SHIORI_LLAMA_KEY: "k", NOT_OTEL_X: "1", FASTAPI_OTEL_AUTO_CONFIGURE: "true", OTEL_EXPORTER_OTLP_ENDPOINT: "x", OTEL_SDK_DISABLED: "false", otel_traces_exporter: "otlp" };
+  assert.deepEqual(sidecarEnv(env), { PATH: "/bin", SHIORI_LLAMA_KEY: "k", NOT_OTEL_X: "1" });
+  assert.equal(env.FASTAPI_OTEL_AUTO_CONFIGURE, "true"); // a copy: our own environment is not touched
 });
 
 test("bundled llama-server and models folder by platform", () => {

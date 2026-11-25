@@ -24,6 +24,11 @@ export function sidecarCommand(l: Layout, extra: string[]): SidecarCommand {
   return { command: "uv", args: ["run", "python", "-m", "sidecar", ...extra], cwd: l.repoRoot };
 }
 
+/** The sidecar's environment: a copy without FASTAPI_OTEL_AUTO_CONFIGURE and OTEL_*, so nothing inherited can turn on
+ * telemetry. Case is ignored, as Windows ignores it. */
+export const sidecarEnv = (env: Record<string, string | undefined>): Record<string, string | undefined> =>
+  Object.fromEntries(Object.entries(env).filter(([k]) => !/^(OTEL_|FASTAPI_OTEL_AUTO_CONFIGURE$)/i.test(k)));
+
 /** The llama-server shipped inside the app; null in dev (the PATH search is used there). */
 export function bundledLlama(l: Layout): string | null {
   return l.isPackaged ? pathFor(l.platform).join(l.resourcesPath, "llama", exeName("llama-server", l.platform)) : null;

@@ -1233,3 +1233,12 @@ Status: accepted (Yasharth's task of 2026-11-24)
 Context: after a reinstall the Library showed "No documents". The Library is React state in the renderer and the main process keeps its job list in memory; nothing is written to disk except models and downloads.
 Decision: v0.1 keeps processed results in memory only, and the empty Library says so. Reason: stored results contain document text, and encrypted per-document storage is Phase 8 (`docs/privacy.md`, `docs/roadmap.md`). Saving between sessions is planned, not decided: where, whether encrypted, and whether the PDF is kept are open.
 Consequences: results are lost when the app quits. Fixture loading, the sidecar and `EXTRACTOR_VERSION` (0.3.0) are unchanged.
+
+## D-117: Sidecar telemetry is off in code and in its environment
+
+Date: 2026-11-26
+Status: accepted (Yasharth's task of 2026-11-26)
+Context: finding F5 of `docs/audit_2026-11.md`. FastAPI 0.165.0 has built-in OpenTelemetry: `FASTAPI_OTEL_AUTO_CONFIGURE=true` with an OTLP endpoint variable turns on export, and its default log records include exception messages, which could hold document text. The app passed its whole environment to the sidecar. The installed sidecar could send nothing, because the export packages are not bundled, but a later dependency could have changed that.
+Decision: `create_app` passes `telemetry={"auto_configure": False, "tracing": False, "metrics": False, "logs": False}`. Electron starts the sidecar without `FASTAPI_OTEL_AUTO_CONFIGURE` and every `OTEL_*` variable, ignoring case (`sidecarEnv` in `app/electron/paths.ts`). Tests in `tests/test_app_no_network.py` and `app/test/models.test.ts` cover both.
+Alternatives: only one of the two layers (rejected: the code setting also covers a sidecar started by hand, and the filter also covers any other library that reads `OTEL_*`); leaving the packages' absence as the protection (rejected: nothing would notice if they arrived).
+Consequences: no change to extraction output (audit baseline 75 of 75 identical) or to `EXTRACTOR_VERSION` (0.3.0). llama-server's environment is not filtered. A FastAPI upgrade that renames these settings would fail the test, which reads the private `_telemetry` attribute. Not tried in a rebuilt packaged app.

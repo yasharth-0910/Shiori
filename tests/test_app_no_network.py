@@ -18,6 +18,10 @@ downloads. Both are named below with their reason; nothing else may.
 import re
 from pathlib import Path
 
+import pytest
+
+from sidecar.server import create_app
+
 APP = Path(__file__).resolve().parent.parent / "app"
 # test/ holds the dev-only node tests: never built or packaged (the two tsconfig
 # files include src and electron only). They name example hosts and run a loopback
@@ -261,3 +265,33 @@ def test_main_uses_the_counting_request_filter() -> None:
     assert "^(shiori|devtools|data|blob):" in nf
     code = re.sub(r"//.*", "", nf)
     assert not re.search(r"""https?://|127\.0\.0\.1|localhost""", code)
+
+
+def test_packaged_app_ignores_shiori_shot() -> None:
+    """Every SHIORI_SHOT* read is gated on app.isPackaged, and the window is hidden
+    only through the gated value (audit_2026-11 F4)."""
+    main = (APP / "electron" / "main.ts").read_text()
+    reads = [x for x in main.splitlines() if "process.env.SHIORI_SHOT" in x]
+    assert reads
+    assert [x for x in reads if "app.isPackaged ? undefined :" not in x] == []
+    assert "show: !shot && !HLCHECK," in main
+
+
+def test_sidecar_telemetry_is_off_whatever_the_environment_says(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """audit_2026-11 F5. `_telemetry` is where FastAPI keeps the merged settings."""
+    monkeypatch.setenv("FASTAPI_OTEL_AUTO_CONFIGURE", "true")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9")
+    settings = create_app("test-token")._telemetry
+    keys = ("auto_configure", "tracing", "metrics", "logs")
+    assert {k: settings.get(k) for k in keys} == dict.fromkeys(keys, False)
+
+
+def test_electron_starts_the_sidecar_without_telemetry_variables() -> None:
+    """The one spawn takes the filtered environment. What the filter removes is tested
+    in app/test/models.test.ts."""
+    src = (APP / SIDECAR).read_text()
+    assert "const env = sidecarEnv(" in src
+    assert src.count("spawn(") == 1
+    assert "spawn(cmd.command, cmd.args, { cwd: cmd.cwd, env," in src

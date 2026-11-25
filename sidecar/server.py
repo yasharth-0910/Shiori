@@ -654,7 +654,18 @@ def create_app(
     cancelled (D-90). All injected so tests need no model."""
     worker = Worker([base, *([lists] if lists else [])])
     # no /docs, /redoc or /openapi.json: nothing to browse, and they would sit behind the token anyway
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    # telemetry off in code: the environment must not be able to turn on an export (privacy.md)
+    app = FastAPI(
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        telemetry={
+            "auto_configure": False,
+            "tracing": False,
+            "metrics": False,
+            "logs": False,
+        },
+    )
     app.state.worker = worker
     queues = Translations(worker, translator) if translator else None
     app.state.queues = queues

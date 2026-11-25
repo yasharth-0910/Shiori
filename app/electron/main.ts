@@ -121,10 +121,12 @@ function serve(request: Request): Response {
 const devSize = (app.isPackaged ? undefined : process.env.SHIORI_SHOT_SIZE)?.split("x").map(Number) as [number, number] | undefined;
 
 async function createWindow(): Promise<void> {
+  // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
+  const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;
   const win = new BrowserWindow({
     width: devSize?.[0] ?? 1280,
     height: devSize?.[1] ?? 860,
-    show: !process.env.SHIORI_SHOT && !HLCHECK,
+    show: !shot && !HLCHECK,
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -139,8 +141,6 @@ async function createWindow(): Promise<void> {
   await win.loadURL("shiori://app/");
   if (HLCHECK && PICK) void runHighlightCheck(win, HLCHECK, PICK, (id) => sidecar.call("GET", `/documents/${id}/fields`));
 
-  // Dev check only: SHIORI_SHOT=<png> clicks chip number SHIORI_CHIP (default 0), saves the window, quits.
-  const shot = app.isPackaged ? undefined : process.env.SHIORI_SHOT;
   // Two more dev checks, off in a packaged app like SHIORI_PICK and SHIORI_SHOT:
   // SHIORI_SHOT_STAGE=extract (or a comma list) also saves <shot>-extract.png when the Processing screen first reaches that stage;
   // SHIORI_SHOT_OPEN=<field label or id> waits until the translation queue is empty (or 400 s), saves <shot>-list.png,
