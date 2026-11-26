@@ -5,6 +5,7 @@ Never imported by the app. Run from the repo root:
     uv run python packaging/fetch_llama.py            # verify against packaging/llama_pins.json
     uv run python packaging/fetch_llama.py --record   # first time only: write the hashes into the pins file
 
+Only llama-server, the shared libraries and the license files are unpacked (wanted()).
 Archives go to packaging/build/llama/dl/, unpacked files to packaging/build/llama/<target>/
 (both gitignored). The pinned release also has its LICENSE fetched once and its hash recorded.
 """
@@ -12,6 +13,7 @@ Archives go to packaging/build/llama/dl/, unpacked files to packaging/build/llam
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 import tarfile
 import urllib.request
@@ -31,6 +33,7 @@ TARGETS = {
     "ubuntu-x64": f"llama-{TAG}-bin-ubuntu-x64.tar.gz",
 }
 LIBS = (".dylib", ".dll", ".so")
+SERVERS = ("llama-server", "llama-server.exe")
 
 
 def sha256(path: Path) -> str:
@@ -52,27 +55,41 @@ def download(url: str, dest: Path) -> None:
     tmp.rename(dest)
 
 
+def is_lib(name: str) -> bool:
+    return name.endswith(LIBS) or ".so." in name
+
+
+def wanted(member: str) -> bool:
+    """Allow-list for the installer: the server, shared libraries (and their symlinks), licenses."""
+    name = Path(member).name
+    return name in SERVERS or is_lib(name) or name.startswith("LICENSE")
+
+
 def unpack(archive: Path, into: Path) -> None:
-    """Extract without trusting member names: no absolute paths, no .., no links outside the folder."""
+    """Extract the wanted() files without trusting member names: no absolute paths, no .., no links
+    outside the folder. The folder is emptied first, so files from an older unpack do not stay."""
+    if into.exists():
+        shutil.rmtree(into)
     into.mkdir(parents=True, exist_ok=True)
     if archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as z:
             for n in z.namelist():
                 if Path(n).is_absolute() or ".." in Path(n).parts:
                     sys.exit(f"unsafe path in archive: {n}")
-            z.extractall(into)  # noqa: S202 (names checked above)
+            z.extractall(into, members=[n for n in z.namelist() if wanted(n)])  # noqa: S202 (names checked above)
     else:
         with tarfile.open(archive) as t:
+            members = [m for m in t.getmembers() if not m.isdir() and wanted(m.name)]
             t.extractall(
-                into, filter="data"
+                into, members=members, filter="data"
             )  # the "data" filter rejects unsafe members
 
 
 def report(target: str, folder: Path) -> list[str]:
     files = sorted(p for p in folder.rglob("*") if p.is_file() or p.is_symlink())
     names = [str(p.relative_to(folder)) for p in files]
-    server = [n for n in names if Path(n).name in ("llama-server", "llama-server.exe")]
-    libs = [n for n in names if n.endswith(LIBS) or ".so." in n]
+    server = [n for n in names if Path(n).name in SERVERS]
+    libs = [n for n in names if is_lib(Path(n).name)]
     print(f"\n== {target}: {len(names)} files")
     print(f"llama-server: {server or 'MISSING'}")
     print(f"shared libraries: {len(libs)}")

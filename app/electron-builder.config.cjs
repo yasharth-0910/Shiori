@@ -39,6 +39,8 @@ module.exports = {
   // dev fixture (it holds document text) and must never end up in an installer.
   files: ["dist/**", "dist-electron/**", "package.json", "!dist/fixture.json", "!dist/doc.pdf", "!node_modules"],
   asar: true,
+  // The UI is English only, so Electron's other locale files are dropped (all three platforms).
+  electronLanguages: ["en-US"],
   extraResources: [
     { from: need(path.join(build, "sidecar", "shiori-sidecar")), to: "sidecar" },
     { from: llamaDir(), to: "llama" },
