@@ -69,6 +69,39 @@ jobs:
         if: startsWith(matrix.name, 'macos')
         working-directory: app/release
         run: codesign --verify --deep --strict --verbose=2 mac*/Shiori.app
+      # Runs the copies inside the unpacked app, which are the files the installer ships.
+      - name: Smoke test the packaged sidecar and llama-server
+        timeout-minutes: 5
+        run: |
+          uv run python - <<'PY'
+          import glob, json, subprocess, sys, threading, urllib.request
+          from pathlib import Path
+
+          found = glob.glob("app/release/mac*/Shiori.app/Contents/Resources") + glob.glob("app/release/*-unpacked/resources")
+          assert len(found) == 1, f"expected one unpacked app, found {found}"
+          res = Path(found[0]).resolve()
+          exe = ".exe" if sys.platform == "win32" else ""
+
+          # The sidecar quits when stdin closes, so hold a pipe open until /health has answered.
+          p = subprocess.Popen([res / "sidecar" / f"shiori-sidecar{exe}"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+          watchdog = threading.Timer(120, p.kill)  # a sidecar that prints nothing must not hang the job
+          watchdog.start()
+          try:
+              ready = json.loads(p.stdout.readline())
+              req = urllib.request.Request(f"http://127.0.0.1:{ready['port']}/health", headers={"Authorization": f"Bearer {ready['token']}"})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  body = json.load(r)
+              assert body == {"ok": True}, body
+              print("sidecar /health ok", flush=True)
+              p.stdin.close()
+              assert p.wait(timeout=30) == 0, f"sidecar exit code {p.returncode}"
+              print("sidecar stopped", flush=True)
+          finally:
+              watchdog.cancel()
+              p.kill()
+
+          subprocess.run([res / "llama" / f"llama-server{exe}", "--version"], check=True, timeout=60)
+          PY
       - name: SHA-256 file
         working-directory: app/release
         run: |

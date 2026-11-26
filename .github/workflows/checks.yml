@@ -1,0 +1,46 @@
+# Lint, type check and tests on every push to main and every pull request. Linux only; installers are release.yml.
+# No secrets. Tests that need gitignored local data (corpus PDFs, models, review answers) skip themselves.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      # The collector group (httpx, beautifulsoup4) is needed for pyright to resolve collector/ imports.
+      - name: Python deps
+        run: uv sync --frozen --group collector
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Pyright
+        run: uv run pyright
+      - name: Pytest
+        run: uv run pytest -rs
+      - name: App deps
+        working-directory: app
+        run: npm ci
+      - name: App tests
+        working-directory: app
+        run: npm test
+      - name: App type check
+        working-directory: app
+        run: npm run typecheck
