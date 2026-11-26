@@ -1,6 +1,6 @@
 [project]
 name = "shiori"
-version = "0.1.0"
+version = "0.1.1"
 description = "Offline reader for Japanese public tender documents."
 license = "AGPL-3.0-only"
 readme = "README.md"
