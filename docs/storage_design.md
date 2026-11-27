@@ -1,6 +1,6 @@
 # Storage design: keeping documents between sessions
 
-Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 and 1 are done: `app/electron/store.ts` seals and opens one blob and nothing imports it. Nothing is saved. D-116 still describes the app: results are kept in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 and 1 are done, and the first half of step 2 (save, list, read, add translations; not delete or startup cleanup): `app/electron/store.ts`, which no app code imports. The app saves nothing. D-116 still describes the app: results are kept in memory only.
 
 This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 

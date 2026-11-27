@@ -1,9 +1,13 @@
-// Run: npm test. Seal and open one blob of the document store (docs/storage_design.md sections 2 and 6 step 1).
-// Everything stays in memory.
+// Run: npm test. The document store (docs/storage_design.md sections 2 and 6, steps 1 and 2a). Seal and open stay in
+// memory. The store tests write only inside their own temp folder, with a fake keeper. All Japanese text is invented.
 import assert from "node:assert/strict";
-import { createDecipheriv, randomBytes } from "node:crypto";
-import { test } from "node:test";
-import { open, type Role, seal, StoreError } from "../electron/store.ts";
+import { createDecipheriv, createHash, randomBytes } from "node:crypto";
+import * as fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+import * as os from "node:os";
+import * as path from "node:path";
+import { test, type TestContext } from "node:test";
+import { createStore, type Keeper, open, type Result, type Role, seal, StoreError } from "../electron/store.ts";
 
 const key = randomBytes(32);
 const folder = "0123456789abcdef0123456789abcdef";
@@ -14,7 +18,7 @@ const BODY = 4 + 12;
 const TAG = 16;
 
 // The error carries its code and nothing else: no cause, no path, no data, no key bytes.
-function failsClosed(op: () => unknown, code: "seal_failed" | "open_failed" = "open_failed"): void {
+function failsClosed(op: () => unknown, code: StoreError["code"] = "open_failed"): void {
   assert.throws(op, (e: unknown) => {
     assert.ok(e instanceof StoreError);
     assert.equal(e.code, code);
@@ -95,4 +99,359 @@ test("two seals of the same input differ", () => {
   const b = seal(key, folder, "record", plain);
   assert.ok(!a.subarray(HEADER, BODY).equals(b.subarray(HEADER, BODY)), "same nonce");
   assert.ok(!a.subarray(BODY).equals(b.subarray(BODY)), "same ciphertext");
+});
+
+// ---- The store ----
+
+const SENTENCE = "架空の調達案件に関する公告である。"; // canary: must never be readable on disk
+const FILE_NAME = "架空の機密案件_canary"; // canary: must not be stored at all
+
+// Stands in for safeStorage: reversible, and the key is not readable in the wrapped bytes.
+const flip = (b: Buffer) => Buffer.from(b.map((x) => x ^ 0x5a));
+const keeper: Keeper = { wrap: (s) => flip(Buffer.from(s)), unwrap: (b) => flip(b).toString() };
+const denied: Keeper = {
+  wrap: () => {
+    throw new Error(`denied ${SENTENCE}`);
+  },
+  unwrap: () => {
+    throw new Error(`denied ${SENTENCE}`);
+  },
+};
+
+// Replaces one node:fs function for the store too, until the test ends.
+function mockFs(t: TestContext, name: "fsyncSync" | "renameSync", impl?: (...a: never[]) => unknown) {
+  const m = impl ? t.mock.method(fs.default, name, impl as never) : t.mock.method(fs.default, name);
+  syncBuiltinESMExports();
+  t.after(() => {
+    m.mock.restore();
+    syncBuiltinESMExports();
+  });
+  return m;
+}
+
+const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+
+function setup(t: TestContext, format: "pdf" | "html" = "pdf", content = "%PDF invented bytes") {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "shiori-store-test-"));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const base = path.join(tmp, "base");
+  const source = path.join(tmp, `${FILE_NAME}.${format}`);
+  const bytes = Buffer.from(content);
+  fs.writeFileSync(source, bytes);
+  const logs: string[] = [];
+  const store = (k: Keeper = keeper) => createStore(base, k, (line) => logs.push(line));
+  const root = path.join(base, "store");
+  const docs = () => (fs.existsSync(path.join(root, "docs")) ? fs.readdirSync(path.join(root, "docs")) : []);
+  return { tmp, base, root, source, bytes, id: sha(bytes), logs, store, docs };
+}
+
+function result(docId: string, model: string | null = "model-a", over: Partial<Result> = {}): Result {
+  return {
+    doc_id: docId,
+    pdf: `${FILE_NAME}.pdf`, // what the sidecar sends: the file's base name
+    model_id: model,
+    doc_type: "notice",
+    fields: [{ field: "title", value_ja: "架空の件名" }],
+    sentences: { p1_s1: { page: 1, text_orig: SENTENCE } },
+    ...over,
+  };
+}
+
+// Every file and folder under `dir`: relative name -> bytes (null for a folder).
+function tree(dir: string): Map<string, Buffer | null> {
+  const out = new Map<string, Buffer | null>();
+  if (!fs.existsSync(dir)) return out;
+  for (const e of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    const full = path.join(e.parentPath, e.name);
+    out.set(path.relative(dir, full), e.isDirectory() ? null : fs.readFileSync(full));
+  }
+  return out;
+}
+
+const en = (text: string) => ({ en: text, numbers_match: true, protected_lost: false });
+
+test("reading an empty store creates nothing and asks the keeper nothing", (t) => {
+  const s = setup(t);
+  const store = s.store(denied);
+  assert.deepEqual(store.list(), { documents: [], unreadable: 0 });
+  assert.equal(store.read(s.id), null);
+  assert.equal(store.readSource(s.id), null);
+  assert.equal(store.addTranslations(s.id, "model-a", { p1_s1: en("x") }), false);
+  assert.ok(!fs.existsSync(s.base));
+});
+
+test("save and reopen with a new store object", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+
+  const again = s.store();
+  const doc = again.read(s.id)!;
+  assert.equal(doc.id, s.id);
+  assert.equal(doc.format, "pdf");
+  assert.ok(!Number.isNaN(Date.parse(doc.added)));
+  assert.deepEqual(doc.results["model-a"], { app_version: "0.1.2", result: { ...result(s.id), pdf: `doc/${s.id}.pdf` } });
+  assert.deepEqual(again.list(), { documents: [doc], unreadable: 0 });
+  assert.deepEqual(again.readSource(s.id), s.bytes);
+  assert.equal(again.read("0".repeat(64)), null);
+
+  const [name] = s.docs();
+  assert.match(name!, /^[0-9a-f]{32}$/);
+  assert.deepEqual([...tree(s.root).keys()].sort(), [
+    "docs",
+    path.join("docs", name!),
+    path.join("docs", name!, "key"),
+    path.join("docs", name!, "record.enc"),
+    path.join("docs", name!, "source.enc"),
+    "master.key",
+  ]);
+});
+
+test("the files follow the two levels of keys in the design", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  const [name] = s.docs();
+  const file = (f: string) => fs.readFileSync(path.join(s.root, "docs", name!, f));
+  const master = Buffer.from(keeper.unwrap(fs.readFileSync(path.join(s.root, "master.key"))), "base64");
+  assert.equal(master.length, 32);
+  const docKey = open(master, name!, "key", file("key"));
+  assert.equal(docKey.length, 32);
+  assert.ok(!docKey.equals(master));
+  assert.equal(JSON.parse(open(docKey, name!, "record", file("record.enc")).toString()).id, s.id);
+  assert.deepEqual(open(docKey, name!, "source", file("source.enc")), s.bytes);
+});
+
+test("a new document is written source, record, key, each through a flushed .tmp file", (t) => {
+  const s = setup(t);
+  const order: string[] = [];
+  const rename = fs.renameSync;
+  const sync = mockFs(t, "fsyncSync");
+  mockFs(t, "renameSync", (from: string, to: string) => {
+    assert.equal(from, `${to}.tmp`);
+    order.push(path.basename(to));
+    rename(from, to);
+  });
+  s.store().save(result(s.id), s.source, "0.1.2");
+  assert.deepEqual(order, ["master.key", "source.enc", "record.enc", "key"]);
+  assert.equal(sync.mock.callCount(), 4);
+});
+
+test("an HTML notice keeps its text in the record and no copy of the file", (t) => {
+  const s = setup(t, "html", "<html>invented raw markup</html>");
+  const html = result(s.id, "model-a", { format: "html", text: SENTENCE, en_summary: { start: 0, end: 2 } });
+  s.store().save(html, s.source, "0.1.2");
+  const doc = s.store().read(s.id)!;
+  assert.equal(doc.format, "html");
+  assert.equal(doc.results["model-a"]!.result.text, SENTENCE);
+  assert.deepEqual(doc.results["model-a"]!.result.en_summary, { start: 0, end: 2 });
+  assert.equal(s.store().readSource(s.id), null);
+  assert.deepEqual(fs.readdirSync(path.join(s.root, "docs", s.docs()[0]!)).sort(), ["key", "record.enc"]);
+});
+
+test("only the listed parts of a result are stored", (t) => {
+  const s = setup(t);
+  const extra = { ...result(s.id), path: s.source, token: "invented" } as Result;
+  s.store().save(extra, s.source, "0.1.2");
+  assert.deepEqual(Object.keys(s.store().read(s.id)!.results["model-a"]!.result).sort(), ["doc_id", "doc_type", "fields", "model_id", "pdf", "sentences"]);
+});
+
+test("a second model joins the same document", (t) => {
+  const s = setup(t);
+  const store = s.store();
+  store.save(result(s.id, "model-a"), s.source, "0.1.2");
+  const first = store.read(s.id)!;
+  const before = tree(s.root);
+  s.store().save(result(s.id, "model-b"), s.source, "0.1.3");
+  s.store().save(result(s.id, null), s.source, "0.1.3"); // rules only
+  assert.equal(s.docs().length, 1);
+  const doc = s.store().read(s.id)!;
+  assert.equal(doc.added, first.added);
+  assert.deepEqual(Object.keys(doc.results).sort(), ["model-a", "model-b", "none"]);
+  assert.deepEqual(doc.results["model-a"], first.results["model-a"]);
+  assert.equal(doc.results["model-b"]!.app_version, "0.1.3");
+  // Only the record is rewritten.
+  const name = s.docs()[0]!;
+  for (const f of ["key", "source.enc"]) assert.deepEqual(tree(s.root).get(path.join("docs", name, f)), before.get(path.join("docs", name, f)));
+});
+
+test("a changed source file is not saved", (t) => {
+  const s = setup(t);
+  fs.writeFileSync(s.source, "%PDF something else");
+  failsClosed(() => s.store().save(result(s.id), s.source, "0.1.2"), "source_changed");
+  assert.ok(!fs.existsSync(s.base), "not even a store folder or a master key");
+
+  // Also for a second model on a saved document.
+  fs.writeFileSync(s.source, s.bytes);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  fs.writeFileSync(s.source, "%PDF something else");
+  const before = tree(s.base);
+  failsClosed(() => s.store().save(result(s.id, "model-b"), s.source, "0.1.2"), "source_changed");
+  assert.deepEqual(tree(s.base), before);
+
+  fs.rmSync(s.source);
+  failsClosed(() => s.store().save(result(s.id), s.source, "0.1.2"), "save_failed");
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("a document id that is not a SHA-256 is not saved", (t) => {
+  const s = setup(t, "html");
+  failsClosed(() => s.store().save(result("../x", "model-a", { format: "html" }), s.source, "0.1.2"), "save_failed");
+  assert.ok(!fs.existsSync(s.base));
+});
+
+test("translations join an existing document, per model", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id, "model-a"), s.source, "0.1.2");
+  s.store().save(result(s.id, "model-b"), s.source, "0.1.2");
+  assert.equal(s.store().addTranslations(s.id, "model-a", { p1_s1: { ...en("one"), extra: 1 } as ReturnType<typeof en> }), true);
+  assert.equal(s.store().addTranslations(s.id, "model-a", { "value:title": en("Title"), p9_s9: en("cited by nothing") }), true);
+  const doc = s.store().read(s.id)!;
+  assert.deepEqual(doc.translations, { "model-a": { p1_s1: en("one"), "value:title": en("Title") } });
+
+  // Nothing new: nothing is written.
+  const before = tree(s.base);
+  assert.equal(s.store().addTranslations(s.id, "model-a", { p1_s1: en("one") }), true);
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("translations never create a document or a model result", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  const before = tree(s.base);
+  assert.equal(s.store().addTranslations("0".repeat(64), "model-a", { p1_s1: en("x") }), false);
+  assert.equal(s.store().addTranslations(s.id, "model-b", { p1_s1: en("x") }), false);
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("saving a result again keeps only the translations of unchanged Japanese", (t) => {
+  const s = setup(t);
+  const two = { p1_s1: { page: 1, text_orig: SENTENCE }, p1_s2: { page: 1, text_orig: "二つ目の架空の文。" } };
+  s.store().save(result(s.id, "model-a", { sentences: two }), s.source, "0.1.2");
+  s.store().addTranslations(s.id, "model-a", { p1_s1: en("one"), p1_s2: en("two"), "value:title": en("Title") });
+  const moved = { ...two, p1_s2: { page: 1, text_orig: "別の架空の文。" } };
+  s.store().save(result(s.id, "model-a", { sentences: moved }), s.source, "0.1.3");
+  assert.deepEqual(s.store().read(s.id)!.translations["model-a"], { p1_s1: en("one"), "value:title": en("Title") });
+});
+
+test("one damaged document is counted and the others stay", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  const first = s.docs()[0]!;
+  const other = Buffer.from("%PDF another invented file");
+  fs.writeFileSync(s.source, other);
+  s.store().save(result(sha(other)), s.source, "0.1.2");
+  const record = path.join(s.root, "docs", first, "record.enc");
+  const bad = fs.readFileSync(record);
+  bad[bad.length - 1]! ^= 1;
+  fs.writeFileSync(record, bad);
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32))); // no key file: unfinished, not counted
+  const before = tree(s.base);
+
+  const { documents, unreadable } = s.store().list();
+  assert.deepEqual([documents.map((d) => d.id), unreadable], [[sha(other)], 1]);
+  assert.equal(s.store().read(s.id), null);
+  assert.deepEqual(tree(s.base), before);
+});
+
+for (const [name, spoil, use] of [
+  ["the keeper refuses", () => {}, denied],
+  ["the keeper returns something that is not a key", () => {}, { ...keeper, unwrap: () => "short" }],
+  ["master.key is missing but documents exist", (root: string) => fs.rmSync(path.join(root, "master.key")), keeper],
+  [
+    "master.key cannot be read",
+    (root: string) => {
+      fs.rmSync(path.join(root, "master.key"));
+      fs.mkdirSync(path.join(root, "master.key"));
+    },
+    keeper,
+  ],
+] as [string, (root: string) => void, Keeper][]) {
+  test(`unreadable master key (${name}) writes nothing and deletes nothing`, (t) => {
+    const s = setup(t);
+    s.store().save(result(s.id), s.source, "0.1.2");
+    spoil(s.root);
+    const before = tree(s.base);
+    const store = s.store(use);
+    failsClosed(() => store.save(result(s.id, "model-b"), s.source, "0.1.2"), "locked");
+    failsClosed(() => store.addTranslations(s.id, "model-a", { p1_s1: en("x") }), "locked");
+    failsClosed(() => store.list(), "locked");
+    failsClosed(() => store.read(s.id), "locked");
+    failsClosed(() => store.readSource(s.id), "locked");
+    assert.deepEqual(tree(s.base), before);
+  });
+}
+
+test("no master key and only an unfinished folder: the next save makes a key", (t) => {
+  const s = setup(t);
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32)), { recursive: true });
+  assert.deepEqual(s.store().list(), { documents: [], unreadable: 0 });
+  s.store().save(result(s.id), s.source, "0.1.2");
+  assert.equal(s.store().list().documents.length, 1);
+  assert.equal(s.docs().length, 2, "cleanup is not part of this step");
+});
+
+test("a save that fails part way says so with a code and leaves no key file", (t) => {
+  const s = setup(t);
+  const rename = fs.renameSync;
+  mockFs(t, "renameSync", (from: string, to: string) => {
+    if (to.endsWith("record.enc")) throw Object.assign(new Error(`ENOSPC: ${to}`), { code: "ENOSPC" });
+    rename(from, to);
+  });
+  failsClosed(() => s.store().save(result(s.id), s.source, "0.1.2"), "save_failed");
+  assert.ok(s.logs.includes("store_save failed: ENOSPC"));
+  assert.deepEqual(s.store().list(), { documents: [], unreadable: 0 });
+});
+
+test("no canary on disk or in a name, and no canary, path or id in the log", (t) => {
+  const s = setup(t);
+  const seen: string[] = [];
+  for (const m of ["log", "info", "warn", "error", "debug"] as const) t.mock.method(console, m, (...a: unknown[]) => seen.push(a.join(" ")));
+  const store = createStore(s.base, keeper); // the default logger
+  store.save(result(s.id), s.source, "0.1.2");
+  store.save(result(s.id, "model-b"), s.source, "0.1.2");
+  store.addTranslations(s.id, "model-a", { p1_s1: en("canary translation") });
+  store.list();
+  store.readSource(s.id);
+  const stored = JSON.stringify(store.read(s.id));
+  for (const secret of [FILE_NAME, s.tmp]) assert.ok(!stored.includes(secret), "file name or path inside the record");
+
+  const names = [...tree(s.base).keys()].join("\n");
+  for (const secret of [FILE_NAME, SENTENCE, s.id, s.id.slice(0, 8)]) assert.ok(!names.includes(secret));
+  for (const bytes of tree(s.base).values()) {
+    if (!bytes) continue;
+    for (const secret of [SENTENCE, FILE_NAME, "canary translation", "架空の件名", s.id, "%PDF"]) {
+      for (const enc of ["utf8", "utf16le"] as const) assert.ok(!bytes.includes(Buffer.from(secret, enc)));
+    }
+  }
+});
+
+test("failure logs and errors hold no canary, path, folder name or id", (t) => {
+  const s = setup(t);
+  const seen: string[] = [];
+  for (const m of ["log", "info", "warn", "error", "debug"] as const) t.mock.method(console, m, (...a: unknown[]) => seen.push(a.join(" ")));
+  const store = createStore(s.base, keeper);
+  store.save(result(s.id), s.source, "0.1.2");
+  const name = s.docs()[0]!;
+  const errors: unknown[] = [];
+  const fails = (op: () => unknown) => {
+    try {
+      op();
+      assert.fail("did not throw");
+    } catch (e) {
+      assert.ok(e instanceof StoreError);
+      errors.push(e);
+    }
+  };
+  fails(() => store.save(result(s.id), path.join(s.tmp, `${FILE_NAME}-missing.pdf`), "0.1.2"));
+  fails(() => createStore(s.base, denied).list());
+  fs.writeFileSync(path.join(s.root, "docs", name, "source.enc"), "damaged");
+  fails(() => store.readSource(s.id));
+  fs.rmSync(path.join(s.root, "docs", name, "source.enc"));
+  fails(() => store.readSource(s.id));
+  fs.writeFileSync(path.join(s.root, "docs", name, "record.enc"), "damaged");
+  assert.equal(store.list().unreadable, 1);
+
+  const out = [...seen, ...errors.map((e) => `${(e as Error).message}\n${(e as Error).stack?.split("\n")[0]}`)].join("\n");
+  assert.ok(seen.some((l) => l.startsWith("store_saved bytes=")));
+  assert.ok(seen.some((l) => l.startsWith("store_open failed: ")));
+  for (const secret of [SENTENCE, FILE_NAME, s.tmp, os.tmpdir(), s.id, s.id.slice(0, 8), name]) assert.ok(!out.includes(secret), "leak");
 });
