@@ -568,7 +568,7 @@ test("a locked store deletes no single document", (t) => {
 
 test("delete all removes every folder and the master key, and the next save makes a new key", (t) => {
   const s = twoDocuments(t);
-  fs.writeFileSync(path.join(s.base, "settings.json"), '{"keepDocuments": true}');
+  fs.writeFileSync(path.join(s.base, "settings.json"), '{"saveDocuments": "yes"}');
   fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32))); // unfinished folder
   const old = s.master();
   const store = s.store();

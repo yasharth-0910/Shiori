@@ -33,11 +33,22 @@ jobs:
         run: uv run ruff check .
       - name: Pyright
         run: uv run pyright
-      - name: Pytest
-        run: uv run pytest -rs
       - name: App deps
         working-directory: app
         run: npm ci
+      # For tests/test_app_filter_electron.py: the built app, and the Electron binary, which npm ci does not download.
+      - name: App build
+        working-directory: app
+        run: |
+          npx --no install-electron
+          npm run build
+      # The runner has no screen, so xvfb-run gives Electron a virtual one. Newer Ubuntu releases can stop Chromium's
+      # sandbox from starting for an Electron run out of node_modules, so it is off for this step only. The test loads
+      # only its own page. The shipped app keeps sandbox: true.
+      - name: Pytest
+        env:
+          ELECTRON_DISABLE_SANDBOX: "1"
+        run: xvfb-run -a uv run pytest -rs
       - name: App tests
         working-directory: app
         run: npm test

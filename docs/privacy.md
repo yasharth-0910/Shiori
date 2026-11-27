@@ -24,7 +24,7 @@ This file says what the code does today (checked 2026-11-27). Anything marked **
 |---|---|
 | App or a dependency sends data out | Page requests cancelled at the Electron session; CSP; shipped Python may not import network or cloud SDK modules (tests); sidecar telemetry off (D-117) |
 | Another local app queries our model or sidecar | Bind to 127.0.0.1, random ports, a new token or key at each start |
-| Laptop stolen or disk imaged | By default nothing is saved. Saved copies (only if saving is on, which no screen offers yet) are encrypted (`storage_design.md`), not tried in real Electron. Your original files and exports are not protected by it |
+| Laptop stolen or disk imaged | By default nothing is saved. Saved copies (only if saving is on, which no screen offers yet) are encrypted (`storage_design.md`); checked by hand on macOS in a dev run only (2026-11-27). Your original files and exports are not protected by it |
 | Deleted documents recovered from SSD | Delete removes the document's key file first (`app/electron/store.ts`). Old disk blocks and earlier backups can still hold it (`storage_design.md` section 3). No screen offers delete yet |
 | Document text ends up in logs or crash dumps | The app's own log lines carry no document text; the app never starts Electron's crash reporter. Filter for Japanese text in child process output: **Planned, not built** (see "Logging") |
 | User documents end up in training data | No code uploads documents or results |

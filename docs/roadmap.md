@@ -186,13 +186,13 @@ Part E: sv4 and review in Claude Code (D-54, D-55; no labeling calls)
 
 Can start in parallel once Phase 2 is done, using gold labels as fake model output, because the viewer and highlight logic don't depend on the model.
 
-- [ ] Electron shell, React renderer, strict CSP, contextIsolation on, nodeIntegration off
-- [ ] Main process spawns sidecar and llama-server on 127.0.0.1 with random ports and a session token
-- [ ] PDF.js viewer with highlight overlay from stored boxes
-- [ ] Fields panel: English value, status (verified / not found), citation chips
-- [ ] Click citation -> jump to page, highlight, show original Japanese + on-demand English for that sentence
-- [ ] Executive summary panel generated from verified fields only
-- [ ] Progress reporting while a document processes
+- [x] Electron shell, React renderer, strict CSP, contextIsolation on, nodeIntegration off
+- [x] Main process spawns sidecar and llama-server on 127.0.0.1 with random ports and a session token
+- [x] PDF.js viewer with highlight overlay from stored boxes
+- [x] Fields panel: English value, status (verified / not found), citation chips
+- [x] Click citation -> jump to page, highlight, show original Japanese + on-demand English for that sentence
+- [x] Executive summary panel generated from verified fields only
+- [x] Progress reporting while a document processes
 - [x] Model registry, automatic llama-server and model discovery, model picker with info card (D-99, 2026-11-22)
 - [x] Setup and model-download screen: pinned URLs and SHA-256, one network file (`download.ts`), renderer request filter (D-100, 2026-11-22). Not yet done: a real download of a full model with the hash check, and the Wi-Fi-off run after it
 

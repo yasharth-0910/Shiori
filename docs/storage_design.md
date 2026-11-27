@@ -1,6 +1,6 @@
 # Storage design: keeping documents between sessions
 
-Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`). The by-hand check of step 3 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): the keeper through a throwaway script under Electron, the lock through two copies of the app. Not run: Windows, Linux, a packaged build, an update (section 7). Steps 4 and 5 are built (`app/electron/settings.ts`, D-120; `app/electron/storage.ts`, wired into `main.ts` and the preload, D-121). Tested with a fake `safeStorage`, fake settings and a temp folder; the by-hand check of step 5 has not been run. No screen asks the question or calls the five new functions yet (steps 7 and 8), so the app saves only if `settings.json` was set to `"yes"` by hand. For a user who has not done that, D-116 still describes the app: results are kept in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`). The by-hand check of step 3 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): the keeper through a throwaway script under Electron, the lock through two copies of the app. Not run: Windows, Linux, a packaged build, an update (section 7). Steps 4 and 5 are built (`app/electron/settings.ts`, D-120; `app/electron/storage.ts`, wired into `main.ts` and the preload, D-121). Tested with a fake `safeStorage`, fake settings and a temp folder. The by-hand check of step 5 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): saving turned on by hand, a PDF processed, `store_saved` logged, `store_opened docs=1 unreadable=0` after a restart, no text or path in the log, no readable Japanese in the store. That check did not cover delete, the confirm dialogs or the viewer reading the stored copy. No screen asks the question or calls the five new functions yet (steps 7 and 8), so the app saves only if `settings.json` was set to `"yes"` by hand. For a user who has not done that, D-116 still describes the app: results are kept in memory only.
 
 This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 
@@ -27,11 +27,11 @@ One record per document:
 | Format | `pdf` or `html` |
 | Date added, app version | For sorting and for knowing which release made a result |
 | One result per model | The fields JSON the sidecar returns: field status, Japanese values, normalized values, items, citation ids, checks, and the cited sentences (text, page, section path and titles, boxes or anchor), plus `doc_type` and model id |
-| HTML only | The extracted `text` and `en_summary`, already part of the result |
+| HTML only | The extracted `text` (the document's source text) and `en_summary`, inside each result in the record |
 | English translations | The ones main has received, per model: sentence id to `{en, numbers_match, protected_lost}` |
 | PDF only | A copy of the PDF bytes, in a second encrypted file |
 
-The copy of the PDF is needed because the original may be moved, changed or deleted, and a citation must always open the exact page it was made from. HTML needs no copy: the viewer only uses the extracted text.
+The copy of the PDF is needed because the original may be moved, changed or deleted, and a citation must always open the exact page it was made from. HTML has no second file: the viewer only uses the extracted text, which is inside the record, so `readSource()` in `store.ts` returns null for HTML.
 
 Never stored:
 
@@ -52,8 +52,8 @@ Exports (CSV, .ics) and Copy are different: the user asks for them, they are pla
   master.key            master key, encrypted by safeStorage
   docs/<random name>/
     key                 this document's key, encrypted with the master key
-    record.enc          the record above, as JSON
-    source.enc          the PDF bytes (PDF only)
+    record.enc          the record above without the PDF copy, as JSON (holds an HTML document's source text)
+    source.enc          the PDF bytes (PDF only; an HTML document has no such file)
 <base>/settings.json        {"saveDocuments": "yes" or "no"}, written only once the user answers
 ```
 
@@ -93,7 +93,7 @@ Why two levels of keys: `safeStorage` holds one secret for the whole app. It can
 Writing safely:
 
 - Write to `<name>.tmp`, flush to disk, rename over the real name. A crash leaves the old file or the new one, never half of one.
-- A new document is written as `source.enc`, then `record.enc`, then `key` last. A folder without `key` is incomplete and is removed at startup.
+- A new PDF document is written as `source.enc`, then `record.enc`, then `key` last. A new HTML document is written as `record.enc`, then `key`. A folder without `key` is incomplete and is removed at startup.
 - Before saving a PDF, main reads the file and checks that its SHA-256 still equals the document id. If not, nothing is saved.
 - Adding the same document with another model updates the existing record. It does not make a second folder.
 - Updating translations never creates a document. If it was deleted, the update does nothing.

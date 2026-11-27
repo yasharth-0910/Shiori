@@ -267,3 +267,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-27 (D-120): storage step 4, first part: `settings.ts` reads and writes the saved answer, tests only. The key changed from `keepDocuments` to `saveDocuments`. The rest of step 4 (the first Yes, off blocking translation updates) is not built. Nothing is saved yet.
 
 - 2026-11-27 (D-121): storage step 5. `storage.ts` is wired into `main.ts`; the bridge has twenty functions. Tests use a fake `safeStorage`, fake settings and a temp folder, plus a one-off run of the compiled `main.js` against a stand-in Electron. Not run in real Electron; the by-hand check of step 5 is open. Do not release before steps 6 to 8.
+
+- 2026-11-27: the by-hand check of storage step 5 passed on macOS in a dev run (reported by Yasharth): saved, found again after a restart, no text or path in the log, no readable Japanese in the store. Next is step 6, the Keychain gate (`storage_design.md` section 7).
