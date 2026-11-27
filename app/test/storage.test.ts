@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -110,10 +111,10 @@ test("a first start with nothing saved asks no keyring and writes nothing", (t) 
   const c = computer(t);
   const s = c.start();
   s.open();
-  assert.deepEqual(s.listDocuments(), []);
+  assert.deepEqual(s.listDocuments().documents, []);
   assert.equal(s.source("0".repeat(64)), null);
   assert.deepEqual(c.safeCalls, []);
-  assert.deepEqual(s.getStorage(), { keep: null, state: "ok", saved: 0, unreadable: 0, message: null });
+  assert.deepEqual(s.getStorage(), { keep: null, state: "ok", saved: 0, unreadable: 0, files: false, message: null });
   assert.ok(!fs.existsSync(c.base));
 });
 
@@ -130,7 +131,7 @@ for (const answer of ["unanswered", "no"] as const) {
       assert.equal(r.pdf, `doc/${d.id}.pdf`);
       assert.deepEqual(await s.translate(d.id, ["p1_s1"], MODEL, live()), { ok: true, ...queue() });
     }
-    assert.deepEqual(s.listDocuments(), []);
+    assert.deepEqual(s.listDocuments().documents, []);
     assert.equal(s.getStorage().keep, answer === "no" ? false : null);
     assert.ok(!fs.existsSync(c.base), "no store folder and no master key");
   });
@@ -156,12 +157,12 @@ test("the first yes saves what finished in this session, and a restart serves it
   await finish(s, b);
   assert.deepEqual(s.setKeepDocuments(true), { saved: 2, failed: 0 });
   assert.equal(c.answer, "yes");
-  assert.deepEqual(s.getStorage(), { keep: true, state: "ok", saved: 2, unreadable: 0, message: null });
+  assert.deepEqual(s.getStorage(), { keep: true, state: "ok", saved: 2, unreadable: 0, files: true, message: null });
 
   const again = c.start();
   again.open();
   assert.ok(c.logs.includes("store_opened docs=2 unreadable=0"));
-  const rows = again.listDocuments();
+  const rows = again.listDocuments().documents;
   assert.deepEqual(rows.map((r) => [r.doc_id, r.model_id, r.doc_type, r.pdf]), [
     [a.id, MODEL, "notice", `doc/${a.id}.pdf`],
     [a.id, null, "notice", `doc/${a.id}.pdf`],
@@ -201,7 +202,7 @@ test("the live job: no model, a sidecar error, and a model id left out", async (
     assert.deepEqual(await s.translate(d.id, [], MODEL, bad), { ok: false, reason });
   }
   assert.deepEqual(await s.translate(d.id, [], undefined, live()), { ok: true, ...queue() });
-  assert.deepEqual(c.start().listDocuments().length, 1);
+  assert.deepEqual(c.start().listDocuments().documents.length, 1);
   assert.deepEqual(await c.start().translate(d.id, [], MODEL, null), { ok: true, ...queue() });
 });
 
@@ -220,7 +221,7 @@ test("off blocks results and translation updates, not reading; on again saves no
   assert.equal((await finish(s, a, "model-b")).saved, false);
   await s.translate(b.id, [], MODEL, live());
   assert.deepEqual(tree(c.base), before);
-  assert.equal(s.listDocuments().length, 1);
+  assert.equal(s.listDocuments().documents.length, 1);
 
   assert.deepEqual(s.setKeepDocuments(true), { saved: 0, failed: 0 }, "not the first yes");
   before = tree(c.base);
@@ -283,7 +284,7 @@ test("delete asks first, then removes the document from the store and from memor
   c.answer = "no"; // delete works whatever the switch says
   assert.equal(await s.deleteDocument(a.id), true);
   assert.deepEqual(c.forgot, [[a.id]]);
-  assert.deepEqual(s.listDocuments().map((r) => r.doc_id), [b.id]);
+  assert.deepEqual(s.listDocuments().documents.map((r) => r.doc_id), [b.id]);
   assert.equal(s.source(a.id), null);
   c.answer = "yes";
   await s.translate(a.id, [], MODEL, live()); // a late poll
@@ -344,7 +345,7 @@ test("delete all removes everything saved, clears the cached key, keeps the answ
   assert.equal((await finish(s, a)).saved, true);
   const newKey = fs.readFileSync(path.join(c.root, "master.key"));
   assert.ok(!newKey.equals(oldKey), "a new master key: the cached one was dropped");
-  assert.equal(c.start().listDocuments().length, 1);
+  assert.equal(c.start().listDocuments().documents.length, 1);
 });
 
 test("a denied keyring: memory only, asked once, nothing changed, delete all still works", async (t) => {
@@ -360,8 +361,8 @@ test("a denied keyring: memory only, asked once, nothing changed, delete all sti
   const s = c.start();
   s.open();
   assert.ok(c.logs.includes("store_locked"));
-  assert.deepEqual(s.getStorage(), { keep: true, state: "locked", saved: 0, unreadable: 1, message: null });
-  assert.deepEqual(s.listDocuments(), []);
+  assert.deepEqual(s.getStorage(), { keep: true, state: "locked", saved: 0, unreadable: 1, files: true, message: null });
+  assert.deepEqual(s.listDocuments().documents, []);
   assert.equal(s.source(old.id), null);
   const d = c.pick("%PDF new");
   assert.equal((await finish(s, d)).saved, false);
@@ -392,6 +393,7 @@ test("no keyring: nothing is saved, no answer is recorded, and the renderer is t
     state: "no_keyring",
     saved: 0,
     unreadable: 0,
+    files: false,
     message: "Saving is not available on this computer: no system keyring was found. Set up GNOME Keyring or KWallet to save documents.",
   });
   assert.equal(c.start({ platform: "win32" }).getStorage().message, "Saving is not available on this computer: no system keyring was found.");
@@ -413,7 +415,7 @@ test("no keyring with documents saved earlier: they stay, only delete all remove
   const s = c.start();
   s.open();
   assert.ok(c.logs.includes("store_unavailable reason=no_keyring"));
-  assert.deepEqual([s.listDocuments(), s.source(old.id), s.getStorage().unreadable], [[], null, 1]);
+  assert.deepEqual([s.listDocuments().documents, s.source(old.id), s.getStorage().unreadable], [[], null, 1]);
   await assert.rejects(s.deleteDocument(old.id), code("locked"));
   assert.deepEqual(tree(c.base), before);
   assert.equal(await s.deleteAllDocuments(), true);
@@ -431,7 +433,7 @@ test("no local folder: nothing is read or written, under any name", async (t) =>
   const d = c.pick("%PDF one");
   assert.equal((await finish(s, d)).saved, false);
   assert.deepEqual(s.setKeepDocuments(true), { saved: 0, failed: 0 });
-  assert.deepEqual(s.listDocuments(), []);
+  assert.deepEqual(s.listDocuments().documents, []);
   assert.equal(s.source(d.id), null);
   assert.equal(s.getStorage().state, "no_local_folder");
   assert.equal(s.getStorage().message, "Saving is not available on this computer: Windows did not give a local app data folder (LOCALAPPDATA).");
@@ -519,7 +521,7 @@ test("nothing the renderer gets, and no log line, holds a path, a file name, a f
   const key = flip(fs.readFileSync(path.join(c.root, "master.key"))).toString();
   const again = c.start();
   again.open();
-  out.push(again.getStorage(), again.listDocuments(), await again.translate(d.id, [], MODEL, null));
+  out.push(again.getStorage(), again.listDocuments().documents, await again.translate(d.id, [], MODEL, null));
   // Failures too.
   fs.writeFileSync(path.join(c.root, "docs", folder, "source.enc"), "damaged");
   out.push(again.source(d.id));
@@ -541,4 +543,162 @@ test("nothing the renderer gets, and no log line, holds a path, a file name, a f
   const logged = c.logs.join("\n");
   for (const want of ["store_saved bytes=", "store_opened docs=1 unreadable=0", "store_locked", "store_start failed: read_failed"]) assert.ok(logged.includes(want), want);
   for (const secret of [SENTENCE, ENGLISH, "架空", FILE_NAME, c.tmp, os.tmpdir(), d.id, d.id.slice(0, 8), folder, key]) assert.ok(!logged.includes(secret), "log leak");
+});
+
+// Reads of files called `name` throw EBUSY while `left` is above 0.
+function busyReads(t: TestContext) {
+  const read = fs.readFileSync;
+  const state = { name: "", left: 0 };
+  const m = t.mock.method(fs.default, "readFileSync", ((file: string, ...rest: []) => {
+    if (state.left > 0 && path.basename(file) === state.name) {
+      state.left--;
+      throw Object.assign(new Error(`EBUSY ${file}`), { code: "EBUSY" });
+    }
+    return read(file, ...rest);
+  }) as never);
+  syncBuiltinESMExports();
+  t.after(() => {
+    m.mock.restore();
+    syncBuiltinESMExports();
+  });
+  return state;
+}
+
+for (const name of ["master.key", "record.enc"]) {
+  test(`W05 W18: a passing error on ${name} never locks the service or makes a second folder`, async (t) => {
+    const c = computer(t);
+    c.answer = "yes";
+    const d = c.pick("%PDF one");
+    await finish(c.start(), d);
+    const busy = busyReads(t);
+
+    // Once: the normal result.
+    const once = c.start();
+    Object.assign(busy, { name, left: 1 });
+    assert.equal((await finish(once, d, "model-b")).saved, true);
+    assert.equal(busy.left, 0);
+    assert.equal(once.getStorage().state, "ok");
+    assert.equal(c.docs().length, 1);
+
+    // Every time: read_failed, the result still opens, and the next call tries again.
+    const s = c.start();
+    Object.assign(busy, { name, left: Infinity });
+    assert.throws(() => s.getStorage(), code("read_failed"));
+    assert.throws(() => s.listDocuments(), code("read_failed"));
+    assert.equal((await finish(s, d, "model-c")).saved, false);
+    assert.equal(c.docs().length, 1);
+    busy.left = 0;
+    assert.equal(s.getStorage().state, "ok");
+    assert.equal((await finish(s, d, "model-c")).saved, true);
+    assert.equal(c.docs().length, 1);
+    assert.ok(!c.logs.includes("store_locked"));
+  });
+}
+
+test("a record that stays busy does not stop delete all", async (t) => {
+  const c = computer(t);
+  c.answer = "yes";
+  await finish(c.start(), c.pick("%PDF one"));
+  Object.assign(busyReads(t), { name: "record.enc", left: Infinity });
+  assert.equal(await c.start().deleteAllDocuments(), true);
+  assert.ok(!fs.existsSync(c.root));
+});
+
+test("listDocuments counts folders with no key, and reports a leftover master.key", async (t) => {
+  const c = computer(t);
+  c.answer = "yes";
+  const s = c.start();
+  const nothing = { documents: [], folders: 0, files: false };
+  assert.deepEqual(s.listDocuments(), nothing);
+  fs.mkdirSync(path.join(c.root, "docs"), { recursive: true });
+  fs.writeFileSync(path.join(c.root, "docs", "not-a-folder-name"), "x");
+  assert.deepEqual(s.listDocuments(), nothing);
+
+  // Only names: an unfinished folder counts, and neither the keyring nor the store is asked.
+  fs.mkdirSync(path.join(c.root, "docs", "f".repeat(32)));
+  assert.deepEqual(s.listDocuments(), { documents: [], folders: 1, files: true });
+  assert.deepEqual(c.safeCalls, []);
+  fs.rmdirSync(path.join(c.root, "docs", "f".repeat(32)));
+
+  // The last document deleted one by one: master.key is left behind.
+  const d = c.pick("%PDF one");
+  await finish(s, d);
+  assert.deepEqual([s.listDocuments().folders, s.listDocuments().files], [1, true]);
+  await s.deleteDocument(d.id);
+  c.safeCalls.length = 0;
+  const again = c.start();
+  assert.deepEqual(again.listDocuments(), { documents: [], folders: 0, files: true });
+  assert.deepEqual(c.safeCalls, []);
+  assert.equal(again.getStorage().files, true);
+  assert.equal(await again.deleteAllDocuments(), true);
+  assert.deepEqual(again.listDocuments(), nothing);
+  assert.equal(again.getStorage().files, false);
+});
+
+test("a locked store still counts its folders", async (t) => {
+  const c = computer(t);
+  c.answer = "yes";
+  await finish(c.start(), c.pick("%PDF one"));
+  c.keyring = "denied";
+  const s = c.start();
+  s.open();
+  assert.deepEqual(s.listDocuments(), { documents: [], folders: 1, files: true });
+});
+
+// Removals throw EBUSY for the paths `fails` picks.
+function stuckRemovals(t: TestContext) {
+  const rm = fs.rmSync;
+  const state = { fails: (_target: string) => false };
+  const m = t.mock.method(fs.default, "rmSync", ((target: string, options: fs.RmOptions) => {
+    if (state.fails(target)) throw Object.assign(new Error(`EBUSY ${target}`), { code: "EBUSY" });
+    rm(target, options);
+  }) as never);
+  syncBuiltinESMExports();
+  t.after(() => {
+    m.mock.restore();
+    syncBuiltinESMExports();
+  });
+  return state;
+}
+
+// Two saved documents; `stuck` is the folder of the second one.
+async function twoSaved(t: TestContext) {
+  const c = computer(t);
+  c.answer = "yes";
+  const s = c.start();
+  const a = c.pick("%PDF one");
+  const b = c.pick("%PDF two longer");
+  await finish(s, a);
+  const first = c.docs()[0];
+  await finish(s, b);
+  const stuck = c.docs().find((name) => name !== first)!;
+  return { c, s, a, b, stuck, rm: stuckRemovals(t) };
+}
+
+test("a delete all that stops part way forgets what it removed, and only that", async (t) => {
+  const { c, s, a, b, stuck, rm } = await twoSaved(t);
+  rm.fails = (target) => target.includes(stuck);
+  await assert.rejects(s.deleteAllDocuments(), code("delete_failed"));
+  assert.deepEqual(c.forgot, [[a.id]]);
+  assert.deepEqual(s.listDocuments().documents.map((r) => r.doc_id), [b.id]);
+  // The removed one left memory: the next first-Yes style save has only the stuck one to write.
+  c.answer = "unanswered";
+  assert.deepEqual(s.setKeepDocuments(true), { saved: 1, failed: 0 });
+  assert.equal(s.getStorage().saved, 1);
+});
+
+test("a delete all that stops after the last folder forgets every document", async (t) => {
+  const { c, s, a, b, rm } = await twoSaved(t);
+  rm.fails = (target) => target === c.root; // the folders go, store/ with master.key does not
+  await assert.rejects(s.deleteAllDocuments(), code("delete_failed"));
+  assert.deepEqual(c.docs(), []);
+  assert.deepEqual([...c.forgot.at(-1)!].sort(), [a.id, b.id].sort());
+});
+
+test("a delete all that stops, with what is left unreadable, forgets nothing", async (t) => {
+  const { c, s, stuck, rm } = await twoSaved(t);
+  rm.fails = (target) => target.includes(stuck);
+  Object.assign(busyReads(t), { name: "record.enc", left: Infinity });
+  await assert.rejects(s.deleteAllDocuments(), code("delete_failed"));
+  assert.deepEqual(c.forgot, []);
 });

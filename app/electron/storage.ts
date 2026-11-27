@@ -18,7 +18,9 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/; // a registry id or "custom"
 const FOLDER = /^[0-9a-f]{32}$/;
 
 export type StorageState = "ok" | "no_keyring" | "no_local_folder" | "locked";
-export type StorageInfo = { keep: boolean | null; state: StorageState; saved: number; unreadable: number; message: string | null };
+export type StorageInfo = { keep: boolean | null; state: StorageState; saved: number; unreadable: number; files: boolean; message: string | null };
+// `folders`: saved folders by name. `files`: a folder or master.key exists. Neither needs the key.
+export type SavedList = { documents: Result[]; folders: number; files: boolean };
 export type Queue = { items: Record<string, Translation>; done: number; total: number; failed: string[] };
 export type Translated = ({ ok: true } & Queue) | { ok: false; reason: "no_model" | "no_document" | "failed" };
 /** What main knows about a finished job. */
@@ -89,6 +91,13 @@ export function createStorage(d: Deps) {
 
   // Counted without the key, so it also works when the store is locked. Reading needs no keyring when this is 0.
   const folderCount = () => (available ? names(docs).filter((n) => FOLDER.test(n) && fs.existsSync(path.join(docs, n, "key"))).length : 0);
+
+  // From names alone, so it needs no key and also counts folders that are unfinished or cannot be opened.
+  function onDisk(): Omit<SavedList, "documents"> {
+    if (!available) return { folders: 0, files: false };
+    const folders = names(docs).filter((n) => FOLDER.test(n)).length;
+    return { folders, files: folders > 0 || names(root).includes("master.key") };
+  }
 
   // Asked only when needed: it can raise a keyring prompt.
   function getKeeper(): Keeper | "no_keyring" {
@@ -163,6 +172,19 @@ export function createStorage(d: Deps) {
     d.forget(ids);
   }
 
+  // After a delete all that stopped part way: forgets what is really gone, so it leaves memory and cannot be saved
+  // again. When what is left cannot be read, nothing is forgotten.
+  function dropRemoved(ids: string[]): void {
+    try {
+      const r = folderCount() ? use((s) => s.list()) : null; // no folder with a key: everything is gone
+      if (r && r.state !== "ok") return;
+      const left = new Set(r?.value.documents.map((doc) => doc.id));
+      drop(ids.filter((id) => !left.has(id)));
+    } catch {
+      // the delete's own error is the one to report
+    }
+  }
+
   function stored(docId: string, modelId: string | null): Translated {
     const none: Translated = { ok: false, reason: "no_document" };
     try {
@@ -199,12 +221,13 @@ export function createStorage(d: Deps) {
       }
     },
 
-    /** One entry per saved document and model. Empty when the store cannot be used. */
-    listDocuments(): Result[] {
-      if (!folderCount()) return [];
-      const r = use((s) => s.list());
-      if (r.state !== "ok") return [];
-      return r.value.documents.sort((a, b) => a.added.localeCompare(b.added)).flatMap((doc) => Object.values(doc.results).map((x) => x.result));
+    /** One entry per saved document and model, empty when the store cannot be used, and what is on disk. */
+    listDocuments(): SavedList {
+      const disk = onDisk();
+      const r = folderCount() ? use((s) => s.list()) : null;
+      if (r?.state !== "ok") return { documents: [], ...disk };
+      const documents = r.value.documents.sort((a, b) => a.added.localeCompare(b.added)).flatMap((doc) => Object.values(doc.results).map((x) => x.result));
+      return { documents, ...disk };
     },
 
     getStorage(): StorageInfo {
@@ -212,7 +235,7 @@ export function createStorage(d: Deps) {
       const keep = answer === "unanswered" ? null : answer === "yes";
       const r = use((s) => s.list());
       const found = r.state === "ok" ? { saved: r.value.documents.length, unreadable: r.value.unreadable } : { saved: 0, unreadable: folderCount() };
-      return { keep, state: r.state, ...found, message: message(r.state, d.platform) };
+      return { keep, state: r.state, ...found, files: onDisk().files, message: message(r.state, d.platform) };
     },
 
     /** The first Yes also saves what has finished in this session. Counts are documents. */
@@ -260,7 +283,12 @@ export function createStorage(d: Deps) {
       } catch {
         // an unreadable folder must not stop the delete
       }
-      (store ?? createStore(d.base, NO_KEY, log)).deleteAll(); // decrypts nothing; drops the store's cached master key
+      try {
+        (store ?? createStore(d.base, NO_KEY, log)).deleteAll(); // decrypts nothing; drops the store's cached master key
+      } catch (e) {
+        dropRemoved([...ids]);
+        throw e;
+      }
       locked = false;
       drop([...ids]);
       return true;

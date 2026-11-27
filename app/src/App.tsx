@@ -6,7 +6,7 @@ import { Onboarding } from "./Onboarding";
 import { showOnboarding, type Stage } from "./firstrun";
 import type { ModelList, StorageInfo } from "./shiori.d.ts";
 import {
-  afterYes, askAfterFinish, emptyText, markFailed, QUESTION, savedIds, showQuestion, storeNotes, withDemo, withFinished, withoutDocs, withRows, type Doc,
+  afterYes, askAfterFinish, askAtStartup, emptyText, markFailed, QUESTION, removedIds, savedIds, showQuestion, storeNotes, withDemo, withFinished, withoutDocs, withRows, type Doc,
 } from "./saving";
 import { Processing } from "./Processing";
 import { Settings } from "./Settings";
@@ -30,12 +30,15 @@ export function App() {
   const [finishedAny, setFinishedAny] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [unread, setUnread] = useState(false); // the last getStorage failed
   const askStorage = useCallback(async () => {
     try {
       const i = (await window.shiori?.getStorage()) ?? null;
       setInfo(i);
+      setUnread(false);
       return i;
     } catch {
+      setUnread(true);
       setStoreError("Shiori could not read the saved documents.");
       return null;
     }
@@ -54,10 +57,9 @@ export function App() {
   useEffect(() => {
     void window.shiori?.listDocuments().then(
       (list) => {
-        if (!list.length) return; // nothing to open: getStorage is not asked at startup
-        const rows = list.map((fx) => ({ fx, counts: countStates(fx), saved: true }));
-        setDocs((all) => withRows(all ?? [], rows));
-        void askStorage();
+        const rows = list.documents.map((fx) => ({ fx, counts: countStates(fx), saved: true }));
+        if (rows.length) setDocs((all) => withRows(all ?? [], rows));
+        if (askAtStartup(list)) void askStorage(); // nothing saved: getStorage is not asked at startup
       },
       () => setStoreError("Shiori could not read the saved documents."),
     );
@@ -125,7 +127,7 @@ export function App() {
     return act("Could not save your answer.", async (api) => {
       await api.setKeepDocuments(keep);
       if (keep) {
-        const listed = await api.listDocuments();
+        const listed = (await api.listDocuments()).documents;
         setDocs((all) => afterYes(all ?? [], listed, first));
       }
       return true;
@@ -138,15 +140,24 @@ export function App() {
       setDocs((all) => withoutDocs(all ?? [], [docId]));
       return true;
     });
-  const deleteAll = () => {
-    const gone = savedIds(docs ?? []);
-    return act("Could not delete the saved documents.", async (api) => {
-      if (!(await api.deleteAllDocuments())) return false;
-      setDocs((all) => withoutDocs(all ?? [], savedIds(all ?? []))); // results that were never saved stay open
-      setOpen((o) => (o && gone.includes(o.fx.doc_id) ? null : o));
+  // Takes deleted documents off the screen. Results that were never saved stay open.
+  const remove = (ids: string[]) => {
+    setDocs((all) => withoutDocs(all ?? [], ids));
+    setOpen((o) => (o && ids.includes(o.fx.doc_id) ? null : o));
+  };
+  const deleteAll = () =>
+    act("Could not delete the saved documents.", async (api) => {
+      try {
+        if (!(await api.deleteAllDocuments())) return false;
+      } catch (e) {
+        // It may have stopped part way.
+        const list = await api.listDocuments();
+        remove(removedIds(docs ?? [], list, list.folders ? await api.getStorage() : null));
+        throw e;
+      }
+      remove(savedIds(docs ?? []));
       return true;
     });
-  };
   const notes = [...storeNotes(info), ...(storeError ? [storeError] : [])];
 
   const name = open ? titleOf(open.fx) : null;
@@ -162,7 +173,7 @@ export function App() {
         {open && <button className="btn" disabled title="Export is not available yet">Export</button>}
         <button className="btn sq" aria-label="Settings" aria-expanded={settings} onClick={() => { if (!settings) void askStorage(); setSettings(!settings); }}>⚙</button>
       </header>
-      {settings && <Settings info={info} busy={busy} error={storeError} onKeep={(keep) => void answer(keep)} onDeleteAll={() => void deleteAll()} />}
+      {settings && <Settings info={info} unread={unread} busy={busy} error={storeError} onKeep={(keep) => void answer(keep)} onDeleteAll={() => void deleteAll()} />}
       {picker && (
         <div className="scrim">
           <div className="dialog" role="dialog" aria-label="Add document">

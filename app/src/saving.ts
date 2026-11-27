@@ -1,8 +1,8 @@
 // The screens' saving rules (docs/storage_design.md sections 3 and 5, D-119, D-123). Pure, so node --test can run them.
 // main enforces what is saved; this only decides what is shown. `info` is null until getStorage has been asked, which
-// happens only when something saved exists, a document has finished, or Settings is opened (it can raise a keyring prompt).
+// happens only when a saved folder exists, a document has finished, or Settings is opened (it can raise a keyring prompt).
 import { resultKey } from "./modelinfo.ts";
-import type { StorageInfo } from "./shiori.d.ts";
+import type { SavedList, StorageInfo } from "./shiori.d.ts";
 import type { Fixture } from "./types.ts";
 import type { State } from "./status.ts";
 
@@ -17,6 +17,10 @@ export const LOCKED_NOTE = "Saved documents cannot be opened, so saving is off. 
 
 const unavailable = (i: StorageInfo) => i.state === "no_keyring" || i.state === "no_local_folder";
 const docs = (n: number) => `${n} saved ${n === 1 ? "document" : "documents"}`;
+
+/** Startup: getStorage is asked only when a saved folder exists, so a locked store is announced. main has already
+ * asked the keyring for such a store, so this raises no new prompt. */
+export const askAtStartup = (list: Pick<SavedList, "folders">): boolean => list.folders > 0;
 
 /** The question line: a document finished in this session, no answer yet, and saving works. */
 export const showQuestion = (finished: boolean, info: StorageInfo | null): boolean => finished && info?.keep === null && info.state === "ok";
@@ -43,16 +47,19 @@ export function storeNotes(info: StorageInfo | null): string[] {
 
 export type SettingsState = { checked: boolean; switchDisabled: boolean; count: string | null; deleteDisabled: boolean; notes: string[] };
 
-export function settingsState(info: StorageInfo | null): SettingsState {
-  if (!info) return { checked: false, switchDisabled: true, count: null, deleteDisabled: true, notes: [] };
+/** `unread`: the last getStorage failed, so a store file is there that could not be read. Delete all stays possible. */
+export function settingsState(info: StorageInfo | null, unread = false): SettingsState {
+  if (!info) return { checked: false, switchDisabled: true, count: null, deleteDisabled: !unread, notes: [] };
+  const locked = info.state === "locked";
   const held = info.saved + info.unreadable;
   const count = info.state === "ok" ? `Saved documents: ${info.saved}` : held ? `Saved documents on disk that cannot be opened: ${held}` : null;
   return {
-    checked: info.keep === true,
-    switchDisabled: unavailable(info),
+    // Locked: saving is off, whatever the saved answer is, and a switch that cannot show a change is disabled.
+    checked: info.keep === true && !locked,
+    switchDisabled: unavailable(info) || locked,
     count,
-    // Locked: delete all is the way out, even with nothing countable. No local folder: there is nothing to delete from.
-    deleteDisabled: info.state === "locked" ? false : info.state === "no_local_folder" || held === 0,
+    // Any store file, a leftover master.key too (main reports none without a local folder). Locked: it is the way out.
+    deleteDisabled: !(info.files || locked || unread),
     notes: storeNotes(info),
   };
 }
@@ -93,6 +100,13 @@ export function afterYes(all: Doc[], listed: Fixture[], first: boolean): Doc[] {
 }
 
 export const savedIds = (all: Doc[]): string[] => [...new Set(all.filter((d) => d.saved).map((d) => d.fx.doc_id))];
+
+/** After a delete all that stopped part way: the saved documents that are really gone. With a folder left in a store
+ * that cannot be opened, an empty list says nothing, so none. */
+export function removedIds(all: Doc[], list: SavedList, info: StorageInfo | null): string[] {
+  if (list.folders > 0 && info?.state !== "ok") return [];
+  return savedIds(all).filter((id) => !list.documents.some((fx) => fx.doc_id === id));
+}
 
 /** Delete removes a document with every model's result, as main does. */
 export const withoutDocs = (all: Doc[], ids: string[]): Doc[] => all.filter((d) => !ids.includes(d.fx.doc_id));

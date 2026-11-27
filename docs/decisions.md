@@ -1165,8 +1165,6 @@ Consequences: the guard only works when it is run. It cannot see an upload made 
 
 ## Open questions
 
-- (2026-11-28, D-123) `listDocuments` cannot tell an empty store from a locked one, or from one where no record opens: all give `[]`. The screens do not ask `getStorage` at startup (it can raise a keyring prompt), so after a denied Keychain prompt the Library says "No documents yet." until Settings opens or a document finishes. Smallest main-side fix, not built: `listDocuments` also returns the number of saved folders, which `storage.ts` already counts without the key (`folderCount()`); the renderer then calls `getStorage` when that number is above 0, which raises no new prompt because `open()` has already asked at startup. It changes the return shape of one bridge function.
-- (2026-11-28, D-123) Design section 3 says "Delete all saved documents" is disabled only when the store folder holds nothing. `getStorage` reports document counts, not that. After the last document is deleted one by one, `master.key` stays but the count is 0, so the button is disabled. No document data is left in that case. Should main report it, or should the design say "when no document is saved"?
 - The local labeler failed `schema_valid` on one field in 6 of the 10 web documents after `repair` reported 0 problems, so the two checks disagree (found 2026-11-23, not yet looked into).
 - Does a prefecture's own bidder roster (入札参加資格者名簿, with 業務種目 and 格付区分 A, Okayama docs `427784e8`, `44473a6e`, `b66a3908`) count as `unified_qualification`? The field is defined for the national 全省庁統一資格; the review (test web batch 04, F-0256 to F-0258) answered absent and held them as UNSURE. The same conditions are already eligibility items of kind other. Decided in D-106: national only, absent.
 - `調達案件の仕様等 入札公告による。` inside a 入札公告 itself (`1bfaa824`) and `「入札説明書」で指定する特質を有すること。` (`262e3a41`): are they spec_access pointers (see_other_document) and which ref kind (spec, other_notice, bid_instructions)? The review used spec for the first and bid_instructions for the second, UNSURE (F-0262, F-0264, 2026-11-23).
@@ -1330,3 +1328,18 @@ Decision:
 Alternatives: `getStorage` at every startup (rejected by Yasharth: breaks the no-prompt promise of D-121); changing main first (not in this task).
 Consequences: no change to `app/electron`, the bridge, the sidecar or `EXTRACTOR_VERSION` (0.3.0). No release can be made yet: step 6 is a gate, the placeholder sentence must be replaced, and the screens have not been run against the real main process.
 
+## D-124: Storage: passing read errors, delete past a bad folder, and what is on disk
+
+Date: 2026-11-28
+Status: accepted (the fixes are Yasharth's task of 2026-11-28; the choices marked "chosen while building" are not yet reviewed)
+Context: Windows audit rows W05, W08 and W18, and the two open questions of D-123 (a locked store was not announced at startup; "Delete all" was disabled with only `master.key` left).
+Decision:
+- A read of `master.key`, a document's `key` or `record.enc` (and `source.enc`) that fails with `EBUSY`, `EPERM`, `EACCES` or `EAGAIN` is tried again after 10, 20 and 40 ms (`Atomics.wait`, because the store is synchronous). If all four fail, the store throws `read_failed`. Nothing remembers it, so the next call reads again. A listing does not skip such a document, so a save cannot make a second folder for it.
+- `locked` still means: the keyring refuses or cannot unwrap, `master.key` is missing beside complete folders, or `master.key` fails to read with any other error (chosen while building; as before).
+- `deleteAll` and `cleanup` try every folder and throw the first error after the loop. `master.key` is removed only when every folder was removed.
+- `listDocuments` returns `{documents, folders, files}`: `folders` counts folder names under `store/docs`, finished or not, and `files` is true when there is a folder or `master.key`. Neither needs the key. `getStorage` also returns `files` (chosen while building: the Settings screen needs a value that is fresh after a save or delete).
+- At startup the renderer calls `getStorage` when `folders` is above 0, so a locked store is announced. With nothing saved there is still no call. `main` has already asked the keyring for such a store, so no new prompt is expected.
+- "Delete all saved documents" is enabled when `files` is true, when the store is locked, or when the last `getStorage` failed (chosen while building: a file that stays unreadable must not disable the way out).
+- In the locked state the switch shows off and is disabled, whatever the saved answer is (chosen while building; replaces D-123, where it stayed enabled).
+Alternatives: counting a busy record as unreadable in the list only (rejected: the task asks for `read_failed`); `files` only in `listDocuments` (rejected: goes stale).
+Consequences: one document file that stays unreadable now makes the whole list, every save and single delete fail with `read_failed`; "Delete all" still works. After a "Delete all" that stops part way, `main` forgets the documents that are gone and the renderer removes their rows (`removedIds`); a document that stayed keeps its row, and when what is left cannot be read, nothing is removed from memory or the screen. Not changed: `keeper.ts`, `settings.ts`, `main.ts`, `preload.ts` (it passes the new shape through), the twenty function names, `EXTRACTOR_VERSION` (0.3.0).

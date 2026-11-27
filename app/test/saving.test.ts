@@ -3,13 +3,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  afterYes, askAfterFinish, emptyText, LOCKED_NOTE, markFailed, MEMORY_ONLY, NO_DOCUMENTS, savedIds, SAVING_OFF, settingsState,
+  afterYes, askAfterFinish, askAtStartup, emptyText, LOCKED_NOTE, markFailed, MEMORY_ONLY, NO_DOCUMENTS, removedIds, savedIds, SAVING_OFF, settingsState,
   showQuestion, storeNotes, UPDATE_NOTE, withDemo, withFinished, withoutDocs, withRows, type Doc,
 } from "../src/saving.ts";
 import type { StorageInfo } from "../src/shiori.d.ts";
 
 const MESSAGE = "Saving is not available on this computer: no system keyring was found.";
-const info = (over: Partial<StorageInfo> = {}): StorageInfo => ({ keep: null, state: "ok", saved: 0, unreadable: 0, message: null, ...over });
+// `files` follows the counts unless a test sets it.
+const info = (over: Partial<StorageInfo> = {}): StorageInfo => {
+  const i = { keep: null, state: "ok" as const, saved: 0, unreadable: 0, message: null, ...over };
+  return { files: i.saved + i.unreadable > 0, ...i };
+};
 const unanswered = info();
 const yes = info({ keep: true, saved: 2 });
 const no = info({ keep: false });
@@ -26,6 +30,14 @@ test("the question line: only after a finished document, with no answer, while s
 
 test("getStorage is asked after a finished document unless the answer is known to be No", () => {
   assert.deepEqual([null, unanswered, yes, locked, no].map(askAfterFinish), [true, true, true, true, false]);
+});
+
+test("startup asks getStorage only when a saved folder exists, listed or locked", () => {
+  assert.equal(askAtStartup({ folders: 0 }), false); // nothing saved, or only a leftover master.key: no keyring prompt
+  assert.equal(askAtStartup({ folders: 2 }), true);
+  const lockedList = { documents: [], folders: 1, files: true };
+  assert.equal(askAtStartup(lockedList), true);
+  assert.deepEqual(storeNotes(locked), [LOCKED_NOTE]); // what that call then shows
 });
 
 test("empty Library text and notices, for each answer and store state", () => {
@@ -52,9 +64,19 @@ test("settings: not available and locked", () => {
   const earlier = settingsState(info({ keep: true, state: "no_keyring", unreadable: 3, message: MESSAGE }));
   assert.deepEqual(earlier, { checked: true, switchDisabled: true, count: "Saved documents on disk that cannot be opened: 3", deleteDisabled: false, notes: [MESSAGE] });
   assert.deepEqual([settingsState(noFolder).switchDisabled, settingsState(noFolder).deleteDisabled, settingsState(noFolder).count], [true, true, null]);
-  assert.deepEqual(settingsState(locked), { checked: true, switchDisabled: false, count: "Saved documents on disk that cannot be opened: 1", deleteDisabled: false, notes: [LOCKED_NOTE] });
+  // locked: the saved answer is yes, but the switch never shows "on" under "saving is off"
+  assert.deepEqual(settingsState(locked), { checked: false, switchDisabled: true, count: "Saved documents on disk that cannot be opened: 1", deleteDisabled: false, notes: [LOCKED_NOTE] });
   assert.equal(settingsState(info({ state: "locked" })).deleteDisabled, false); // enabled even with both counts 0
   assert.deepEqual(settingsState(null), { checked: false, switchDisabled: true, count: null, deleteDisabled: true, notes: [] });
+});
+
+test("settings: delete all is enabled whenever a store file exists, or the store could not be read", () => {
+  const leftover = info({ keep: true, files: true }); // only master.key: both counts are 0
+  assert.equal(settingsState(leftover).deleteDisabled, false);
+  assert.equal(settingsState(info({ state: "no_keyring", files: true, message: MESSAGE })).deleteDisabled, false);
+  assert.equal(settingsState(info({ keep: true })).deleteDisabled, true); // no file at all
+  assert.equal(settingsState(null, true).deleteDisabled, false); // getStorage failed on the first ask
+  assert.equal(settingsState(info(), true).deleteDisabled, false); // or after an earlier answer
 });
 
 const row = (doc_id: string, over: Partial<Doc> = {}, fx: Partial<Doc["fx"]> = {}): Doc => ({
@@ -94,6 +116,17 @@ test("rows after Yes: the first one saves this session's results, a later one sa
   const listed = [row("a").fx];
   assert.deepEqual(brief(afterYes(all, listed, true)), ["demo:none", "a:m1 saved", "b:m1 failed"]);
   assert.deepEqual(brief(afterYes(all, listed, false)), ["demo:none", "a:m1 saved", "b:m1"]);
+});
+
+test("after a delete all that stopped part way, only the documents that are gone leave the screen", () => {
+  const all = [row("a", { saved: true }), row("a", {}, { model_id: "m2" }), row("b", { saved: true }), row("c")];
+  const left = { documents: [row("b").fx], folders: 1, files: true };
+  assert.deepEqual(removedIds(all, left, yes), ["a"]); // not b, which stayed, nor c, which was never saved
+  const nothing = { documents: [], folders: 0, files: true }; // only master.key stayed
+  assert.deepEqual(removedIds(all, nothing, null), ["a", "b"]);
+  const hidden = { documents: [], folders: 1, files: true };
+  for (const i of [null, locked, noKeyring]) assert.deepEqual(removedIds(all, hidden, i), [], i?.state);
+  assert.deepEqual(removedIds(all, hidden, yes), ["a", "b"]); // the folder left lost its key
 });
 
 test("delete takes every model's row of that document", () => {

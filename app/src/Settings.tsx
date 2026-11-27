@@ -3,10 +3,10 @@
 import { settingsState, UPDATE_NOTE } from "./saving";
 import type { StorageInfo } from "./shiori.d.ts";
 
-type Props = { info: StorageInfo | null; busy: boolean; error: string | null; onKeep: (keep: boolean) => void; onDeleteAll: () => void };
+type Props = { info: StorageInfo | null; unread: boolean; busy: boolean; error: string | null; onKeep: (keep: boolean) => void; onDeleteAll: () => void };
 
-export function Settings({ info, busy, error, onKeep, onDeleteAll }: Props) {
-  const s = settingsState(info);
+export function Settings({ info, unread, busy, error, onKeep, onDeleteAll }: Props) {
+  const s = settingsState(info, unread);
   return (
     <div className="pop" role="dialog" aria-label="Settings">
       <b>Settings</b>

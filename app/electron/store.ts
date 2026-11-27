@@ -82,6 +82,11 @@ export type StoredDocument = {
 const ID = /^[0-9a-f]{64}$/;
 const FOLDER = /^[0-9a-f]{32}$/;
 
+// What antivirus or backup software holding a file for a moment looks like. These reads are tried again.
+const PASSING = new Set(["EBUSY", "EPERM", "EACCES", "EAGAIN"]);
+const WAITS_MS = [10, 20, 40];
+const sleep = (ms: number) => void Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
 const errorType = (e: unknown) => (e as NodeJS.ErrnoException)?.code ?? (e instanceof Error ? e.name : "unknown");
 const missing = (e: unknown) => errorType(e) === "ENOENT";
 
@@ -101,6 +106,19 @@ function write(file: string, data: Buffer): void {
 const japanese = (r: Result, id: string) =>
   id === "value:title" ? r.fields.find((f) => f.field === "title")?.value_ja : r.sentences[id]?.text_orig;
 
+// One failing item does not stop the rest. The first error is thrown after the loop.
+function each<T>(items: T[], op: (item: T) => void): void {
+  let first: { error: unknown } | undefined;
+  for (const item of items) {
+    try {
+      op(item);
+    } catch (error) {
+      first ??= { error };
+    }
+  }
+  if (first) throw first.error;
+}
+
 // `base` is the folder that holds store/ (section 2). Creating the object touches neither the disk nor the keeper.
 // Every method throws StoreError and nothing else, and logs no text, name, path, folder name or document id.
 export function createStore(base: string, keeper: Keeper, log: (line: string) => void = console.error) {
@@ -118,6 +136,24 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
     }
   }
 
+  // A read that still fails with a passing error is "read_failed": it says nothing about the key or the document.
+  // Any other error is thrown as it is.
+  function readStored(file: string): Buffer {
+    for (let tried = 0; ; tried++) {
+      try {
+        return fs.readFileSync(file);
+      } catch (e) {
+        if (!PASSING.has(errorType(e))) throw e;
+        const wait = WAITS_MS[tried];
+        if (wait === undefined) {
+          log(`store_file_read failed: ${errorType(e)}`);
+          throw new StoreError("read_failed");
+        }
+        sleep(wait);
+      }
+    }
+  }
+
   function folders(): string[] {
     try {
       return fs.readdirSync(docs).filter((name) => FOLDER.test(name));
@@ -130,14 +166,15 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
   // A folder without `key` is an unfinished save or delete.
   const complete = () => folders().filter((name) => fs.existsSync(path.join(docs, name, "key")));
 
-  // The master key, or null when there is none and nothing depends on one. Anything else is "locked": a new key is
-  // never made over an old one, or beside documents that an old one protects.
+  // The master key, or null when there is none and nothing depends on one. A passing read error is "read_failed".
+  // Anything else is "locked": a new key is never made over an old one, or beside documents that an old one protects.
   function master(): Buffer | null {
     if (cached) return cached;
     let wrapped: Buffer;
     try {
-      wrapped = fs.readFileSync(masterFile);
+      wrapped = readStored(masterFile);
     } catch (e) {
+      if (e instanceof StoreError) throw e;
       if (missing(e) && complete().length === 0) return null;
       throw new StoreError("locked");
     }
@@ -159,7 +196,7 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
   }
 
   function openDocument(key: Buffer, folder: string) {
-    const file = (name: string) => fs.readFileSync(path.join(docs, folder, name));
+    const file = (name: string) => readStored(path.join(docs, folder, name));
     const docKey = open(key, folder, "key", file("key"));
     const doc = JSON.parse(open(docKey, folder, "record", file("record.enc")).toString()) as StoredDocument;
     return { folder, docKey, doc };
@@ -173,6 +210,8 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
       try {
         found.push(openDocument(key as Buffer, folder));
       } catch (e) {
+        // Not skipped: a save would take the document for a new one and make a second folder.
+        if (e instanceof StoreError && e.code === "read_failed") throw e;
         unreadable++; // skipped and left as it is: a failed decryption never deletes anything
         log(`store_open failed: ${errorType(e)}`);
       }
@@ -259,7 +298,7 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
       return guard("store_read_source", "read_failed", () => {
         const d = find(docId);
         if (!d || d.doc.format !== "pdf") return null;
-        return open(d.docKey, d.folder, "source", fs.readFileSync(path.join(docs, d.folder, "source.enc")));
+        return open(d.docKey, d.folder, "source", readStored(path.join(docs, d.folder, "source.enc")));
       });
     },
 
@@ -295,11 +334,12 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
     },
 
     // Every document folder, then the master key and anything left beside it. Decrypts nothing, so it works when locked.
+    // While any folder cannot be removed, the master key stays and the call throws.
     deleteAll(): void {
       guard("store_delete_all", "delete_failed", () => {
         cached = undefined; // the next save makes a new master key; if this stops half way, the file is read again
         const all = folders();
-        for (const folder of all) shred(folder);
+        each(all, shred);
         fs.rmSync(root, { recursive: true, force: true });
         log(`store_deleted_all folders=${all.length}`);
       });
@@ -309,9 +349,8 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
     cleanup(): void {
       guard("store_cleanup", "delete_failed", () => {
         master(); // throws when locked
-        fs.rmSync(`${masterFile}.tmp`, { force: true });
         let removed = 0;
-        for (const folder of folders()) {
+        each(folders(), (folder) => {
           const dir = path.join(docs, folder);
           const names = fs.readdirSync(dir); // throws rather than guess: a folder we cannot list is not a keyless one
           if (!names.includes("key")) {
@@ -320,7 +359,8 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
           } else {
             for (const name of names) if (name.endsWith(".tmp")) fs.rmSync(path.join(dir, name), { force: true });
           }
-        }
+        });
+        fs.rmSync(`${masterFile}.tmp`, { force: true });
         log(`store_cleanup folders=${removed}`);
       });
     },

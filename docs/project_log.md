@@ -274,3 +274,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 
 - 2026-11-28 (D-123): storage steps 7 and 8 built in the renderer, before step 6. Plan change: no `getStorage` at startup, so a locked store is not announced until Settings opens or a document finishes (open question). Screens rendered with a fake bridge only. The update sentence is still a placeholder.
 
+- 2026-11-28 (D-124): fixed Windows audit rows W05, W08 and W18 and the two D-123 open questions in `app/`. Plan change: `getStorage` is now asked at startup when saved folders exist. Tested with fakes only, not in real Electron and not on Windows.
+

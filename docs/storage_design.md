@@ -106,6 +106,7 @@ When something is wrong:
 | `master.key` exists but `safeStorage` cannot decrypt it (access denied, folder copied from another machine) | Saving and the saved Library are off, with a message. Delete nothing. Never make a new master key over the old one |
 | `master.key` is missing but document folders exist | Same message, and offer "Delete all saved documents" |
 | One document fails to decrypt | Skip it, count it in the Library notice, keep the others. Offer only "Delete all", because we cannot tell which document it is |
+| A store file cannot be read for the moment (`EBUSY`, `EPERM`, `EACCES`, `EAGAIN`) | Try again after a very short wait, then `read_failed`. Not locked, and no second folder on save (D-124) |
 | A folder has no `key` file | Remove it (unfinished save or unfinished delete) |
 | A save fails (disk full) | The result still opens in this session, marked "not saved" |
 | Windows: `LOCALAPPDATA` is missing or not an absolute path | Saving is not available (see "When saving is not available") |
@@ -261,6 +262,8 @@ New bridge functions (fifteen becomes twenty):
 The question line is shown when `keep` is `null`, `state` is `ok` and a document has finished in this session.
 
 As built (D-121): `getStorage` also returns `message`, the sentence "Saving is not available on this computer: <reason>" for `no_keyring` and `no_local_folder`, else `null`. `getStorage` can raise a keyring prompt, so the screens call it only at the times listed under "Linux with no keyring". In `state` `locked`, "Delete all saved documents" is enabled even when both counts are 0.
+
+Since D-124: `listDocuments()` returns `{documents, folders, files}` and `getStorage` also returns `files`. The screens call `getStorage` at startup when `folders` is above 0. "Delete all saved documents" is enabled when `files` is true, and in `locked` the switch shows off and is disabled.
 
 Changed:
 

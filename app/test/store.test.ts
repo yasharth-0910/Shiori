@@ -119,7 +119,7 @@ const denied: Keeper = {
 };
 
 // Replaces one node:fs function for the store too, until the test ends.
-function mockFs(t: TestContext, name: "fsyncSync" | "renameSync" | "rmSync", impl?: (...a: never[]) => unknown) {
+function mockFs(t: TestContext, name: "fsyncSync" | "readFileSync" | "renameSync" | "rmSync", impl?: (...a: never[]) => unknown) {
   const m = impl ? t.mock.method(fs.default, name, impl as never) : t.mock.method(fs.default, name);
   syncBuiltinESMExports();
   t.after(() => {
@@ -684,4 +684,126 @@ test("delete and cleanup logs and errors hold no canary, path, folder name or id
   const out = seen.join("\n");
   for (const line of ["store_deleted", "store_cleanup folders=", "store_deleted_all folders=", "store_delete failed: EACCES"]) assert.ok(out.includes(line), line);
   for (const secret of [SENTENCE, FILE_NAME, s.tmp, os.tmpdir(), s.id, s.id.slice(0, 8), s.name, "f".repeat(32)]) assert.ok(!out.includes(secret), "leak");
+});
+
+// ---- Passing file errors (Windows audit W05, W18) ----
+
+// Reads of files called `name` throw `code`, `times` times in all. Returns how many reads threw.
+function busy(t: TestContext, name: string, code: string, times: number): () => number {
+  const read = fs.readFileSync;
+  let thrown = 0;
+  mockFs(t, "readFileSync", (file: string, ...rest: []) => {
+    if (path.basename(file) === name && thrown < times) {
+      thrown++;
+      throw Object.assign(new Error(`${code}: ${SENTENCE} ${file}`), { code });
+    }
+    return read(file, ...rest);
+  });
+  return () => thrown;
+}
+
+for (const file of ["master.key", "key", "record.enc"]) {
+  for (const code of ["EBUSY", "EPERM", "EACCES", "EAGAIN"]) {
+    test(`W05 W18: ${code} once on ${file} is tried again, and there is still one folder`, (t) => {
+      const s = setup(t);
+      s.store().save(result(s.id), s.source, "0.1.2");
+      const thrown = busy(t, file, code, 1);
+      const store = s.store();
+      store.save(result(s.id, "model-b"), s.source, "0.1.2");
+      assert.equal(thrown(), 1);
+      assert.deepEqual(Object.keys(store.read(s.id)!.results).sort(), ["model-a", "model-b"]);
+      assert.equal(s.docs().length, 1);
+    });
+  }
+
+  test(`W05 W18: EBUSY every time on ${file} is read_failed, not locked, and writes nothing`, (t) => {
+    const s = setup(t);
+    s.store().save(result(s.id), s.source, "0.1.2");
+    const before = tree(s.base);
+    let times = Infinity;
+    const read = fs.readFileSync;
+    const m = mockFs(t, "readFileSync", (f: string, ...rest: []) => {
+      if (path.basename(f) === file && times > 0) throw Object.assign(new Error(`EBUSY ${f}`), { code: "EBUSY" });
+      return read(f, ...rest);
+    });
+    const store = s.store();
+    for (const op of [
+      () => store.save(result(s.id, "model-b"), s.source, "0.1.2"),
+      () => store.list(),
+      () => store.read(s.id),
+      () => store.readSource(s.id),
+      () => store.addTranslations(s.id, "model-a", { p1_s1: en("x") }),
+      () => store.deleteDocument(s.id),
+    ]) {
+      const reads = m.mock.callCount();
+      failsClosed(op, "read_failed");
+      assert.ok(m.mock.callCount() - reads >= 4, "tried more than once");
+    }
+    times = 0;
+    assert.deepEqual(tree(s.base), before);
+    assert.deepEqual(ids(store), [s.id], "the same object works afterwards");
+    for (const secret of [s.tmp, s.id, SENTENCE]) assert.ok(!s.logs.join("\n").includes(secret), "log leak");
+    assert.ok(s.logs.includes("store_file_read failed: EBUSY"));
+  });
+}
+
+test("W05: cleanup with a busy master.key is read_failed and removes nothing", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32)));
+  const before = tree(s.base);
+  busy(t, "master.key", "EBUSY", 4);
+  failsClosed(() => s.store().cleanup(), "read_failed");
+  assert.deepEqual(tree(s.base), before);
+});
+
+// ---- One bad folder (Windows audit W08) ----
+
+// Three documents; every removal inside the second folder that the store lists fails.
+function stuckFolder(t: TestContext) {
+  const s = setup(t);
+  for (const content of ["%PDF one", "%PDF two longer", "%PDF three, longer again"]) {
+    fs.writeFileSync(s.source, content);
+    s.store().save(result(sha(Buffer.from(content))), s.source, "0.1.2");
+  }
+  const names = fs.readdirSync(path.join(s.root, "docs"));
+  const stuck = names[1]!;
+  const rm = fs.rmSync;
+  const state = { broken: true };
+  mockFs(t, "rmSync", (target: string, options: fs.RmOptions) => {
+    if (state.broken && target.includes(stuck)) throw Object.assign(new Error(`EBUSY ${target}`), { code: "EBUSY" });
+    rm(target, options);
+  });
+  return { ...s, names, stuck, state };
+}
+
+test("W08: delete all removes the other folders, throws, and keeps master.key and the stuck folder", (t) => {
+  const s = stuckFolder(t);
+  const master = fs.readFileSync(path.join(s.root, "master.key"));
+  const kept = tree(path.join(s.root, "docs", s.stuck));
+  failsClosed(() => s.store().deleteAll(), "delete_failed");
+  assert.deepEqual(s.docs(), [s.stuck]);
+  assert.deepEqual(tree(path.join(s.root, "docs", s.stuck)), kept);
+  assert.deepEqual(fs.readFileSync(path.join(s.root, "master.key")), master);
+  assert.equal(s.store().list().documents.length, 1, "what stayed is still readable");
+  assert.ok(s.logs.includes("store_delete_all failed: EBUSY"));
+  s.state.broken = false;
+  s.store().deleteAll();
+  assert.ok(!fs.existsSync(s.root));
+});
+
+test("W08: cleanup continues past a bad folder, then throws", (t) => {
+  const s = stuckFolder(t);
+  const [first, , last] = s.names as [string, string, string];
+  for (const name of [first, last]) fs.writeFileSync(path.join(s.root, "docs", name, "record.enc.tmp"), "half");
+  fs.writeFileSync(path.join(s.root, "docs", s.stuck, "record.enc.tmp"), "half");
+  fs.writeFileSync(path.join(s.root, "master.key.tmp"), "half");
+  failsClosed(() => s.store().cleanup(), "delete_failed");
+  for (const name of [first, last]) assert.ok(!fs.existsSync(path.join(s.root, "docs", name, "record.enc.tmp")));
+  assert.ok(fs.existsSync(path.join(s.root, "docs", s.stuck, "record.enc.tmp")));
+  assert.equal(s.docs().length, 3);
+  s.state.broken = false;
+  s.store().cleanup();
+  assert.ok(!fs.existsSync(path.join(s.root, "docs", s.stuck, "record.enc.tmp")));
+  assert.ok(!fs.existsSync(path.join(s.root, "master.key.tmp")));
 });

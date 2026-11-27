@@ -49,8 +49,12 @@ export type StorageInfo = {
   state: "ok" | "no_keyring" | "no_local_folder" | "locked";
   saved: number; // documents, not Library rows
   unreadable: number;
+  files: boolean; // a saved folder or master.key exists
   message: string | null; // "Saving is not available on this computer: <reason>"
 };
+
+// Mirrors SavedList in electron/storage.ts. `folders` and `files` need no key.
+export type SavedList = { documents: Fixture[]; folders: number; files: boolean };
 
 // The twenty functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
@@ -79,8 +83,9 @@ declare global {
       scanCancel(): Promise<void>;
       // Registers a match by its index (never a path), through the same import as chooseModelFile: the file is copied in.
       useScanned(index: number): Promise<UseResult>;
-      // The saved documents, one entry per document and model. Empty when there are none or the store cannot be used.
-      listDocuments(): Promise<Fixture[]>;
+      // The saved documents, one entry per document and model (empty when there are none or the store cannot be used),
+      // and what is on disk.
+      listDocuments(): Promise<SavedList>;
       // Can raise a keyring prompt: call it only at the times storage_design.md lists.
       getStorage(): Promise<StorageInfo>;
       // Records the answer. The first Yes also saves this session's finished documents; the counts are those.
