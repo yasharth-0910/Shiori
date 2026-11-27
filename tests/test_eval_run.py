@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 """eval/run.py on two tiny invented documents (no corpus, no model, no network)."""
 
+import hashlib
 import json
 import re
 from datetime import UTC, date, datetime
@@ -11,6 +12,7 @@ from shiori_core.fields import SCHEMA_VERSION
 from shiori_core.models import EXTRACTOR_VERSION, Sentence
 
 from collector.manifest import ManifestRow
+from eval import bootstrap as bs
 from eval import run
 from eval.silver.compare import gold_of
 from eval.silver.model import Candidate
@@ -117,7 +119,7 @@ def test_document_without_labels_is_listed_and_skipped(world) -> None:
     assert skipped == [rows[1].doc_id] and {r["doc"] for r in recs} == {
         rows[0].doc_id[:12]
     }
-    rep = run.build(recs, skipped, rows, "x", "dev", "stub", (0, 0))
+    rep = run.build(recs, skipped, rows, "x", "dev", "stub", (0, 0), {})
     assert rep["skipped"] == [rows[1].doc_id[:12]] and rows[1].doc_id[
         :12
     ] in run.markdown(rep)
@@ -138,9 +140,46 @@ def test_reports_are_never_overwritten(world, tmp_path: Path, monkeypatch) -> No
     rows, dirs, sents = world
     monkeypatch.setattr(run, "REPORTS", tmp_path / "reports")
     recs, skipped = run.evaluate(rows, dirs, run.stub_extractor, sents)
-    names = [run.write(run.build(recs, skipped, rows, "dev_stub", "dev", "stub", (2, 4)))[0].name for _ in range(2)]  # fmt: skip
+    names = [run.write(run.build(recs, skipped, rows, "dev_stub", "dev", "stub", (2, 4), {}))[0].name for _ in range(2)]  # fmt: skip
     assert names == ["run_dev_stub.json", "run_dev_stub_2.json"]
     assert "Hallucination" in (tmp_path / "reports" / "run_dev_stub.md").read_text()
+
+
+def hashed_report(rows, dirs, sents) -> bs.Report:
+    hashes: dict[str, str] = {}
+    recs, skipped = run.evaluate(rows, dirs, run.stub_extractor, sents, hashes)
+    rep = run.build(recs, skipped, rows, "x", "dev", "stub", (0, 0), hashes)
+    return bs.Report.model_validate(rep)
+
+
+def test_report_label_hashes_ignore_the_path(world, tmp_path: Path) -> None:
+    rows, dirs, sents = world
+    moved = dirs[0].rename(tmp_path / "elsewhere")
+    first = hashed_report(rows, [moved], sents)
+    assert first.label_sha256 == {
+        r.doc_id[:12]: hashlib.sha256((moved / f"{r.doc_id}.jsonl").read_bytes()).hexdigest()
+        for r in rows
+    }  # fmt: skip
+    moved.rename(dirs[0])
+    assert hashed_report(rows, dirs, sents).label_sha256 == first.label_sha256
+
+
+def test_one_changed_label_value_is_refused(world) -> None:
+    """Same status, same citations, same scores: only the hash can see it."""
+    rows, dirs, sents = world
+    before = hashed_report(rows, dirs, sents)
+    bs.paired(before, hashed_report(rows, dirs, sents))
+    changed = labels(rows[1].doc_id)
+    changed[0]["value_ja"] = TITLE + "二"
+    (dirs[0] / f"{rows[1].doc_id}.jsonl").write_text(
+        "".join(json.dumps(x) + "\n" for x in changed)
+    )
+    after = hashed_report(rows, dirs, sents)
+    assert before.records == after.records
+    with pytest.raises(ValueError, match="label files differ") as e:
+        bs.paired(before, after)
+    assert rows[1].doc_id[:12] in str(e.value)
+    assert rows[0].doc_id[:12] not in str(e.value)
 
 
 # --- the test split stays closed -------------------------------------------------------

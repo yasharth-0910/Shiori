@@ -4,8 +4,9 @@
     uv run python -m eval.bootstrap eval/reports/run_<A>.json eval/reports/run_<B>.json
 
 A is the baseline, B the change. Reads the two report files only: no document, no label
-file, no model, no network. The reports do not store label file hashes, so identical
-labels cannot be proven from them; a row whose label status differs is refused.
+file, no model, no network. A pair whose stored label file SHA-256 differ is refused.
+A report written before the hashes were stored is read with a warning: label identity is
+unproven, and only a row whose label status differs is refused.
 """
 
 import argparse
@@ -42,6 +43,7 @@ class Report(BaseModel):
     extractor_version: str
     schema_version: str
     records: list[Record]
+    label_sha256: dict[str, str] | None = None  # None: written before hashes
 
 
 Rows = dict[tuple[str, str], Record]
@@ -70,6 +72,13 @@ def paired(a: Report, b: Report) -> tuple[Rows, Rows]:
     docs_a, docs_b = ({doc for doc, _ in rows} for rows in (ra, rb))
     if docs_a != docs_b:
         raise ValueError(f"documents differ: {sorted(docs_a ^ docs_b)}")
+    ha, hb = a.label_sha256, b.label_sha256
+    if ha is not None and hb is not None:
+        unequal = sorted(
+            d for d in docs_a if d not in ha or d not in hb or ha[d] != hb[d]
+        )
+        if unequal:
+            raise ValueError(f"label files differ or have no hash: {unequal}")
     if ra.keys() != rb.keys():
         raise ValueError(f"rows differ: {sorted(ra.keys() ^ rb.keys())[:5]}")
     changed = sorted(k for k in ra if ra[k].gold != rb[k].gold)
@@ -136,12 +145,19 @@ def render(a: Report, b: Report) -> str:
     ra, rb = paired(a, b)
     docs = len({doc for doc, _ in ra})
     results = {attr: bootstrap(ra, rb, attr) for _, attr in METRICS}
+    unhashed = [n for n, r in (("A", a), ("B", b)) if r.label_sha256 is None]
+    identity = (
+        f"WARNING: no label file hashes in report {' and '.join(unhashed)}, "
+        "so label identity is unproven: a changed label value or citation passes."
+        if unhashed
+        else f"Label files: SHA-256 equal for all {docs} documents."
+    )
     out = [
         f"A: {a.name}   B: {b.name}",
         f"{docs} documents, {len(ra)} rows, extractor {a.extractor_version}, "
         f"schema {a.schema_version}, {RESAMPLES} resamples, seed {SEED}",
-        "Scores are against model-reviewed silver labels (D-41). The reports store no "
-        "label file hashes, so identical labels are not proven.",
+        "Scores are against model-reviewed silver labels (D-41).",
+        identity,
     ]
     for title, attr in METRICS:
         r = results[attr]

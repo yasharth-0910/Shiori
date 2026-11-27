@@ -15,6 +15,7 @@ split is ever formed (tests/test_eval_run.py).
 """
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -81,13 +82,19 @@ def label_dirs(split: str) -> list[Path]:
     return [Path("data/eval") / s / "labels", Path("data/eval_private") / s / "labels"]
 
 
-def read_labels(doc_id: str, dirs: list[Path]) -> dict[str, dict] | None:
+def read_labels(
+    doc_id: str, dirs: list[Path], hashes: dict[str, str] | None = None
+) -> dict[str, dict] | None:
     """field -> label line, or None when the document has no label file. A file made
-    for another extractor or schema version is refused (sentence ids would not match)."""
+    for another extractor or schema version is refused (sentence ids would not match).
+    `hashes` gets doc id prefix -> SHA-256 of the same bytes the lines come from."""
     for d in dirs:
         p = d / f"{doc_id}.jsonl"
         if p.exists():
-            lines = [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+            data = p.read_bytes()
+            if hashes is not None:
+                hashes[doc_id[:12]] = hashlib.sha256(data).hexdigest()
+            lines = [json.loads(x) for x in data.decode().splitlines() if x.strip()]
             for ln in lines:
                 if (ln["extractor_version"], ln["schema_version"]) != (EXTRACTOR_VERSION, SCHEMA_VERSION):  # fmt: skip
                     raise ValueError(f"{doc_id[:12]}: labels are for extractor {ln['extractor_version']} / schema {ln['schema_version']}")  # fmt: skip
@@ -117,11 +124,12 @@ def record(row: ManifestRow, field: str, pred: Candidate, gold: dict, by_id: dic
 
 
 def evaluate(rows: list[ManifestRow], dirs: list[Path], extractor: Extractor,
-             sentences_of: Callable[[ManifestRow], list[Sentence]]) -> tuple[list[dict], list[str]]:  # fmt: skip
+             sentences_of: Callable[[ManifestRow], list[Sentence]],
+             hashes: dict[str, str] | None = None) -> tuple[list[dict], list[str]]:  # fmt: skip
     """(records, skipped doc ids). A document with no label file is skipped."""
     recs, skipped = [], []
     for row in rows:
-        gold = read_labels(row.doc_id, dirs)
+        gold = read_labels(row.doc_id, dirs, hashes)
         if gold is None:
             skipped.append(row.doc_id)
             continue
@@ -160,7 +168,8 @@ def groups(recs: list[dict], key: str) -> dict[str, dict]:
 
 
 def build(recs: list[dict], skipped: list[str], rows: list[ManifestRow], name: str,
-          split: str, extractor: str, reviewed_lines: tuple[int, int]) -> dict:  # fmt: skip
+          split: str, extractor: str, reviewed_lines: tuple[int, int],
+          label_sha256: dict[str, str]) -> dict:  # fmt: skip
     return {
         "name": name, "split": split, "extractor": extractor,
         "date": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -169,6 +178,7 @@ def build(recs: list[dict], skipped: list[str], rows: list[ManifestRow], name: s
         "documents": sorted({r["doc"] for r in recs}), "skipped": [d[:12] for d in skipped],
         "documents_in_split": len(rows),
         "label_lines_reviewed_by_a_model": reviewed_lines,
+        "label_sha256": dict(sorted(label_sha256.items())),
         "overall": tally(recs), "tier1": tally([r for r in recs if r["tier1"]]),
         "by_kind": groups(recs, "kind"), "by_field": groups(recs, "field"),
         "records": recs,
@@ -279,8 +289,11 @@ def main(argv: list[str] | None = None) -> int:
 
     dirs = label_dirs(a.split)
     rows = run.select(a.split, doc_ids=a.docs)
+    hashes: dict[str, str] = {}
     try:
-        recs, skipped = evaluate(rows, dirs, EXTRACTORS[a.extractor], load_sentences)
+        recs, skipped = evaluate(
+            rows, dirs, EXTRACTORS[a.extractor], load_sentences, hashes
+        )
     finally:
         if a.extractor == "hybrid":
             from eval import hybrid
@@ -288,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
             hybrid.stop()
     scored = [r for r in rows if r.doc_id not in skipped]
     rep = build(recs, skipped, rows, a.name or f"{a.split}_{a.extractor}", a.split,
-                a.extractor, reviewed_count(scored, dirs))  # fmt: skip
+                a.extractor, reviewed_count(scored, dirs), hashes)  # fmt: skip
     j, m = write(rep)
     print(f"{len(scored)} documents scored, {len(skipped)} skipped (no label file)")
     for k, v in rep["overall"].items():

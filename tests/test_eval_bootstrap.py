@@ -97,6 +97,39 @@ def test_refuses_one_document():
         bs.paired(one, one)
 
 
+def hashes(docs: int = 6) -> dict[str, str]:
+    return {f"doc{d}": f"{d:064x}" for d in range(docs)}
+
+
+def test_matching_label_hashes_pass():
+    r = parse(report(grid(lambda d, f: False), label_sha256=hashes()))
+    out = bs.render(r, r)
+    assert "SHA-256 equal for all 6 documents" in out and "WARNING" not in out
+
+
+@pytest.mark.parametrize("change", [{"doc3": "f" * 64}, {"doc3": None}])
+def test_refuses_a_differing_or_missing_label_hash(change):
+    other = {k: v for k, v in (hashes() | change).items() if v is not None}
+    rows = grid(lambda d, f: False)
+    a = parse(report(rows, label_sha256=hashes()))
+    b = parse(report(rows, label_sha256=other))
+    with pytest.raises(ValueError, match=r"label files differ.*\['doc3'\]"):
+        bs.paired(a, b)
+
+
+@pytest.mark.parametrize(
+    ("a_has", "b_has", "named"),
+    [(False, False, "A and B"), (False, True, "A"), (True, False, "B")],
+)
+def test_report_without_label_hashes_is_read_with_a_warning(a_has, b_has, named):
+    rows = grid(lambda d, f: False)
+    plain, hashed = report(rows), report(rows, label_sha256=hashes())
+    a, b = (parse(hashed if has else plain) for has in (a_has, b_has))
+    out = bs.render(a, b)
+    assert f"WARNING: no label file hashes in report {named}," in out
+    assert "label identity is unproven" in out and "Verdict:" in out
+
+
 def test_load_refuses_test_split_before_reading_rows(tmp_path: Path):
     p = tmp_path / "run_x.json"
     p.write_text(json.dumps({"split": "test", "records": "never looked at"}))
