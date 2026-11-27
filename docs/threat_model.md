@@ -1,6 +1,6 @@
 # Threat model
 
-Scope: the shipped app (`app/`, `sidecar/`, `core/`) running on one user's machine, reading documents the user chooses to open. Privacy behaviour is in `privacy.md`, the storage proposal in `storage_design.md`, and design background in `architecture.md`; decisions are D-06 (Electron + sidecar + llama.cpp), D-09 (model download is the only network path) and D-65 (security baseline).
+Scope: the shipped app (`app/`, `sidecar/`, `core/`) running on one user's machine, reading documents the user chooses to open. Privacy behaviour is in `privacy.md`, the storage design in `storage_design.md` (D-119), and design background in `architecture.md`; decisions are D-06 (Electron + sidecar + llama.cpp), D-09 (model download is the only network path) and D-65 (security baseline).
 
 "What Shiori does" describes the code as of 2026-11-27. Status values: **done** (built and checked by a test), **partly built** (some of it is in the code; the status says what is missing), **test only** (a test enforces the rule on today's code, the feature it guards is not built), **Planned, not built** (no code or test).
 
@@ -35,6 +35,6 @@ Test names below are in `tests/test_security_static.py` (`static:`) or `tests/te
 - Someone with the user's unlocked session can open every document the app can open.
 - The network is outside the app. Shiori's code makes a network request only when you start a model download, but it cannot stop the OS, a VPN, a proxy, or other software from seeing that the machine is online. Packet capture on a trusted machine is how the claim is checked, not a proof that holds on every machine.
 - Hardware and firmware attacks, cold-boot memory reads and swap files are not addressed. The OS may write memory to swap; full-disk encryption is the user's job.
-- Deleted data on an SSD may survive in blocks we cannot overwrite. The app saves no documents today; crypto-shredding for saved documents is planned, not built (`storage_design.md`).
+- Deleted data on an SSD may survive in blocks we cannot overwrite. The app saves no documents today; crypto-shredding for saved documents is planned, not built (`storage_design.md`). Even then, someone who recovers the old key file (or has an older backup) and can use your login could read a deleted document.
 - A bug in a dependency we have not found yet. Pinned versions and audits reduce the chance, they do not remove it. There is no sandboxed parser to limit the damage.
 - The model can be wrong. Code checks that a cited sentence contains the value; it cannot check that the Japanese meaning was understood correctly.

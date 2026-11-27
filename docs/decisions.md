@@ -1178,6 +1178,9 @@ Consequences: the guard only works when it is run. It cannot see an upload made 
 - Dev deadline relabel to kind `application` (2026-11-24, answers in data/cache/labeling/answers/dev-relabel-application.txt, not yet imported): 563042df (h_s48, 提案書等のシステムへの提出期限) and 4b0b9d82 (h_s38, 研究提案書等提出期限) were judged by cue words only and need a native check.
 - Five model-proposed `application` rows were left unchanged in the dev labels (not relabeled, not checked against the sentences): d230e51e h_s58, 28ad40ea p2_s24 and p3_s20, 84e9d0c8 h_s66, a81e99fe h_s66.
 - Dev reports whose deadline numbers use the old labels (before this relabel is imported): the `run_*` and `hybrid_*` files in eval/reports/ that score the dev split, and the dev rows of `rules_v4_side_by_side.md`. Not re-run or recomputed.
+- Saved documents (D-119, `storage_design.md`), not tested: does the macOS Keychain still give the app its key after an update, with ad-hoc signing (D-114)? The test is section 7 of the design; step 6 of section 6 is a gate.
+- Saved documents (D-119): on Windows `userData` is in the roaming profile. Should the store live in a local, non-roaming folder instead? Answered in D-119: yes (`storage_design.md` section 2).
+- Saved documents (D-119): stored results keep the citations and boxes of the release that made them. After an extractor change, should the app offer to process again? The fields response does not carry the extractor version today, and the design adds no such offer.
 
 ## D-112: Packaging for v0.1: frozen sidecar, bundled llama-server, no OCR
 
@@ -1251,3 +1254,20 @@ Context: `docs/privacy.md` said the built-in spellchecker was disabled, but `app
 Decision: when a session is created, `app/electron/main.ts` empties the spellchecker language list, then turns the checker off; the window also sets `spellcheck: false`. Emptying the list is the part that stops the download. It happens in the same task that creates the session, before the file check that leads to a download can report back. Test: `tests/test_app_no_network.py::test_spellchecker_is_off_and_lists_no_dictionary` (reads the source).
 Alternatives: `spellcheck: false` or `setSpellCheckerEnabled(false)` alone (rejected: neither empties the list); `setSpellCheckerDictionaryDownloadURL` pointing nowhere (rejected: it puts a URL in the app and still makes a request attempt).
 Consequences: no spellchecking in the app, which has only short search inputs. Checked on macOS in a real Electron run: the checker is off. The list call does nothing on macOS, so the Windows and Linux part has not been run. Check it with a packet capture on one of them before saying it was observed. Electron's own patches to Chromium were not checked.
+
+## D-119: Saved documents: encrypted files owned by the main process, off by default
+
+Date: 2026-11-27
+Status: accepted (Yasharth's task of 2026-11-27); only step 1 of the design's section 6 is built, and nothing is saved yet
+Context: D-116 keeps results in memory only and left open where, whether encrypted, and whether the PDF is kept. `docs/storage_design.md` proposes the answer.
+Decision: accept `docs/storage_design.md`.
+- Saving is off by default and starts only after the user says yes. Off is what `privacy.md` calls ephemeral mode.
+- The main process owns the store (not the sidecar): one folder per document with a random name, holding the record and, for a PDF, a copy of the file. No database and no new dependency.
+- Each document has its own random 32-byte key. Files are AES-256-GCM (Node `crypto`) with a fresh 12-byte nonce, a 16-byte tag, and the folder name and file role as additional authenticated data. Document keys are encrypted with one master key, which Electron `safeStorage` encrypts. On Linux with no keyring nothing is saved.
+- Delete is crypto-shred: the document's wrapped key file is removed first.
+- Open question 2 of the design: use the synchronous `safeStorage` calls.
+- Open question 5: a partly translated saved document is acceptable; sentences with no stored English show Japanese only.
+- Open question 3: on Windows, keep the store in a local (non-roaming) folder, not in the roaming profile. The roaming profile can sync across a company's machines, and the store holds confidential text. `settings.json` goes in the same local folder, so a synced yes cannot turn saving on at another machine; on macOS and Linux both stay in `userData`. If `LOCALAPPDATA` is missing or not an absolute path, nothing is saved, the app never falls back to the roaming folder, and it says saving is not available on this computer, with the reason.
+- Open questions 1 and 4 stay open and are logged under Open questions. Open questions 6 and 7 were settled before this entry (D-118 and `app/electron/userfile.ts`).
+Alternatives: the table "Alternatives rejected" in the design (SQLCipher per document, plain SQLite or JSON, `safeStorage` on every file, one keychain item per document, a user password, the sidecar as owner, one file for the whole library, an encrypted title index, remembering the PDF path, saving on by default, asking before the first document).
+Consequences: replaces the SQLCipher plan in `architecture.md` and `modules.md`. Delete does not promise that the data is gone forever: a recovered wrapped key plus the user's login, or an older backup, can still read it. Steps 5 to 8 must ship in the same release, and step 6 (the Keychain key surviving an update) is a gate. `EXTRACTOR_VERSION` (0.3.0) and the sidecar do not change.

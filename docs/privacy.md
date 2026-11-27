@@ -1,6 +1,6 @@
 # Privacy design
 
-The promise: **the app never sends a document, extracted text or result off the user's machine.** Today it keeps results in memory only (D-116) and writes no document or result file of its own. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and permanent delete are planned, not built (`storage_design.md`).
+The promise: **the app never sends a document, extracted text or result off the user's machine.** Today it keeps results in memory only (D-116) and writes no document or result file of its own. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and permanent delete are planned, not built. Their design is accepted (D-119, `storage_design.md`).
 
 This file says what the code does today (checked 2026-11-27). Anything marked **Planned, not built** is not in the app. Releases v0.1.0 and v0.1.1 do not have the spellchecker and HTTP cache settings described below (D-118).
 
@@ -52,7 +52,7 @@ Out of scope: a compromised OS or a malicious user with full access to an unlock
 - Today: the Library, results and translations are held in memory and are gone when the app quits (D-116).
 - The app writes model files and partial downloads, the exports you choose to save, and whatever Electron itself keeps in the user data folder.
 - No temp files for document text: no code in `core/` or `sidecar/` that the app runs writes one. The packaged app has no OCR (D-112). What the OCR engine does inside a dev run has not been checked.
-- Encrypted saved documents: **Planned, not built.** The proposal is in `storage_design.md`; it is not accepted yet.
+- Encrypted saved documents: **Planned, not built.** The design is accepted (D-119) and described in `storage_design.md`.
 
 **Deletion**
 - Permanent delete of a saved document: **Planned, not built** (`storage_design.md`).

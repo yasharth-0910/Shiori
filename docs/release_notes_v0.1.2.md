@@ -27,7 +27,7 @@ Shiori reads Japanese public tender documents (入札公告, 仕様書, 入札�
 
 ## Testing status
 
-Only the macOS Apple Silicon build has been run by hand. The macOS Intel, Windows and Linux installers are built by CI and are untested. The llama.cpp trim was not started on Windows or Linux.
+The macOS Intel, Windows and Linux installers are built by CI. In CI, the packaged sidecar and llama-server start on macOS, Windows and Linux. Only the macOS Apple Silicon build has had the full app run by hand.
 
 ## Privacy
 

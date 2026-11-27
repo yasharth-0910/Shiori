@@ -257,3 +257,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-23 (D-103): HTML notices in the app. Built the sidecar change, the text viewer and the highlight check for HTML (136dfba9, p-portal, dev split, open licence). Unit and sidecar tests pass. Real-app highlight check passed on 136dfba9: 8 clicks, 0 offset mismatches. The Deadlines click and the English Summary screenshot are covered in the v0.1 wrap-up checks.
 
 - 2026-11-24 (D-112): packaging path. Packaged-mode paths, llama.ts child tracking, `scan_not_supported`, PyInstaller spec, `fetch_llama.py` with pinned hashes. Frozen sidecar (macOS arm64) gave the same fields JSON as the unfrozen one on two dev documents. OCR dropped from v0.1 (optional download after). No installer yet. A llama-server left by a SIGKILLed app is no longer cleaned up on the next start.
+
+- 2026-11-27 (D-119): accepted the storage design. Encrypted files owned by the main process replace the SQLCipher plan; saving is off by default. Steps 0 and 1 done (`app/electron/store.ts`, not imported anywhere). Nothing is saved yet.

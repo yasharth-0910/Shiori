@@ -12,14 +12,13 @@ Status: planned. Update as things get built. Anything here that turns out wrong 
 |  - PDF.js viewer     <-IPC-> - spawns + supervises child procs   |
 |  - highlight layer           - holds session tokens              |
 |  - fields / summary          - blocks all outbound requests      |
-|                              - keychain access (safeStorage)     |
+|                              - encrypted doc store, safeStorage  |
 |                                   |                 |            |
 |                          127.0.0.1:random    127.0.0.1:random    |
 |                                   v                 v            |
 |                     Python sidecar (FastAPI)   llama-server      |
 |                     - shiori_core pipeline     (llama.cpp, GGUF) |
 |                     - job queue + progress                       |
-|                     - encrypted doc store                        |
 +------------------------------------------------------------------+
 
 Dev-time only, never shipped:
@@ -153,7 +152,7 @@ Fields stream to the UI as they finish, so the user sees results before the whol
 | OCR | NDLOCR-Lite, PaddleOCR fallback | NDLOCR-Lite runs on CPU, built for Japanese |
 | Inference | llama.cpp (`llama-server`) | Metal on Mac, CPU/Vulkan on Windows, JSON schema constrained output |
 | Training | mlx-lm on Mac, PEFT/Unsloth on Colab as fallback | Output merged to GGUF |
-| Local store | SQLite + SQLCipher, one file per document | Keys in OS keychain via Electron safeStorage |
+| Local store | Encrypted files owned by main, one folder per document (AES-256-GCM, Node `crypto`) | Off by default. A key per document, wrapped by one master key held with Electron safeStorage (D-119) |
 | Sidecar | FastAPI, packaged with PyInstaller | |
 
-Details of storage and privacy are in `privacy.md`.
+Storage is designed in `storage_design.md` (D-119); privacy is in `privacy.md`.

@@ -246,10 +246,12 @@ One entry per module. Keep the status and interface lines current. Status values
 - **Translation queue (D-88):** `POST /documents/{id}/translate` is the queue's front door, not a translator: it moves ids to the front, restarts a cancelled queue and returns what is ready with `done`, `total`, `failed`. See the translate entry. `Job` carries `tq`, `pending`, `inflight`, `failed`, `translations` (memory only). A failed sentence is put back at the front when its field is opened (log event `queue_retry`, count only). The title's extracted value is queued first under the key `value:title` (D-91): same translator, not counted in `done`/`total`/`failed`; the endpoint accepts that one key besides cited sentences.
 - **Not built:** `GET /documents/{id}/sentences/{sid}`, `POST /translate`, `DELETE /documents/{id}`, job persistence (jobs live in memory), `era_plausible` and `en_summary_agrees` checks.
 
-## Store (`core/shiori_core/store/`, shipped)
+## Store (`app/electron/store.ts`, shipped)
 
-- **Status:** planned (Phase 8, plain SQLite before that)
-- **Purpose:** one SQLCipher database per document, holding the PDF bytes, sentences, results. Key per document from the OS keychain. Delete = destroy key + file.
+- **Status:** started (Phase 8, D-119, `storage_design.md` section 6 step 1 of 9). Only seal and open of one blob exist. Nothing imports the file and nothing is saved.
+- **Purpose:** the main process keeps saved documents as encrypted files, one folder per document, with a key per document wrapped by a master key (Electron `safeStorage`, in `keeper.ts`, planned). Saving is off until the user says yes. Delete = destroy the wrapped key, then the folder.
+- **Interface:** `seal(key, folder, role, plain)` and `open(key, folder, role, blob)`, both returning a Buffer. `role` is `key`, `record` or `source`. Blob: `SHI1`, 12-byte nonce, ciphertext, 16-byte tag (AES-256-GCM, Node `crypto`). Any failure throws `StoreError` with the code `seal_failed` or `open_failed` and nothing else.
+- **Tests:** `app/test/store.test.ts`.
 
 ---
 
@@ -292,7 +294,7 @@ One entry per module. Keep the status and interface lines current. Status values
 
 ### settings
 - **Status:** planned (Phase 8)
-- **Purpose:** ephemeral mode toggle, storage location, delete all, model info, network activity screen.
+- **Purpose:** the switch "Keep documents in your Library between sessions" (off by default; off is ephemeral mode), the saved document count, "Delete all saved documents" (`storage_design.md` section 3, D-119). Also model info and a network activity screen, which that design does not cover.
 
 ## Packaging (`packaging/`, `app/electron/paths.ts`, dev-time except paths.ts)
 

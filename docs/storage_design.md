@@ -1,8 +1,8 @@
 # Storage design: keeping documents between sessions
 
-Status: proposal (2026-11-27). Nothing here is built. D-116 still applies: v0.1 keeps results in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 and 1 are done: `app/electron/store.ts` seals and opens one blob and nothing imports it. Nothing is saved. D-116 still describes the app: results are kept in memory only.
 
-If accepted, this replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
+This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 
 ## Today
 
@@ -15,7 +15,7 @@ If accepted, this replaces the "Storage", "Deletion" and "Ephemeral mode" parts 
 
 ## Recommendation in one paragraph
 
-The main process owns a small folder of encrypted files in the app's user data folder. Each document gets its own folder and its own random key. Files are encrypted with AES-256-GCM from Node's built-in `crypto`. Each document key is itself encrypted ("wrapped") with one master key, and the master key is encrypted by Electron `safeStorage`, which relies on the operating system's secret store. Deleting a document destroys its wrapped key first. No database and no new dependency. Saving is off until the user says yes.
+The main process owns a small folder of encrypted files in the app's user data folder (on Windows, in a folder under local app data instead, see section 2). Each document gets its own folder and its own random key. Files are encrypted with AES-256-GCM from Node's built-in `crypto`. Each document key is itself encrypted ("wrapped") with one master key, and the master key is encrypted by Electron `safeStorage`, which relies on the operating system's secret store. Deleting a document destroys its wrapped key first. No database and no new dependency. Saving is off until the user says yes.
 
 ## 1. What is stored
 
@@ -48,14 +48,25 @@ Exports (CSV, .ics) and Copy are different: the user asks for them, they are pla
 ## 2. Layout and encryption
 
 ```
-<userData>/store/
+<base>/store/
   master.key            master key, encrypted by safeStorage
   docs/<random name>/
     key                 this document's key, encrypted with the master key
     record.enc          the record above, as JSON
     source.enc          the PDF bytes (PDF only)
-<userData>/settings.json    {"keepDocuments": true or false}, written only once the user answers
+<base>/settings.json        {"keepDocuments": true or false}, written only once the user answers
 ```
+
+Where `<base>` is:
+
+| OS | `<base>` |
+|---|---|
+| Windows | `%LOCALAPPDATA%\shiori-app` (local, non-roaming) |
+| macOS, Linux | `<userData>` |
+
+On Windows, Electron's default `userData` is in the roaming profile, which can sync across a company's machines. The store holds confidential text, and a synced yes in `settings.json` would turn saving on at another machine without asking there (D-119). So both go under the local app data folder. `app.getPath` in Electron 44.4.5 has no name for that folder, so main reads the `LOCALAPPDATA` environment variable and joins it with the last part of the `userData` path (`shiori-app`). Not run on Windows yet.
+
+If `LOCALAPPDATA` is missing or is not an absolute path, saving is not available (see "When saving is not available"). There is no `<base>`: nothing is saved, `settings.json` is neither read nor written, and the app never falls back to `userData`.
 
 Folder names are 16 random bytes in hex, not the document id. The id is a hash of a public tender, so anyone holding the same file could compare hashes and learn that you opened it.
 
@@ -97,6 +108,7 @@ When something is wrong:
 | One document fails to decrypt | Skip it, count it in the Library notice, keep the others. Offer only "Delete all", because we cannot tell which document it is |
 | A folder has no `key` file | Remove it (unfinished save or unfinished delete) |
 | A save fails (disk full) | The result still opens in this session, marked "not saved" |
+| Windows: `LOCALAPPDATA` is missing or not an absolute path | Saving is not available (see "When saving is not available") |
 
 The only automatic deletion is the "no `key` file" case, and only when the master key opened (or no master key and no complete document exists). A failed decryption never deletes anything.
 
@@ -111,16 +123,31 @@ The only automatic deletion is the "no `key` file" case, and only when the maste
 
 The first three rows come from the platform documentation and have not been tested here. The `basic_text` backend is documented in the installed Electron (44.4.5) type definitions.
 
-### Linux with no keyring
+### When saving is not available
+
+Two cases, handled the same way:
+
+| Case | `state` | Reason shown |
+|---|---|---|
+| No usable keyring (in practice Linux) | `no_keyring` | "no system keyring was found. Set up GNOME Keyring or KWallet to save documents." |
+| Windows with no usable `LOCALAPPDATA` | `no_local_folder` | "Windows did not give a local app data folder (LOCALAPPDATA)." |
+
+Then the store is off and the app behaves like v0.1: everything works and the Library is in memory. The saving question is not asked and no answer is recorded. The Library and Settings say "Saving is not available on this computer:" followed by the reason, and the switch is disabled. The sentence about GNOME Keyring or KWallet is shown on Linux only.
+
+#### Linux with no keyring
 
 Recommendation: do not save. Check after the app is ready, and only when needed: there is something saved to open, a document has finished and the question has not been answered, or Settings is opened. A user who never turns saving on should not meet a keyring prompt at startup.
 
 - `safeStorage.isEncryptionAvailable()` is false, or
 - on Linux, `getSelectedStorageBackend()` is `basic_text` or `unknown`.
 
-Then the store is off and the app behaves like v0.1: everything works and the Library is in memory. The saving question is not asked and no answer is recorded. The Library and Settings say "Documents are not saved: no system keyring was found. Set up GNOME Keyring or KWallet to save them." and the switch is disabled. Never call `setUsePlainTextEncryption`. Documents saved earlier, when a keyring was present, stay on disk untouched and show as locked.
+Never call `setUsePlainTextEncryption`. Documents saved earlier, when a keyring was present, stay on disk untouched and show as locked.
 
 Writing with `basic_text` would look encrypted and protect nothing, which is worse than being honest.
+
+#### Windows with no local app data folder
+
+Do not save. Never write the store or `settings.json` to the roaming folder instead. Without `<base>` the app cannot find documents saved earlier: they stay on disk untouched, are not listed, and "Delete all saved documents" is disabled.
 
 ## 3. Opt-in saving and delete
 
@@ -226,7 +253,7 @@ New bridge functions (fifteen becomes twenty):
 | Function | Input | Output |
 |---|---|---|
 | `listDocuments()` | none | `Fixture[]`, the saved documents |
-| `getStorage()` | none | `{keep: boolean \| null, state: "ok" \| "no_keyring" \| "locked", saved: number, unreadable: number}`. `null` means not answered |
+| `getStorage()` | none | `{keep: boolean \| null, state: "ok" \| "no_keyring" \| "no_local_folder" \| "locked", saved: number, unreadable: number}`. `null` means not answered |
 | `setKeepDocuments(keep)` | boolean | `{saved: number, failed: number}`, what the first Yes saved |
 | `deleteDocument(docId)` | 64 hex characters | `boolean`, false if the user cancels the dialog |
 | `deleteAllDocuments()` | none | `boolean`, same |
@@ -275,12 +302,12 @@ Each step is done when its tests pass, `npm run typecheck`, `npm test` and `uv r
 | 0 | Accept the design: new entry D-119, update `privacy.md`, `architecture.md`, `modules.md`, `threat_model.md` | The docs agree with each other and with this file; open questions below are answered or logged |
 | 1 | `store.ts`: seal and open one blob | Tests: round trip; empty and 20 MB input; one flipped byte in header, nonce, body and tag each fails; short tag fails; wrong key, wrong folder and wrong role fail; two seals of the same input differ |
 | 2 | `store.ts`: save, list, read PDF, add translations, delete, delete all, startup cleanup | Tests in a temp folder with a fake keeper: save and reopen with a new store object; second model joins the same document; changed source file is not saved; update after delete creates nothing; delete removes `key` first (stop it after step 2 and the document cannot be opened, even with a saved copy of the other files and the master key); copied-back files without `key` stay unreadable; leftover `.tmp` and keyless folders are removed; unreadable master key deletes nothing and writes nothing; canary string and canary file name appear in no file under the store and in no folder name; captured log output holds no canary, path or id |
-| 3 | `keeper.ts` and single instance lock | Tests with a fake `safeStorage`: unavailable, `basic_text` and `unknown` give `no_keyring` and create no file. A static test fails if `setUsePlainTextEncryption` appears in `app/`. By hand on the Mac: a key is made, survives a restart, and a second app copy does not start |
-| 4 | The saved answer (three values) and the rule for the first Yes, used by the store | Tests: not answered leaves the user data folder byte for byte unchanged (compare snapshots); No changes only `settings.json`; neither makes a master key; unreadable settings means not answered; first Yes saves the finished session documents; off then on does not save earlier ones; off blocks translation updates but not delete |
+| 3 | `keeper.ts` and single instance lock | Tests with a fake `safeStorage`: unavailable, `basic_text` and `unknown` give `no_keyring` and create no file. With the platform and environment passed in: on Windows a missing or relative `LOCALAPPDATA` gives `no_local_folder` and creates no file, under `userData` either; macOS and Linux use `userData`. A static test fails if `setUsePlainTextEncryption` appears in `app/`. By hand on the Mac: a key is made, survives a restart, and a second app copy does not start |
+| 4 | The saved answer (three values) and the rule for the first Yes, used by the store | Tests: not answered leaves the user data folder and `<base>` byte for byte unchanged (compare snapshots); No changes only `settings.json`; neither makes a master key; unreadable settings means not answered; first Yes saves the finished session documents; off then on does not save earlier ones; off blocks translation updates but not delete |
 | 5 | Main wiring: keep results in memory, save in `getFields`, save translations, serve the stored PDF, answer `translate` for saved results, open the store at startup and log `store_opened docs=N unreadable=M` or `store_locked` | Tests for the pure parts; `test_app_ipc.py` still lists every channel and sender check. By hand with saving set to `true` in `settings.json` and an open-license PDF: process, quit, check that the files hold no readable Japanese and that the log holds no text or path |
 | 6 | Keychain gate (macOS) | The test in section 7 is run and its result is written into `decisions.md` |
 | 7 | `listDocuments`, `getStorage`, `setKeepDocuments`, `deleteDocument`; the question line; Library loads saved documents; empty-state and notice text | `test_app_ipc.py` expects the new function set. Logic tests for when the line shows (each answer, each store state). By hand: first document finishes and the line shows; quit without answering, nothing saved; Yes, quit, rename the original file, reopen, highlights land on the same sentences; No, restart, never asked again; delete one, restart, it is gone and its folder with it |
-| 8 | Settings: switch, saved count, "Delete all saved documents" (`deleteAllDocuments`) | Tests: delete all removes every folder and `master.key`, works when locked, keeps the switch value, and the next save makes a new key. By hand: with saving off, one PDF and one HTML notice leave a directory snapshot unchanged apart from `settings.json` and known non-document files. Search the whole user data folder, including Chromium's cache folders, for a canary sentence from an invented test document: no hit, with saving off and on |
+| 8 | Settings: switch, saved count, "Delete all saved documents" (`deleteAllDocuments`) | Tests: delete all removes every folder and `master.key`, works when locked, keeps the switch value, and the next save makes a new key. By hand: with saving off, one PDF and one HTML notice leave a directory snapshot unchanged apart from `settings.json` and known non-document files. Search the whole user data folder, including Chromium's cache folders, and `<base>` where it is elsewhere (Windows), for a canary sentence from an invented test document: no hit, with saving off and on |
 | 9 | Packaged checks and the privacy checklist | macOS: section 7 run again with the real screens. Windows and Linux (with and without a keyring) tried by hand or marked untested. The delete and ephemeral lines in `privacy.md` are ticked only for what was run |
 
 The existing fixture document stays memory only and is never saved.
@@ -368,10 +395,10 @@ Record for each run: macOS version, both hashes, each prompt, the log lines, and
 
 Decided on 2026-11-27: saving is off by default and opt-in.
 
-1. Does the macOS Keychain still give the app its key after an update (ad-hoc signing, D-114)? Not tested. Section 7 is the test.
-2. Should we use the asynchronous `safeStorage` calls that Electron 44 also offers? The design assumes the synchronous ones.
-3. On Windows, `userData` is in the roaming profile. Should the store live in the local, non-roaming folder instead?
-4. Stored results keep the citations and boxes of the release that made them. After an extractor change, should the app offer to process again? The fields response does not carry the extractor version today.
-5. Translations are saved only while a document's screen is asking for them. Is a partly translated saved document acceptable?
+1. Open, logged in `decisions.md`. Does the macOS Keychain still give the app its key after an update (ad-hoc signing, D-114)? Not tested. Section 7 is the test.
+2. Answered (D-119): synchronous `safeStorage` calls. Electron 44 also offers asynchronous ones.
+3. Answered (D-119): on Windows the store and `settings.json` live in a local, non-roaming folder (section 2), because the roaming profile can sync across a company's machines and the store holds confidential text.
+4. Open, logged in `decisions.md`. Stored results keep the citations and boxes of the release that made them. After an extractor change, should the app offer to process again? The fields response does not carry the extractor version today.
+5. Answered (D-119): yes. Translations are saved only while a document's screen is asking for them, and a sentence with no stored English shows Japanese only.
 6. Settled on 2026-11-27: `app/electron/main.ts` now turns the spellchecker off and empties its dictionary list (D-118), and turns the HTTP cache off. Checked on macOS only. Windows and Linux have not been run.
 7. Settled on 2026-11-27: in `main.ts`, the file reads in `shiori:start` and `serve()` and the write in `shiori:save` now go through `userFile` (`app/electron/userfile.ts`), which logs and throws only the error type. Tests: `app/test/userfile.test.ts` and `tests/test_app_no_network.py`.
