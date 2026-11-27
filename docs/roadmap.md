@@ -2,7 +2,9 @@
 
 ## Current phase
 
-**v0.1.0 is ready to tag (2026-11-24). The app is built end to end: Processing, Workspace, Summary, Deadlines, Export (CSV and .ics), HTML notices, and first-run onboarding with a model scan and a pinned-hash download (D-99, D-100, D-103, D-115). Installers come from electron-builder in CI for macOS arm64, macOS Intel, Windows and Linux (D-112 to D-114); only macOS arm64 has been run by hand, the other three are built in CI and untested. Phase 5 is closed by decision (D-74). Phase 6 is not started (blocked by D-10). Not done: the Windows 16 GB run, the base-model decision entry, the native-speaker audit and the test split labeling (D-68), the test-split milestone run, and scanned PDFs (refused with a message, D-112). The Library is in memory only and is lost on quit. See "After v0.1" below.**
+**v0.1.0 is ready to tag (2026-11-24). The app is built end to end: Processing, Workspace, Summary, Deadlines, Export (CSV and .ics), HTML notices, and first-run onboarding with a model scan and a pinned-hash download (D-99, D-100, D-103, D-115). Installers come from electron-builder in CI for macOS arm64, macOS Intel, Windows and Linux (D-112 to D-114); only macOS arm64 has been run by hand, the other three are built in CI and untested. Phase 5 is closed by decision (D-74). Phase 6 is not started (it waits on the gates in `measurement_plan.md`, D-125). Not done: the Windows 16 GB run, the base-model decision entry, the native-speaker audit and the test split labeling (D-68), the test-split milestone run, and scanned PDFs (refused with a message, D-112). The Library is in memory only and is lost on quit. See "After v0.1" below.**
+
+Measurement protocol, label counts, reader sheet spec and LoRA gates: [`measurement_plan.md`](measurement_plan.md) (2026-11-28).
 
 Update this line whenever a phase's exit criteria are met. Don't start the next phase's heavy work early, except where noted as parallel.
 
@@ -174,6 +176,8 @@ Part E: sv4 and review in Claude Code (D-54, D-55; no labeling calls)
 
 ## Phase 6: LoRA fine-tuning
 
+Gates and training data rule: [`measurement_plan.md`](measurement_plan.md) section 6. Targets come only from filtered Qwen self-distillation (D-125), so D-10 does not block this data; the gates do.
+
 - [ ] Build training set from **train split only**: numbered sentences -> JSON fields with sentence IDs
 - [ ] Check data provenance and terms (see decisions.md) before using any cloud-model-generated targets for training
 - [ ] Train with `mlx-lm` on the Mac (fallback: Colab/Kaggle GPU)
@@ -237,7 +241,7 @@ Packaging for v0.1 (D-112). The generic "Packaging" line of Phase 8 above is don
 
 Parked after the v0.1 plan (2026-11-21), one line each on why:
 
-- Phase 6, LoRA on a small model: blocked by D-10 (the providers' output terms for training on cloud labels), and rules gave larger gains than the model changes did.
+- Phase 6, LoRA on a small model: waits on the gates in `measurement_plan.md` (D-125; D-10 still bars training on cloud labels), and rules gave larger gains than the model changes did.
 - Phase 10, full document translation: it is a reading aid and not needed for the v0.1 exit; it starts after Phase 9 (D-78).
 - Bundle reconciliation (a Q&A overriding the notice): needs links between documents of one tender, and v0.1 reads one document at a time.
 - Pluggable schemas: the 23 v1 fields are still being fixed by the audit, so opening the schema to other users would freeze it too early.
