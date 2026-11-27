@@ -1,6 +1,6 @@
 # Storage design: keeping documents between sessions
 
-Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done: `app/electron/store.ts`, which no app code imports. The app saves nothing. D-116 still describes the app: results are kept in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 in code and tests (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`); its by-hand Mac check is not recorded yet. No app code imports the store or the keeper. The app saves nothing. D-116 still describes the app: results are kept in memory only.
 
 This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 
@@ -97,7 +97,7 @@ Writing safely:
 - Before saving a PDF, main reads the file and checks that its SHA-256 still equals the document id. If not, nothing is saved.
 - Adding the same document with another model updates the existing record. It does not make a second folder.
 - Updating translations never creates a document. If it was deleted, the update does nothing.
-- The app takes Electron's single instance lock, so two copies cannot write at once. It does not take it today.
+- The app takes Electron's single instance lock, so two copies cannot write at once. A second copy quits and the first one comes to the front.
 
 When something is wrong:
 

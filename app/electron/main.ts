@@ -449,8 +449,25 @@ function registerIpc(): void {
   });
 }
 
+// One copy at a time, so two can never write the store at once (storage_design.md section 2). A second copy quits, and
+// the first one comes to the front.
+const primary = app.requestSingleInstanceLock();
+if (!primary) {
+  console.error("second_instance: quitting");
+  app.quit();
+}
+app.on("second-instance", () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  app.focus({ steal: true }); // macOS needs this to bring another app's window forward
+  win.focus();
+});
+
 const filter = requestFilter();
 void app.whenReady().then(() => {
+  if (!primary) return; // quit() is not immediate: start nothing in the second copy
   registerIpc();
   protocol.handle("shiori", serve);
   // Belt and braces next to the CSP: nothing a page asks for but shiori:// (and devtools, data, blob) goes out. Blocked

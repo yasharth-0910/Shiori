@@ -345,3 +345,30 @@ def test_user_path_file_calls_in_main_are_guarded() -> None:
         assert f'userFile("{event}", () => {call}' in main, event
     assert main.count('fs.writeFileSync(file, content, "utf8")') == 1
     assert main.count("fs.statSync(") == 1
+
+
+def test_plain_text_encryption_is_never_turned_on() -> None:
+    """docs/storage_design.md, "Linux with no keyring": that call makes safeStorage
+    use a password anyone can derive. Every file under app/ except installed packages
+    and build output (Electron's own files name it)."""
+    built = {"node_modules", "dist", "dist-electron", "release"}
+    files = [
+        p
+        for p in APP.rglob("*")
+        if p.is_file() and not (set(p.relative_to(APP).parts) & built)
+    ]
+    assert APP / "electron" / "keeper.ts" in files
+    word = b"setUsePlainTextEncryption"
+    assert [p.name for p in files if word in p.read_bytes()] == []
+
+
+def test_a_second_copy_starts_nothing() -> None:
+    """The single instance lock (docs/storage_design.md section 2): the second copy
+    quits, and its ready handler returns before it does anything."""
+    main = (APP / "electron" / "main.ts").read_text()
+    assert "const primary = app.requestSingleInstanceLock();" in main
+    assert re.search(r"if \(!primary\) \{\n[^}]*app\.quit\(\);", main)
+    assert re.search(
+        r"app\.whenReady\(\)\.then\(\(\) => \{\n\s*if \(!primary\) return;", main
+    )
+    assert 'app.on("second-instance"' in main

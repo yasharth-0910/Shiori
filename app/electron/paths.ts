@@ -34,5 +34,15 @@ export function bundledLlama(l: Layout): string | null {
   return l.isPackaged ? pathFor(l.platform).join(l.resourcesPath, "llama", exeName("llama-server", l.platform)) : null;
 }
 
+/** The folder that holds store/ and settings.json (storage_design.md section 2). Windows: under LOCALAPPDATA, joined
+ * with the last part of userData; a missing or relative value (`\dir` and `C:dir` too) gives "no_local_folder", never
+ * userData, which roams. Elsewhere: userData. */
+export function storageBase(platform: string, env: Record<string, string | undefined>, userData: string): string | "no_local_folder" {
+  if (platform !== "win32") return userData;
+  const local = env.LOCALAPPDATA;
+  if (!local || !path.win32.isAbsolute(local) || path.win32.parse(local).root.length < 2) return "no_local_folder";
+  return path.win32.join(local, path.win32.basename(userData));
+}
+
 /** The folder model files are looked for in: <userData>/models when packaged, <repo>/models in dev. */
 export const modelsDir = (l: Layout): string => pathFor(l.platform).join(l.isPackaged ? l.userData : l.repoRoot, "models");
