@@ -1,14 +1,15 @@
 // The document store (docs/storage_design.md sections 1 and 2, D-119). Only Node modules, and no app code imports it
 // yet. Every file under <base>/store is a blob: "SHI1" | 12-byte nonce | ciphertext | 16-byte tag, AES-256-GCM. The
 // folder name and the role are authenticated too, so a file moved to another folder or renamed to another role does not
-// open. master.key is the exception: the keeper wraps it. Delete and startup cleanup are not here yet (step 2b).
+// open. master.key is the exception: the keeper wraps it. Delete destroys the document's key file, not its data: old disk
+// blocks and backups made earlier can still hold the key (section 3, "What delete does not promise").
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 export type Role = "key" | "record" | "source";
 
-type Code = "seal_failed" | "open_failed" | "locked" | "source_changed" | "save_failed" | "read_failed";
+type Code = "seal_failed" | "open_failed" | "locked" | "source_changed" | "save_failed" | "read_failed" | "delete_failed";
 
 // A code and nothing else (no cause, path, data or key bytes), because it may end up in a log.
 export class StoreError extends Error {
@@ -106,7 +107,7 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
   const root = path.join(base, "store");
   const masterFile = path.join(root, "master.key");
   const docs = path.join(root, "docs");
-  let cached: Buffer | undefined; // the master key, once it opened; step 2b's delete all must drop it
+  let cached: Buffer | undefined; // the master key, once it opened; deleteAll() drops it
 
   function guard<T>(event: string, code: Code, op: () => T): T {
     try {
@@ -186,6 +187,13 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
     const blob = seal(docKey, folder, "record", Buffer.from(JSON.stringify(doc)));
     write(path.join(docs, folder, "record.enc"), blob);
     return blob.length;
+  }
+
+  // Key first: from then on the other files cannot be decrypted, and cleanup() finishes a removal that stopped.
+  function shred(folder: string): void {
+    const dir = path.join(docs, folder);
+    fs.rmSync(path.join(dir, "key"), { force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 
   return {
@@ -271,6 +279,49 @@ export function createStore(base: string, keeper: Keeper, log: (line: string) =>
         d.doc.translations[model] = merged;
         log(`store_saved bytes=${writeRecord(d.folder, d.docKey, d.doc)}`);
         return true;
+      });
+    },
+
+    // false when no readable document has this id. Needs the master key: without it the folder cannot be told apart.
+    deleteDocument(docId: string): boolean {
+      return guard("store_delete", "delete_failed", () => {
+        // All matches: a save made while a record could not be read leaves a second folder for the same document.
+        const matches = scan().found.filter((d) => d.doc.id === docId);
+        if (!matches.length) return false;
+        for (const d of matches) shred(d.folder);
+        log("store_deleted");
+        return true;
+      });
+    },
+
+    // Every document folder, then the master key and anything left beside it. Decrypts nothing, so it works when locked.
+    deleteAll(): void {
+      guard("store_delete_all", "delete_failed", () => {
+        cached = undefined; // the next save makes a new master key; if this stops half way, the file is read again
+        const all = folders();
+        for (const folder of all) shred(folder);
+        fs.rmSync(root, { recursive: true, force: true });
+        log(`store_deleted_all folders=${all.length}`);
+      });
+    },
+
+    // For startup: removes leftover .tmp files and folders without a key. Nothing is removed when the store is locked.
+    cleanup(): void {
+      guard("store_cleanup", "delete_failed", () => {
+        master(); // throws when locked
+        fs.rmSync(`${masterFile}.tmp`, { force: true });
+        let removed = 0;
+        for (const folder of folders()) {
+          const dir = path.join(docs, folder);
+          const names = fs.readdirSync(dir); // throws rather than guess: a folder we cannot list is not a keyless one
+          if (!names.includes("key")) {
+            shred(folder);
+            removed++;
+          } else {
+            for (const name of names) if (name.endsWith(".tmp")) fs.rmSync(path.join(dir, name), { force: true });
+          }
+        }
+        log(`store_cleanup folders=${removed}`);
       });
     },
   };

@@ -1,4 +1,4 @@
-// Run: npm test. The document store (docs/storage_design.md sections 2 and 6, steps 1 and 2a). Seal and open stay in
+// Run: npm test. The document store (docs/storage_design.md sections 2 and 6, steps 1 and 2). Seal and open stay in
 // memory. The store tests write only inside their own temp folder, with a fake keeper. All Japanese text is invented.
 import assert from "node:assert/strict";
 import { createDecipheriv, createHash, randomBytes } from "node:crypto";
@@ -119,7 +119,7 @@ const denied: Keeper = {
 };
 
 // Replaces one node:fs function for the store too, until the test ends.
-function mockFs(t: TestContext, name: "fsyncSync" | "renameSync", impl?: (...a: never[]) => unknown) {
+function mockFs(t: TestContext, name: "fsyncSync" | "renameSync" | "rmSync", impl?: (...a: never[]) => unknown) {
   const m = impl ? t.mock.method(fs.default, name, impl as never) : t.mock.method(fs.default, name);
   syncBuiltinESMExports();
   t.after(() => {
@@ -454,4 +454,234 @@ test("failure logs and errors hold no canary, path, folder name or id", (t) => {
   assert.ok(seen.some((l) => l.startsWith("store_saved bytes=")));
   assert.ok(seen.some((l) => l.startsWith("store_open failed: ")));
   for (const secret of [SENTENCE, FILE_NAME, s.tmp, os.tmpdir(), s.id, s.id.slice(0, 8), name]) assert.ok(!out.includes(secret), "leak");
+});
+
+// ---- Delete and startup cleanup ----
+
+// Two saved documents; `id` and `name` are the one the test deletes.
+function twoDocuments(t: TestContext) {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  const name = s.docs()[0]!;
+  const other = Buffer.from("%PDF another invented file");
+  fs.writeFileSync(s.source, other);
+  s.store().save(result(sha(other)), s.source, "0.1.2");
+  fs.writeFileSync(s.source, s.bytes);
+  const dir = path.join(s.root, "docs", name);
+  const master = () => Buffer.from(keeper.unwrap(fs.readFileSync(path.join(s.root, "master.key"))), "base64");
+  return { ...s, name, dir, otherId: sha(other), master };
+}
+
+const ids = (store: ReturnType<typeof createStore>) => store.list().documents.map((d) => d.id);
+
+test("after delete the document is gone and the others stay", (t) => {
+  const s = twoDocuments(t);
+  const store = s.store();
+  assert.equal(store.deleteDocument(s.id), true);
+  for (const st of [store, s.store()]) {
+    assert.deepEqual(ids(st), [s.otherId]);
+    assert.equal(st.read(s.id), null);
+    assert.equal(st.readSource(s.id), null);
+  }
+  assert.ok(!fs.existsSync(s.dir));
+  assert.equal(s.docs().length, 1);
+
+  const before = tree(s.base);
+  assert.equal(store.deleteDocument(s.id), false);
+  assert.equal(store.deleteDocument("not an id"), false);
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("delete removes every folder that holds the document", (t) => {
+  const s = setup(t);
+  s.store().save(result(s.id), s.source, "0.1.2");
+  const record = path.join(s.root, "docs", s.docs()[0]!, "record.enc");
+  const good = fs.readFileSync(record);
+  fs.writeFileSync(record, "damaged for a moment");
+  s.store().save(result(s.id), s.source, "0.1.2"); // cannot see the first one, so makes a second
+  fs.writeFileSync(record, good);
+  assert.equal(s.docs().length, 2);
+  s.store().deleteDocument(s.id);
+  assert.deepEqual(s.docs(), []);
+});
+
+test("a delete stopped after its first removal leaves a document that cannot be opened", (t) => {
+  const s = twoDocuments(t);
+  const removed: string[] = [];
+  const rm = fs.rmSync;
+  mockFs(t, "rmSync", (target: string, options: fs.RmOptions) => {
+    removed.push(target);
+    if (removed.length === 2) throw Object.assign(new Error(`stopped at ${target}`), { code: "EIO" });
+    rm(target, options);
+  });
+  failsClosed(() => s.store().deleteDocument(s.id), "delete_failed");
+  assert.equal(removed[0], path.join(s.dir, "key"));
+  assert.deepEqual(fs.readdirSync(s.dir).sort(), ["record.enc", "source.enc"]);
+
+  // Copies of the remaining files and the master key, opened as a store of their own.
+  const copy = path.join(s.tmp, "copy");
+  fs.cpSync(s.base, copy, { recursive: true });
+  for (const base of [s.base, copy]) {
+    const store = createStore(base, keeper, () => {});
+    assert.deepEqual(store.list().unreadable, 0);
+    assert.deepEqual(ids(store), [s.otherId]);
+    assert.equal(store.read(s.id), null);
+    assert.equal(store.readSource(s.id), null);
+  }
+  // The master key itself opens neither file.
+  for (const [file, role] of [["record.enc", "record"], ["source.enc", "source"]] as const) {
+    failsClosed(() => open(s.master(), s.name, role, fs.readFileSync(path.join(s.dir, file))));
+  }
+
+  s.store().cleanup();
+  assert.ok(!fs.existsSync(s.dir));
+});
+
+test("files copied back without the key stay unreadable", (t) => {
+  const s = twoDocuments(t);
+  const copy = path.join(s.tmp, "copy");
+  fs.cpSync(s.dir, copy, { recursive: true });
+  fs.rmSync(path.join(copy, "key"));
+  s.store().deleteDocument(s.id);
+  fs.cpSync(copy, s.dir, { recursive: true });
+  const store = s.store();
+  assert.deepEqual(ids(store), [s.otherId]);
+  assert.equal(store.read(s.id), null);
+  assert.equal(store.readSource(s.id), null);
+});
+
+test("an update after a delete creates nothing", (t) => {
+  const s = twoDocuments(t);
+  const store = s.store();
+  store.deleteDocument(s.id);
+  const before = tree(s.base);
+  for (const st of [store, s.store()]) assert.equal(st.addTranslations(s.id, "model-a", { p1_s1: en("x") }), false);
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("a locked store deletes no single document", (t) => {
+  const s = twoDocuments(t);
+  const before = tree(s.base);
+  failsClosed(() => s.store(denied).deleteDocument(s.id), "locked");
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("delete all removes every folder and the master key, and the next save makes a new key", (t) => {
+  const s = twoDocuments(t);
+  fs.writeFileSync(path.join(s.base, "settings.json"), '{"keepDocuments": true}');
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32))); // unfinished folder
+  const old = s.master();
+  const store = s.store();
+  store.list(); // caches the master key
+  store.deleteAll();
+  assert.deepEqual([...tree(s.base).keys()], ["settings.json"]);
+  assert.deepEqual(store.list(), { documents: [], unreadable: 0 });
+
+  store.save(result(s.id), s.source, "0.1.2");
+  assert.ok(!s.master().equals(old), "the cached master key was used again");
+  assert.deepEqual(ids(s.store()), [s.id]);
+});
+
+for (const [how, damage, k] of [
+  ["the keeper refuses", () => {}, denied],
+  ["master.key is damaged", (file: string) => fs.writeFileSync(file, "damaged"), keeper],
+  ["master.key is missing", (file: string) => fs.rmSync(file), keeper],
+] as const) {
+  test(`delete all works when locked: ${how}`, (t) => {
+    const s = twoDocuments(t);
+    damage(path.join(s.root, "master.key"));
+    failsClosed(() => s.store(k).list(), "locked");
+    s.store(k).deleteAll();
+    assert.ok(!fs.existsSync(s.root));
+    s.store().save(result(s.id), s.source, "0.1.2");
+    assert.deepEqual(ids(s.store()), [s.id]);
+  });
+}
+
+test("delete all and cleanup on an empty store create nothing and ask the keeper nothing", (t) => {
+  const s = setup(t);
+  s.store(denied).deleteAll();
+  s.store(denied).cleanup();
+  assert.ok(!fs.existsSync(s.base));
+});
+
+test("startup cleanup removes .tmp files and keyless folders and keeps every document", (t) => {
+  const s = twoDocuments(t);
+  const record = path.join(s.dir, "record.enc");
+  fs.writeFileSync(record, "damaged"); // unreadable, but it has a key: never removed
+  const before = tree(s.base);
+  fs.writeFileSync(path.join(s.root, "master.key.tmp"), "half");
+  for (const f of ["record.enc.tmp", "source.enc.tmp", "key.tmp"]) fs.writeFileSync(path.join(s.dir, f), "half");
+  const unfinished = path.join(s.root, "docs", "f".repeat(32));
+  fs.mkdirSync(unfinished);
+  for (const f of ["source.enc", "record.enc", "key.tmp"]) fs.writeFileSync(path.join(unfinished, f), "half");
+
+  s.store().cleanup();
+  assert.deepEqual(tree(s.base), before);
+  assert.deepEqual(ids(s.store()), [s.otherId]);
+  s.store().cleanup();
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("startup cleanup removes unfinished first saves when there is no master key yet", (t) => {
+  const s = setup(t);
+  const unfinished = path.join(s.root, "docs", "f".repeat(32));
+  fs.mkdirSync(unfinished, { recursive: true });
+  fs.writeFileSync(path.join(unfinished, "source.enc"), "half");
+  fs.writeFileSync(path.join(s.root, "master.key.tmp"), "half");
+  s.store(denied).cleanup();
+  assert.deepEqual([...tree(s.root).keys()], ["docs"]);
+});
+
+test("startup cleanup removes nothing when locked", (t) => {
+  const s = twoDocuments(t);
+  fs.writeFileSync(path.join(s.dir, "record.enc.tmp"), "half");
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32)));
+  let before = tree(s.base);
+  failsClosed(() => s.store(denied).cleanup(), "locked");
+  assert.deepEqual(tree(s.base), before);
+  fs.rmSync(path.join(s.root, "master.key"));
+  before = tree(s.base);
+  failsClosed(() => s.store().cleanup(), "locked");
+  assert.deepEqual(tree(s.base), before);
+});
+
+test("after delete all no canary string or file name is left under the store", (t) => {
+  const s = twoDocuments(t);
+  s.store().addTranslations(s.id, "model-a", { p1_s1: en("canary translation") });
+  // Planted in plain text, so the search below has something to find if anything is left behind.
+  fs.writeFileSync(path.join(s.dir, `${FILE_NAME}.tmp`), SENTENCE);
+  fs.writeFileSync(path.join(s.root, "docs", FILE_NAME), SENTENCE);
+  fs.writeFileSync(path.join(s.root, `${FILE_NAME}.tmp`), SENTENCE);
+  s.store().deleteAll();
+  for (const [name, bytes] of tree(s.base)) {
+    assert.ok(!name.includes(FILE_NAME) && !name.includes(SENTENCE), "canary name");
+    for (const secret of [SENTENCE, FILE_NAME, "canary translation"]) assert.ok(!bytes?.includes(Buffer.from(secret)), "canary bytes");
+  }
+  assert.ok(!fs.existsSync(s.root));
+});
+
+test("delete and cleanup logs and errors hold no canary, path, folder name or id", (t) => {
+  const s = twoDocuments(t);
+  const seen: string[] = [];
+  for (const m of ["log", "info", "warn", "error", "debug"] as const) t.mock.method(console, m, (...a: unknown[]) => seen.push(a.join(" ")));
+  const store = createStore(s.base, keeper); // the default logger
+  const rm = fs.rmSync;
+  let broken = true;
+  mockFs(t, "rmSync", (target: string, options: fs.RmOptions) => {
+    if (broken) throw Object.assign(new Error(`EACCES: ${SENTENCE} ${target}`), { code: "EACCES" });
+    rm(target, options);
+  });
+  fs.mkdirSync(path.join(s.root, "docs", "f".repeat(32)));
+  failsClosed(() => store.deleteDocument(s.id), "delete_failed");
+  failsClosed(() => store.cleanup(), "delete_failed");
+  failsClosed(() => store.deleteAll(), "delete_failed");
+  broken = false;
+  store.deleteDocument(s.id);
+  store.cleanup();
+  store.deleteAll();
+
+  const out = seen.join("\n");
+  for (const line of ["store_deleted", "store_cleanup folders=", "store_deleted_all folders=", "store_delete failed: EACCES"]) assert.ok(out.includes(line), line);
+  for (const secret of [SENTENCE, FILE_NAME, s.tmp, os.tmpdir(), s.id, s.id.slice(0, 8), s.name, "f".repeat(32)]) assert.ok(!out.includes(secret), "leak");
 });
