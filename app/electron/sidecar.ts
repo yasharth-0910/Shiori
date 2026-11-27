@@ -1,9 +1,11 @@
 // The sidecar process and the only HTTP client in the app. It runs in the main process;
 // the renderer never sees the port or the token (D-83). The one allowed network target is
-// the sidecar's own 127.0.0.1 port. Nothing here logs a path or document text.
-import { spawn, type ChildProcess } from "node:child_process";
+// the sidecar's own 127.0.0.1 port. Nothing here logs a path or document text; the sidecar's stderr is only counted
+// (child.ts).
+import type { ChildProcess } from "node:child_process";
 import * as path from "node:path";
 import { app } from "electron";
+import { startChild } from "./child";
 import type { Llama } from "./llama";
 import { sidecarCommand, sidecarEnv, type Layout } from "./paths";
 
@@ -32,7 +34,7 @@ export function start(llama: Llama | null): Promise<void> {
     const cmd = sidecarCommand(layout, llama ? ["--llama-url", `http://${HOST}:${llama.port}`] : []);
     const env = sidecarEnv(llama ? { ...process.env, SHIORI_LLAMA_KEY: llama.key } : process.env);
     // stdin stays open (a pipe): when this process dies the sidecar sees EOF and exits.
-    const p = spawn(cmd.command, cmd.args, { cwd: cmd.cwd, env, stdio: ["pipe", "pipe", "inherit"] });
+    const p = startChild("sidecar", cmd.command, cmd.args, { cwd: cmd.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     child = p;
     let buf = "";
     p.stdout?.on("data", (d: Buffer) => {

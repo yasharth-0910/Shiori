@@ -276,4 +276,6 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 
 - 2026-11-28 (D-124): fixed Windows audit rows W05, W08 and W18 and the two D-123 open questions in `app/`. Plan change: `getStorage` is now asked at startup when saved folders exist. Tested with fakes only, not in real Electron and not on Windows.
 
+- 2026-11-28 (D-126): Windows audit W03 and U1 fixed in `app/` (`child.ts`: no console window, sidecar stderr counted and never logged). The sidecar's log lines are no longer visible, in dev runs too. W01 is a design only. Not run on Windows.
+
 - 2026-11-28 (D-125): measurement plan written (`docs/measurement_plan.md`). Plan change: Phase 6 now waits on its gates, not on D-10, and trains only on filtered Qwen self-distillation. No gate passes yet. Review gates cover open documents only (37 dev, 29 test) and count reviewed rows only. Training data is open documents only (88 from 12 train orgs today).

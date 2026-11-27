@@ -289,12 +289,12 @@ def test_sidecar_telemetry_is_off_whatever_the_environment_says(
 
 
 def test_electron_starts_the_sidecar_without_telemetry_variables() -> None:
-    """The one spawn takes the filtered environment. What the filter removes is tested
-    in app/test/models.test.ts."""
+    """The one start (through child.ts, D-126) takes the filtered environment. What the
+    filter removes is tested in app/test/models.test.ts."""
     src = (APP / SIDECAR).read_text()
     assert "const env = sidecarEnv(" in src
-    assert src.count("spawn(") == 1
-    assert "spawn(cmd.command, cmd.args, { cwd: cmd.cwd, env," in src
+    assert src.count("startChild(") == 1
+    assert 'startChild("sidecar", cmd.command, cmd.args, { cwd: cmd.cwd, env,' in src
 
 
 def test_spellchecker_is_off_and_lists_no_dictionary() -> None:

@@ -26,7 +26,7 @@ This file says what the code does today (checked 2026-11-27). Anything marked **
 | Another local app queries our model or sidecar | Bind to 127.0.0.1, random ports, a new token or key at each start |
 | Laptop stolen or disk imaged | By default nothing is saved. Saved copies (only if saving is on, which no screen offers yet) are encrypted (`storage_design.md`); checked by hand on macOS in a dev run only (2026-11-27). Your original files and exports are not protected by it |
 | Deleted documents recovered from SSD | Delete removes the document's key file first (`app/electron/store.ts`). Old disk blocks and earlier backups can still hold it (`storage_design.md` section 3). |
-| Document text ends up in logs or crash dumps | The app's own log lines carry no document text; the app never starts Electron's crash reporter. Filter for Japanese text in child process output: **Planned, not built** (see "Logging") |
+| Document text ends up in logs or crash dumps | The app's own log lines carry no document text; the app never starts Electron's crash reporter. Child process output is not passed through to any log (see "Logging") |
 | User documents end up in training data | No code uploads documents or results |
 
 Out of scope: a compromised OS or a malicious user with full access to an unlocked session.
@@ -65,8 +65,7 @@ Out of scope: a compromised OS or a malicious user with full access to an unlock
 - The app writes no log file. Messages go to the terminal output of the process.
 - Event lines hold names, timings, counts, byte sizes, model ids and error types. The sidecar also logs the first 8 characters of the document id, which is a hash of the file.
 - A failed read, stat or write of a path you chose, in `main.ts`, logs the error type only (`app/electron/userfile.ts`). Download and model scan lines hold no path or file name (tested). Not every other error path has been audited.
-- llama-server's output is discarded. The sidecar's error output is passed through unfiltered. Its own log lines hold no document text (`tests/test_sidecar.py`), but an error it does not catch has not been checked.
-- A log filter on child process output that drops lines with Japanese text: **Planned, not built** (`storage_design.md` does not cover it).
+- llama-server's output is discarded. The sidecar's error output is read and only counted: the app logs the number of lines and the exit code, never a line (`app/electron/child.ts`, D-126, `app/test/child.test.ts`). Its stdout is read for the one port and token line and otherwise discarded.
 - The app never starts Electron's crash reporter. There is no test for this. Crash reports made by the operating system are outside the app.
 - Dev checks (`SHIORI_HLCHECK`, `SHIORI_SHOT*`) print text from the screen, which can be document text. A packaged app ignores them.
 

@@ -129,7 +129,7 @@ The extractor version is part of the cache key. If segmentation changes, sentenc
 - Main process picks two free ports on 127.0.0.1 at startup and generates a random 32-byte token per child.
 - Sidecar and llama-server bind to 127.0.0.1 only. Sidecar rejects requests without the token. llama-server is started with `--api-key` set to its token.
 - If a child crashes, main restarts it once and surfaces an error to the user on a second crash.
-- All child process stdout/stderr goes through a filter that drops anything that looks like document content before it reaches the log file.
+- No child process output reaches a log: llama-server's is discarded, the sidecar's stderr is only counted (D-126).
 
 ## Performance targets (to be validated in Phase 4)
 

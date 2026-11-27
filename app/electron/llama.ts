@@ -4,11 +4,12 @@
 // llama-server left behind by a killed (SIGKILL) app is not found again; the user ends it by hand. The API key goes to llama-server through its environment
 // (LLAMA_API_KEY), never argv, which `ps` shows. Nothing here logs a path or document text;
 // llama-server's own output is discarded.
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
+import { startChild } from "./child.ts";
 
 const HOST = "127.0.0.1";
 const CTX = 16384; // what the extractor was tuned with (eval/hybrid.py)
@@ -58,7 +59,7 @@ export async function start(cfg: Config): Promise<Llama> {
   const port = await freePort();
   const key = randomBytes(32).toString("hex");
   const args = buildArgs(cfg.model, port);
-  const p = spawn(cfg.binary, args, { env: { ...process.env, LLAMA_API_KEY: key }, stdio: "ignore" });
+  const p = startChild("llama", cfg.binary, args, { env: { ...process.env, LLAMA_API_KEY: key }, stdio: "ignore" });
   proc = p;
   let exited = false;
   p.on("exit", () => {

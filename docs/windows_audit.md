@@ -1,6 +1,6 @@
 # Windows audit (reading only)
 
-Date: 2026-11-28. Nothing was run on Windows, no code was changed, no model was called. Line numbers are for the tree at commit `d052bd3`.
+Date: 2026-11-28. Nothing was run on Windows, no code was changed by the audit itself (later fixes are marked in the rows), no model was called. Line numbers are for the tree at commit `d052bd3`.
 
 How sure:
 
@@ -24,7 +24,7 @@ Rows marked "all OSes" are not Windows-only, but Windows makes them more likely.
 
 | ID | File and line | What goes wrong on Windows | How sure | Smallest fix |
 |---|---|---|---|---|
-| W03 | `app/electron/sidecar.ts:35`, `app/electron/llama.ts:61` | Neither `spawn` sets `windowsHide`. Both children are console programs (`packaging/sidecar.spec:38` has `console=True`) started by a GUI app, so each is likely to open a visible console window. Closing that window kills the process. For the sidecar, `windowsHide` alone may not be enough because stderr is `"inherit"`. | inferred medium to high | `windowsHide: true` on both. In the sidecar spawn, use `"ignore"` for stderr when packaged. |
+| W03 | `app/electron/sidecar.ts:35`, `app/electron/llama.ts:61` | Neither `spawn` sets `windowsHide`. Both children are console programs (`packaging/sidecar.spec:38` has `console=True`) started by a GUI app, so each is likely to open a visible console window. Closing that window kills the process. For the sidecar, `windowsHide` alone may not be enough because stderr is `"inherit"`. | inferred medium to high | `windowsHide: true` on both. In the sidecar spawn, use `"ignore"` for stderr when packaged. **Fixed 2026-11-28 (D-126)**, tested on the Mac only; Windows behaviour is unverified until an rc build is tried on Windows. Every start goes through `app/electron/child.ts`, which sets `windowsHide`; the sidecar's stderr is a pipe, not `"ignore"`. Tests: `app/test/child.test.ts`. |
 | W04 | `app/electron/main.ts:70`, `app/electron/main.ts:296`, `app/electron/discover.ts:28` | Packaged models and partial downloads (about 5 to 6 GB each) go under `userData`, which is `%APPDATA%`, the roaming profile. On a managed PC this can sync at sign-in and sign-out or exceed the profile quota. The store already avoids this (`paths.ts:40`). `paths.ts:48` `modelsDir` has the same choice and `main.ts` does not call it. | read (the folder); inferred high (roaming effect) | On win32, build the models and downloads folders from the same local base that `storageBase` returns. |
 | W05 | `app/electron/store.ts:141-142`, `app/electron/storage.ts:114` | Any error reading `master.key` becomes `locked`, including a passing `EBUSY` or `EPERM` from antivirus or backup software. `locked` is remembered until restart or "Delete all", and Settings offers "Delete all", so a brief file lock can push the user to destroy readable documents. | read (the mapping); inferred medium (the trigger) | Map only a failed unwrap or a missing file to `locked`. Throw `read_failed` for `EBUSY`, `EPERM`, `EACCES` so the next call tries again. **Fixed 2026-11-28 (D-124)**, tested with a mocked `node:fs`, not on Windows. Tests: `W05 W18: <code> once on <file> is tried again, and there is still one folder`, `W05 W18: EBUSY every time on <file> is read_failed, not locked, and writes nothing`, `W05: cleanup with a busy master.key is read_failed and removes nothing` (`app/test/store.test.ts`); `W05 W18: a passing error on <file> never locks the service or makes a second folder`, `a record that stays busy does not stop delete all` (`app/test/storage.test.ts`). |
 | W06 | `app/electron/store.ts:97`, `app/electron/settings.ts:29` | `renameSync` over an existing file fails with `EPERM`, `EACCES` or `EBUSY` while another process holds the target without delete sharing (antivirus, indexer, backup). There is no retry. A document is reported not saved, or the saving answer fails with "Could not save your answer". English is retried only if another translate poll arrives. The old file stays intact. | inferred high (Windows rename behaviour), medium (how often) | One shared helper: retry the rename a few times with a short wait on those three codes. |
@@ -72,7 +72,7 @@ Rows marked "all OSes" are not Windows-only, but Windows makes them more likely.
 
 | ID | Question | Where | Why it matters |
 |---|---|---|---|
-| U1 | Does the GUI app have a valid stderr to pass on? If not, Python may get `sys.stderr = None`, and uvicorn's default log setup is known to fail then. | `sidecar.ts:35`, `sidecar/__main__.py:109-119` | Would stop the sidecar starting. CI cannot show it because it runs the sidecar from a shell. The W03 fix covers it. Check this first. |
+| U1 | Does the GUI app have a valid stderr to pass on? If not, Python may get `sys.stderr = None`, and uvicorn's default log setup is known to fail then. | `sidecar.ts:35`, `sidecar/__main__.py:109-119` | Would stop the sidecar starting. CI cannot show it because it runs the sidecar from a shell. The W03 fix covers it. Check this first. **Fixed 2026-11-28 (D-126)**, tested on the Mac only; Windows behaviour is unverified until an rc build is tried on Windows. stderr is no longer passed on: it is a pipe the app drains and counts (`app/electron/child.ts`), so the question of the app's own stderr should not arise. Whether the packaged sidecar starts on Windows is still the first thing to check. |
 | U2 | Does Electron on Windows ignore `hiddenInset`, or hide the title bar and window buttons? | `main.ts:174` | If hidden, there is no close or minimise button, which raises W17 to breaks. |
 | U3 | After End Task on the app, are the sidecar and llama-server gone? libuv is expected to put children in a kill-on-close job, which would make the comment at `llama.ts:4` wrong for Windows. | `llama.ts:4` | A leftover llama-server holds several GB of RAM. |
 | U4 | `safeStorage` on Windows is expected to keep its DPAPI-wrapped key in `userData\Local State` (roaming), while `master.key` is in the local folder. Does saving survive a profile reset, a roaming sign-in, a password reset, and a force-kill right after the first save? | `keeper.ts:18`, `paths.ts:40` | Losing that key shows the store as locked for good. |
@@ -109,3 +109,34 @@ Faults can be injected by mocking the default `node:fs` object (`mock.method` pl
 | W24 | Run the notices script with `PYTHONWARNDEFAULTENCODING=1` and `-W error::EncodingWarning`. |
 
 W02, W13, W15, W16, W17, W20, W21, W23 and U1 to U12 need a real Windows machine for a meaningful check.
+
+## 5. W01 design: bundling the Visual C++ runtime in CI (not built, not decided)
+
+Nothing here is implemented, and no option is chosen.
+
+**What is needed.** A text search of the files in `packaging/build/llama/win-cpu-x64` (2026-11-28, on the Mac; not a PE import table parse) finds these runtime names: `VCRUNTIME140.dll` (llama-server.exe and the DLLs other than libomp.dll), `MSVCP140.dll` (the DLLs other than libomp.dll) and `VCRUNTIME140_1.dll` (llama.dll, llama-common.dll, llama-server-impl.dll). This matches W01. The Windows sidecar bundle was not looked at; PyInstaller may already copy some of these DLLs into it (not checked).
+
+**Option A: copy the DLLs next to llama-server (app-local).**
+
+1. In the Windows job of `release.yml`, after "Fetch llama-server", find the runner's Visual Studio with `vswhere.exe -latest -property installationPath`.
+2. Under it, take the three DLLs from `VC\Redist\MSVC\<version>\x64\Microsoft.VC*.CRT\`. Take them from this redist folder only, never from `System32`. Pick `<version>` by a stated rule, fail if a file is missing, and print the version and SHA-256 of each file.
+3. Copy them into the folder that holds `llama-server.exe`, which `llamaDir()` in the builder config already ships as `resources/llama`. No builder config change is expected.
+4. Add a check that parses the import table of every shipped `.exe` and `.dll` and fails on a name that is neither shipped nor on a list of Windows system DLLs (section 4, W01). The smoke test alone cannot catch a missing DLL, because the runner has Visual Studio.
+
+Trade-offs: no admin prompt and the per-user install stays as it is. The copies get no Windows Update servicing, so a runtime fix needs a new Shiori release. The version changes when the runner image changes.
+
+**Option B: run Microsoft's `vc_redist.x64.exe` from the NSIS installer.** CI would fetch a pinned copy, check its SHA-256, and a custom NSIS step would run it. The app itself still makes no network request. Trade-offs: it needs admin rights (a UAC prompt, while `perMachine` is false today), adds installer script to maintain and installer size, and can be refused on a managed PC. Windows Update can service the runtime.
+
+**Option C: ship nothing and tell the user to install the runtime** (a README line and a clearer error). Not bundling, so it does not close W01 for a clean PC.
+
+**Open questions: license terms to check before A or B.** The points below are from general knowledge. No Microsoft license text was read for this section.
+
+1. Which license grants the right to redistribute these files here: that of the Visual Studio edition on the GitHub runner, and may a project rely on it for files copied out of a hosted runner? Does the maintainer need a Visual Studio license (for example Community) in their own name, and does Shiori qualify for it?
+2. Are all three DLLs on the REDIST list for that Visual Studio version, and is app-local copying allowed for them, or only the redistributable installer?
+3. What do the distributable code terms require of the distributor (for example terms that protect the files, notices, indemnity), and where must that appear (installer, `THIRD_PARTY_NOTICES.txt`, README)?
+4. Do the terms forbid shipping the files in a way that would bring them under a license that requires source disclosure? Shiori is AGPL-3.0-only. Does the AGPL "System Libraries" exception cover the Visual C++ runtime when it ships inside the installer?
+5. For option B: may a project that is not Microsoft include `vc_redist.x64.exe` in its installer, and under which terms?
+6. If the sidecar bundle already carries these DLLs (not checked), under which terms are they shipped today?
+
+The answer and the chosen option go in `docs/decisions.md` before any of this is built.
+
