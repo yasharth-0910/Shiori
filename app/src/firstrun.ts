@@ -6,7 +6,7 @@ export type Stage = "intro" | "find" | "ready" | "models";
 // The README footnote, word for word, without its pointer to docs/decisions.md (the installed app has no docs folder).
 // test/onboarding.test.ts checks this still matches the README.
 export const PRIVACY_TEXT =
-  "Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is the first-run model download, which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels. The app does not call any cloud service.";
+  "Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is downloading a model, which you start yourself and which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels. The app does not call any cloud service.";
 
 /** Onboarding opens by itself only when no model is installed (and not in the dev-check mode that skips the picker). */
 export const showOnboarding = (l: ModelList): boolean => !l.skipPicker && !l.models.some((m) => m.installed);

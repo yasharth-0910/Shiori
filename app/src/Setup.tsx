@@ -72,7 +72,7 @@ export function Setup({ list, onRefresh, onClose, onFind }: Props) {
     <section className="setup" aria-label="Set up a model">
       <h2>Set up a model</h2>
       <p>Shiori reads tenders with a language model that runs on this computer. Pick one to download once.</p>
-      <p className="pnotice" role="note"><b>This is the only time Shiori uses the internet. Your documents never leave your computer.</b></p>
+      <p className="pnotice" role="note"><b>The only network use is downloading a model, which you start yourself and which sends none of your documents.</b></p>
       <ul className="mcards">
         {list.models.map((m) => {
           const mine = dl?.id === m.id;

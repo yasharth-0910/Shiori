@@ -4,7 +4,7 @@
 
 Japanese public tenders are long, dense and written in official-document Japanese. Shiori is a desktop app that reads one for you on your own computer\* and shows, in English, the things you need before you bid: the title, who issued it, the deadlines, who may bid, which documents to send, and so on. Every value points at the sentence it came from. Click it and the PDF opens on that page with the source sentence highlighted, so you can check it against the original.
 
-\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is the first-run model download, which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
+\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is downloading a model, which you start yourself and which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
 
 > Early work in progress. There is no installer yet. You can run it from source (see below).
 
@@ -58,7 +58,7 @@ Installers are built by GitHub Actions (`.github/workflows/release.yml`) and att
 - **Windows.** Run `Shiori-<version>-win-x64.exe`. If SmartScreen says it protected your PC, click More info, then Run anyway.
 - **Linux.** Download `Shiori-<version>-linux-x64.AppImage`, then `chmod +x Shiori-*.AppImage` and run it. On Ubuntu 22.04 and later it will not start without FUSE 2: `sudo apt install libfuse2`.
 
-The installer does not contain a language model. On first run the app shows a Setup screen and downloads the model (about 5.7 GB, SHA-256 checked, see below). That is the only network use. Scanned PDFs (pages that are images) are not supported yet: the app refuses them with a message instead of giving partial answers (D-112).
+The installer does not contain a language model. On first run the app shows a Setup screen, where you click Download to get the model (about 5.7 GB, SHA-256 checked, see below). The only network use is downloading a model, which you start yourself and which sends none of your documents. Scanned PDFs (pages that are images) are not supported yet: the app refuses them with a message instead of giving partial answers (D-112).
 
 Manual test list (for the author, per platform):
 1. Install on a clean user account (not the one used for development).
@@ -91,7 +91,7 @@ npm install
 npm run dev
 ```
 
-The first time, no model is installed, so the app opens a Setup screen. Pick a model and click Download. It downloads the GGUF file (Qwen3.5-9B is about 5.7 GB) from a pinned Hugging Face address and checks its SHA-256 before using it; if the hash does not match, the file is deleted. That is the only time the app uses the internet. If you already have the file, "Choose a model file from disk" copies it in after the same hash check. Then click Add document and choose a tender PDF. In my runs of this one notice on an M4 Mac, the model job took 116 s and 190 s (two runs, not a benchmark).
+The first time, no model is installed, so the app opens a Setup screen. Pick a model and click Download. It downloads the GGUF file (Qwen3.5-9B is about 5.7 GB) from a pinned Hugging Face address and checks its SHA-256 before using it; if the hash does not match, the file is deleted. The only network use is downloading a model, which you start yourself and which sends none of your documents. If you already have the file, "Choose a model file from disk" copies it in after the same hash check. Then click Add document and choose a tender PDF. In my runs of this one notice on an M4 Mac, the model job took 116 s and 190 s (two runs, not a benchmark).
 
 Details: `app/electron/registry.ts` (models, URLs, hashes) and `docs/decisions.md` D-99 and D-100.
 
@@ -99,7 +99,7 @@ Details: `app/electron/registry.ts` (models, URLs, hashes) and `docs/decisions.m
 
 What the app does (`docs/privacy.md`, `docs/threat_model.md`): the document, its text and the results stay on your machine.\* The page that shows your document is not allowed to make any network request. The local services bind to 127.0.0.1 only, on a random port with a per-launch token. Logs hold event names, timings and counts, not document text.
 
-\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is the first-run model download, which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
+\*Privacy in Shiori means this: the app reads and processes your documents only on your own computer, runs its language model locally, makes no network requests while you work, and sends no telemetry. The only network use is downloading a model, which you start yourself and which sends none of your documents. This describes the shipped app, not how it was built: during development, some public tender documents, including some whose sites reserve rights, were sent to cloud AI services to prepare reference labels (docs/decisions.md, D-111). The app does not call any cloud service.
 
 What was measured:
 - A counting request filter in the app cancels every request from the page except its own app address. A test runs it in a real Electron session and checks that a page's request to an outside host is cancelled (`tests/test_app_filter_electron.py`, D-100). In the screenshot runs above, the app reported 0 blocked requests.

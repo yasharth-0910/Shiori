@@ -295,3 +295,53 @@ def test_electron_starts_the_sidecar_without_telemetry_variables() -> None:
     assert "const env = sidecarEnv(" in src
     assert src.count("spawn(") == 1
     assert "spawn(cmd.command, cmd.args, { cwd: cmd.cwd, env," in src
+
+
+def test_spellchecker_is_off_and_lists_no_dictionary() -> None:
+    """docs/privacy.md. Turning the checker off is not enough on Windows and Linux:
+    Chromium loads (and downloads) every listed dictionary whether it is on or not, so
+    the list is emptied, from the listener that runs as each session is made."""
+    main = (APP / "electron" / "main.ts").read_text()
+    listener = re.search(
+        r'^app\.on\("session-created", \(s\) => \{\n(.*?)^\}\);', main, re.M | re.S
+    )
+    assert listener
+    assert re.search(
+        r"^\s*s\.setSpellCheckerLanguages\(\[\]\);", listener.group(1), re.M
+    )
+    assert re.search(
+        r"^\s*s\.setSpellCheckerEnabled\(false\);", listener.group(1), re.M
+    )
+    assert listener.start() < main.index("app.whenReady()")
+    assert re.search(r"^\s*spellcheck: false,", main, re.M)
+    for p in (APP / "electron").rglob("*.ts"):
+        text = p.read_text()
+        assert "setSpellCheckerDictionaryDownloadURL" not in text, p.name
+        assert "setSpellCheckerEnabled(true)" not in text, p.name
+
+
+def test_http_cache_is_off_before_ready_on_every_platform() -> None:
+    main = (APP / "electron" / "main.ts").read_text()
+    # at the top level: not inside the ready handler, not behind a platform check
+    line = re.search(
+        r'^app\.commandLine\.appendSwitch\("disable-http-cache"\);', main, re.M
+    )
+    assert line
+    assert line.start() < main.index("app.whenReady()")
+    for p in (APP / "electron").rglob("*.ts"):
+        assert "cache: true" not in p.read_text(), p.name
+
+
+def test_user_path_file_calls_in_main_are_guarded() -> None:
+    """Every read, stat and write of a path the user chose goes through userFile, which
+    logs the error type only (app/test/userfile.test.ts)."""
+    main = (APP / "electron" / "main.ts").read_text()
+    for event, call in (
+        ("pdf_read", "fs.readFileSync(file)"),
+        ("pdf_hash_read", "fs.readFileSync(file)"),
+        ("model_stat", "fs.statSync(file)"),
+        ("export_write", 'fs.writeFileSync(file, content, "utf8")'),
+    ):
+        assert f'userFile("{event}", () => {call}' in main, event
+    assert main.count('fs.writeFileSync(file, content, "utf8")') == 1
+    assert main.count("fs.statSync(") == 1

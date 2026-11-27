@@ -16,6 +16,7 @@ import { runHighlightCheck } from "./hlcheck";
 import { createDownloader } from "./download";
 import { requestFilter } from "./netfilter";
 import { savedCalendar } from "./saved";
+import { userFile } from "./userfile";
 import type { UseResult } from "./scantypes";
 
 const DIST = path.join(__dirname, "..", "dist");
@@ -32,6 +33,16 @@ const MIME: Record<string, string> = {
 protocol.registerSchemesAsPrivileged([
   { scheme: "shiori", privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
+
+// No HTTP cache and no spellchecker, on every platform (docs/privacy.md). The switch only works before app ready.
+app.commandLine.appendSwitch("disable-http-cache");
+// On Windows and Linux Chromium loads every listed dictionary as a session is made, downloading a missing one from
+// Google, whether the checker is on or not. So the list is emptied here, in the same task, before that download can
+// start. The list call does nothing on macOS (no downloads there); the second call turns the checker off.
+app.on("session-created", (s) => {
+  s.setSpellCheckerLanguages([]);
+  s.setSpellCheckerEnabled(false);
+});
 
 const ID = /^[0-9a-f]{64}$/;
 const SENTENCE = /^(?:p\d+_s\d+|h_s\d+|value:title)$/; // a sentence id, as core makes them, or the title value's queue key (D-91)
@@ -61,7 +72,7 @@ const here = () => {
   return { found: discover(realWhere(bundledLlama({ isPackaged: app.isPackaged, platform: process.platform, resourcesPath: process.resourcesPath, userData: app.getPath("userData"), repoRoot: "" })), dirs, app.isPackaged ? "models/ in the app's user data folder" : "models/ in the repo", REGISTRY), dirs };
 };
 const customEntry = (file: string): ModelEntry => {
-  const size = (() => { try { return fs.statSync(file).size; } catch { return 0; } })();
+  const size = (() => { try { return userFile("model_stat", () => fs.statSync(file).size); } catch { return 0; } })();
   const nr = "not yet recorded";
   return { id: CUSTOM_ID, name: path.basename(file), file: path.basename(file), parameters: nr, quantization: nr, sizeBytes: size, license: nr, minRamGb: 0, recommendedRamGb: 0, platformNotes: [], bestFor: "Set with SHIORI_MODEL", rank: 99, url: "", sha256: "", measured: [] };
 };
@@ -108,8 +119,12 @@ function serve(request: Request): Response {
   const doc = /^\/doc\/([0-9a-f]{64})\.pdf$/.exec(rel);
   if (doc) {
     const file = picked.get(doc[1] as string);
-    if (!file || !fs.existsSync(file)) return new Response("not found", { status: 404 });
-    return new Response(new Uint8Array(fs.readFileSync(file)), { headers: { "content-type": "application/pdf" } });
+    if (!file) return new Response("not found", { status: 404 });
+    try {
+      return new Response(new Uint8Array(userFile("pdf_read", () => fs.readFileSync(file))), { headers: { "content-type": "application/pdf" } });
+    } catch {
+      return new Response("not found", { status: 404 }); // gone or unreadable; userFile logged the type
+    }
   }
   const file = path.normalize(path.join(DIST, rel === "/" ? "index.html" : rel));
   if (!file.startsWith(DIST + path.sep) || !fs.existsSync(file)) return new Response("not found", { status: 404 });
@@ -134,6 +149,7 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      spellcheck: false,
     },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -278,7 +294,7 @@ function registerIpc(): void {
     if (!file) return null;
     // The id is the file's SHA-256, the same one the sidecar makes, so the screen can start
     // before the model and the sidecar are up.
-    const doc_id = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+    const doc_id = createHash("sha256").update(userFile("pdf_hash_read", () => fs.readFileSync(file))).digest("hex");
     picked.set(doc_id, file);
     const b = ensureBackend(choice, found); // before jobs.set: a model switch clears the old jobs
     jobs.set(doc_id, { posted: false, error: null, cancelled: false, finished: false });
@@ -360,7 +376,7 @@ function registerIpc(): void {
       file = r.canceled ? undefined : r.filePath;
     }
     if (!file) return false;
-    fs.writeFileSync(file, content, "utf8"); // the BOM is U+FEFF in the string and becomes EF BB BF
+    userFile("export_write", () => fs.writeFileSync(file, content, "utf8")); // the BOM is U+FEFF in the string and becomes EF BB BF
     calendar.remember(file, kind);
     return true;
   });
