@@ -1,4 +1,4 @@
-// The whole bridge between the renderer and the main process: fifteen functions (D-83, D-85, D-90, D-98, D-99, D-100, D-115).
+// The whole bridge between the renderer and the main process: twenty functions (D-83, D-85, D-90, D-98, D-99, D-100, D-115, D-121).
 // None takes a path (scanModels takes only the word computer or folder), a URL or a token (download takes a registry id). The renderer asks; main picks the file, talks to
 // the sidecar and answers. Sandboxed preload: only "electron" may be required here.
 import { contextBridge, ipcRenderer } from "electron";
@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld("shiori", {
   getStatus: (docId: string, since?: number) => ipcRenderer.invoke("shiori:status", docId, since ?? 0),
   cancel: (docId: string) => ipcRenderer.invoke("shiori:cancel", docId),
   getFields: (docId: string) => ipcRenderer.invoke("shiori:fields", docId),
-  translate: (docId: string, ids: string[]) => ipcRenderer.invoke("shiori:translate", docId, ids),
+  translate: (docId: string, ids: string[], modelId?: string | null) => ipcRenderer.invoke("shiori:translate", docId, ids, modelId),
   saveExport: (kind: "csv" | "ics", name: string, content: string) => ipcRenderer.invoke("shiori:save", kind, name, content),
   openCalendar: () => ipcRenderer.invoke("shiori:open-calendar"),
   downloadModel: (modelId: string) => ipcRenderer.invoke("shiori:download", modelId),
@@ -19,4 +19,9 @@ contextBridge.exposeInMainWorld("shiori", {
   scanStatus: () => ipcRenderer.invoke("shiori:scan-status"),
   scanCancel: () => ipcRenderer.invoke("shiori:scan-cancel"),
   useScanned: (index: number) => ipcRenderer.invoke("shiori:scan-use", index),
+  listDocuments: () => ipcRenderer.invoke("shiori:documents"),
+  getStorage: () => ipcRenderer.invoke("shiori:storage"),
+  setKeepDocuments: (keep: boolean) => ipcRenderer.invoke("shiori:set-keep", keep),
+  deleteDocument: (docId: string) => ipcRenderer.invoke("shiori:delete", docId),
+  deleteAllDocuments: () => ipcRenderer.invoke("shiori:delete-all"),
 });

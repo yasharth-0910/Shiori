@@ -265,3 +265,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-27: storage step 3 code and tests (`keeper.ts`, `storageBase` in `paths.ts`, single instance lock in `main.ts`). The keeper is not imported by app code. By-hand Mac check passed in a dev run (reported by Yasharth): a master key was made and survived a restart, and a second app copy did not start. Not run on Windows, Linux or a packaged build.
 
 - 2026-11-27 (D-120): storage step 4, first part: `settings.ts` reads and writes the saved answer, tests only. The key changed from `keepDocuments` to `saveDocuments`. The rest of step 4 (the first Yes, off blocking translation updates) is not built. Nothing is saved yet.
+
+- 2026-11-27 (D-121): storage step 5. `storage.ts` is wired into `main.ts`; the bridge has twenty functions. Tests use a fake `safeStorage`, fake settings and a temp folder, plus a one-off run of the compiled `main.js` against a stand-in Electron. Not run in real Electron; the by-hand check of step 5 is open. Do not release before steps 6 to 8.

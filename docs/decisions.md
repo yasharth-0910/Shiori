@@ -1280,3 +1280,22 @@ Context: D-119 accepted a design that writes `{"keepDocuments": true or false}` 
 Decision: the file is `{"saveDocuments": "yes"}` or `{"saveDocuments": "no"}`. The code has a third state, `unanswered`, for a missing file, a file that cannot be read or parsed, any other value, and `no_local_folder`; it is never written. A write goes to `settings.json.tmp`, is flushed, and is renamed over the file. A failed write returns `failed` and throws nothing, because Node file errors carry the path.
 Alternatives: the boolean `keepDocuments` from the first draft (replaced; no release wrote it).
 Consequences: replaces the key name in `storage_design.md` sections 2, 3 and 7. A crash can leave `settings.json.tmp`; it is never read and the next write replaces it. The planned bridge function names (`keep`, `setKeepDocuments`) do not change.
+
+## D-121: The storage service in the main process
+
+Date: 2026-11-27
+Status: accepted (Yasharth's task of 2026-11-27 asked for step 5; the choices below were made while building it)
+Context: step 5 of `storage_design.md` section 6 wires the store, the keeper and the saved answer into the app.
+Decision:
+- One module, `app/electron/storage.ts`, is the only value import of `store.ts` and `keeper.ts` (tested). It holds the saving rules and validates the renderer's arguments; `safeStorage`, the settings functions, the confirm dialog and main's maps are passed in. `tsconfig.electron.json` sets `rewriteRelativeImportExtensions`, so it can import `./store.ts` and still run under plain `node --test`.
+- `safeStorage` is asked only when needed. At startup that means only when `<base>/store` holds something, so a user who never turned saving on meets no keyring prompt. The saved answer is read from disk at each use, not cached.
+- A locked store is remembered until "Delete all" or the next start, so a refused Keychain prompt is not raised again by the next call.
+- Limits per save: 20 MB for a result with its English, 200 MB for the PDF. Over the limit nothing is saved, the result still opens, and `store_save skipped: too_large` is logged.
+- English is written only while the answer is yes and only for a result saved in this session. A result processed while saving was off gets none, also after it is turned on again. A result saved before saving was turned off takes later English again once it is on, including sentences translated in between.
+- "The first Yes" means the answer was `unanswered`. Its counts are documents. A settings write that fails throws `save_failed` and saves nothing.
+- With saved folders that cannot be opened (locked or no keyring), deleting one document throws `locked` and drops nothing from memory, because a saved copy of it might remain. "Delete all" works.
+- `getStorage` adds `message`. `translate` without a model id means the running job's model.
+- Every response of `getFields` has `pdf` set to `doc/<id>.pdf`, so the sidecar's file name no longer reaches the renderer through it. `startProcessing` still returns the chosen file's name for the Processing screen, and the model screens still get model file names and scan folders (D-99, D-115).
+- The PDF viewer falls back to the stored copy when the picked file cannot be read.
+Alternatives: the rules inside `main.ts` (rejected: it imports Electron, so nothing there can be tested with `node --test`); factories for the store and keeper passed into the service instead of the tsconfig option (rejected: more code to work around module names).
+Consequences: bridge grows from fifteen to twenty functions (`listDocuments`, `getStorage`, `setKeepDocuments`, `deleteDocument`, `deleteAllDocuments`). No screen calls them yet. Steps 5 to 8 must ship in one release (design section 6), so no release should be built from this state. Not run in real Electron. `EXTRACTOR_VERSION` stays 0.3.0 and the sidecar is unchanged.

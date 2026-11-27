@@ -1,5 +1,5 @@
-// The document store (docs/storage_design.md sections 1 and 2, D-119). Only Node modules, and no app code imports it
-// yet. Every file under <base>/store is a blob: "SHI1" | 12-byte nonce | ciphertext | 16-byte tag, AES-256-GCM. The
+// The document store (docs/storage_design.md sections 1 and 2, D-119). Only Node modules. The app reaches it
+// through storage.ts. Every file under <base>/store is a blob: "SHI1" | 12-byte nonce | ciphertext | 16-byte tag, AES-256-GCM. The
 // folder name and the role are authenticated too, so a file moved to another folder or renamed to another role does not
 // open. master.key is the exception: the keeper wraps it. Delete destroys the document's key file, not its data: old disk
 // blocks and backups made earlier can still hold the key (section 3, "What delete does not promise").

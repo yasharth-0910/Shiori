@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "Node16",
+    "rewriteRelativeImportExtensions": true,
     "rootDir": "electron",
     "strict": true,
     "skipLibCheck": true,

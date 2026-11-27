@@ -1,6 +1,6 @@
 // The saved answer to "keep documents between sessions?" (docs/storage_design.md section 3, D-119, D-120):
 // <base>/settings.json, one value. `base` is what storageBase() in paths.ts returned. Not encrypted, and it holds
-// nothing about any document. Only Node modules, and no app code imports it yet.
+// nothing about any document. Only Node modules.
 import * as fs from "node:fs";
 import * as path from "node:path";
 

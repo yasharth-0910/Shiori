@@ -1,6 +1,6 @@
 # Storage design: keeping documents between sessions
 
-Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`). The by-hand check of step 3 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): the keeper through a throwaway script under Electron, the lock through two copies of the app. Not run: Windows, Linux, a packaged build, an update (section 7). Of step 4, only reading and writing the saved answer is done (`app/electron/settings.ts`, tests only, D-120); the rule for the first Yes is not built. No app code imports the store, the keeper or the settings file. The app saves nothing. D-116 still describes the app: results are kept in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`). The by-hand check of step 3 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): the keeper through a throwaway script under Electron, the lock through two copies of the app. Not run: Windows, Linux, a packaged build, an update (section 7). Steps 4 and 5 are built (`app/electron/settings.ts`, D-120; `app/electron/storage.ts`, wired into `main.ts` and the preload, D-121). Tested with a fake `safeStorage`, fake settings and a temp folder; the by-hand check of step 5 has not been run. No screen asks the question or calls the five new functions yet (steps 7 and 8), so the app saves only if `settings.json` was set to `"yes"` by hand. For a user who has not done that, D-116 still describes the app: results are kept in memory only.
 
 This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 
@@ -260,11 +260,13 @@ New bridge functions (fifteen becomes twenty):
 
 The question line is shown when `keep` is `null`, `state` is `ok` and a document has finished in this session.
 
+As built (D-121): `getStorage` also returns `message`, the sentence "Saving is not available on this computer: <reason>" for `no_keyring` and `no_local_folder`, else `null`. `getStorage` can raise a keyring prompt, so the screens call it only at the times listed under "Linux with no keyring". In `state` `locked`, "Delete all saved documents" is enabled even when both counts are 0.
+
 Changed:
 
 - `getFields(docId)`: main keeps the result in memory and, if `keep` is true, saves it before returning it. It adds `saved: boolean`. A Library row is marked "not saved" only when saving is on and failed. Main supplies `doc_type` and `model_id` from what it already knows. The renderer never sends document content to be saved.
 - The empty Library text becomes "Documents are kept only while the app is open. You can turn on saving in Settings." when saving is off.
-- `translate(docId, ids, modelId)`: gains the model id, because translations are stored per model. For the running model's job, main asks the sidecar as today, keeps any new items and saves them if saving is on. For a saved result with no running job, main returns the stored items with `total` equal to `done`, so the screen does not wait for more. Sentences with no stored English show Japanese only.
+- `translate(docId, ids, modelId)`: gains the model id, because translations are stored per model. Left out, it means the running model's job (today's screens send none). For the running model's job, main asks the sidecar as today, keeps any new items and saves them if saving is on. For a saved result with no running job, main returns the stored items with `total` equal to `done`, so the screen does not wait for more. Sentences with no stored English show Japanese only.
 - `serve()` in `main.ts`: for `/doc/<id>.pdf`, use the picked file if there is one, else decrypt from the store. Send `cache-control: no-store`.
 
 As today, every handler checks the sender (`own(e)`) and validates every argument (`docId`, a known model id shape, a real boolean).

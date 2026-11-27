@@ -1,6 +1,6 @@
 // The master key's keeper (docs/storage_design.md sections 2 and "When saving is not available", D-119): Electron
-// safeStorage, synchronous calls. safeStorage is passed in, so tests run with a fake and plain `node --test`. No app
-// code imports this file yet. It touches no file itself, and without a keeper no store can be made.
+// safeStorage, synchronous calls. safeStorage is passed in, so tests run with a fake and plain `node --test`. storage.ts
+// uses it. It touches no file itself, and without a keeper no store can be made.
 import type { Keeper } from "./store"; // type only: nothing of the store is loaded
 
 export type SafeStorage = {

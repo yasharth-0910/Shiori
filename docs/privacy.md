@@ -1,6 +1,6 @@
 # Privacy design
 
-The promise: **the app never sends a document, extracted text or result off the user's machine.** Today it keeps results in memory only (D-116) and writes no document or result file of its own. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and permanent delete are planned, not built. Their design is accepted (D-119, `storage_design.md`).
+The promise: **the app never sends a document, extracted text or result off the user's machine.** No screen turns saving on yet, so by default it keeps results in memory only (D-116) and writes no document or result file of its own. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and delete are partly built: the main process does both (D-121), the screens are planned, not built (D-119, `storage_design.md`).
 
 This file says what the code does today (checked 2026-11-27). Anything marked **Planned, not built** is not in the app. Releases v0.1.0 and v0.1.1 do not have the spellchecker and HTTP cache settings described below (D-118).
 
@@ -24,8 +24,8 @@ This file says what the code does today (checked 2026-11-27). Anything marked **
 |---|---|
 | App or a dependency sends data out | Page requests cancelled at the Electron session; CSP; shipped Python may not import network or cloud SDK modules (tests); sidecar telemetry off (D-117) |
 | Another local app queries our model or sidecar | Bind to 127.0.0.1, random ports, a new token or key at each start |
-| Laptop stolen or disk imaged | The app saves no documents or results. Your original files and exports are not protected by it. Encrypted saving: **Planned, not built** (`storage_design.md`) |
-| Deleted documents recovered from SSD | Nothing is saved, so there is nothing for the app to delete. Delete by destroying a key: **Planned, not built** (`storage_design.md`) |
+| Laptop stolen or disk imaged | By default nothing is saved. Saved copies (only if saving is on, which no screen offers yet) are encrypted (`storage_design.md`), not tried in real Electron. Your original files and exports are not protected by it |
+| Deleted documents recovered from SSD | Delete removes the document's key file first (`app/electron/store.ts`). Old disk blocks and earlier backups can still hold it (`storage_design.md` section 3). No screen offers delete yet |
 | Document text ends up in logs or crash dumps | The app's own log lines carry no document text; the app never starts Electron's crash reporter. Filter for Japanese text in child process output: **Planned, not built** (see "Logging") |
 | User documents end up in training data | No code uploads documents or results |
 
@@ -49,18 +49,17 @@ Out of scope: a compromised OS or a malicious user with full access to an unlock
 - llama-server gets a new random 32-byte API key at each start, through its environment. How llama-server enforces it (for example on `/health`) is its own behaviour and is not tested here.
 
 **Storage**
-- Today: the Library, results and translations are held in memory and are gone when the app quits (D-116).
+- By default the Library, results and translations are held in memory and are gone when the app quits (D-116).
 - The app writes model files and partial downloads, the exports you choose to save, and whatever Electron itself keeps in the user data folder.
 - No temp files for document text: no code in `core/` or `sidecar/` that the app runs writes one. The packaged app has no OCR (D-112). What the OCR engine does inside a dev run has not been checked.
-- Encrypted saved documents: **Planned, not built.** The design is accepted (D-119) and described in `storage_design.md`.
+- Encrypted saved documents: built in the main process (D-119, D-121) and used only when `settings.json` says `"saveDocuments": "yes"`. The question, the switch and a Library that shows saved documents are **Planned, not built** (`storage_design.md` steps 7 and 8).
 
 **Deletion**
-- Permanent delete of a saved document: **Planned, not built** (`storage_design.md`).
-- "Delete all": **Planned, not built** (`storage_design.md`).
-- Today, quitting drops what the app held in memory. Operating system swap files are not covered.
+- Delete of one saved document and "Delete all": built in the main process behind a confirm dialog (D-121). Buttons for them are **Planned, not built** (`storage_design.md` steps 7 and 8).
+- Quitting drops what the app held in memory. Operating system swap files are not covered.
 
 **Ephemeral mode**
-- A setting for it: **Planned, not built** (`storage_design.md`). Today the app never saves results, so there is nothing to switch.
+- Off is the default: until the saved answer is yes, no document data is written (tested with a temp folder). A setting for it on screen: **Planned, not built** (`storage_design.md`).
 
 **Logging**
 - The app writes no log file. Messages go to the terminal output of the process.
@@ -124,8 +123,8 @@ No box is ticked. The note after each line says what exists today.
 - [ ] Test: sidecar and llama-server refuse connections from non-loopback interfaces. Tests check the bind address only (`tests/test_sidecar.py::test_binds_loopback_only`, `tests/test_app_llama.py`)
 - [ ] Test: sidecar returns 401 without the token. Test exists: `tests/test_sidecar.py::test_every_request_without_the_token_gets_401`
 - [ ] Test: `grep` for CJK characters in all log output after processing 10 docs finds nothing. Not run
-- [ ] Test: after delete, the saved document can't be opened (key gone). **Planned, not built** (`storage_design.md`)
-- [ ] Test: ephemeral mode leaves no new files on disk (compare directory snapshots). **Planned, not built** (`storage_design.md`)
+- [ ] Test: after delete, the saved document can't be opened (key gone). Tests exist (`app/test/store.test.ts`, `app/test/storage.test.ts`); not checked in the app
+- [ ] Test: ephemeral mode leaves no new files on disk (compare directory snapshots). The service writes nothing in a temp folder (`app/test/storage.test.ts`); the whole user data folder has not been compared
 - [ ] Import-boundary test passes (no collector/eval/training/cloud SDK imports in shipped Python). Test exists: `tests/test_import_boundaries.py`
 - [ ] Static security test passes (`tests/test_security_static.py`: no network, shell, unsafe-load or non-loopback bind code outside the allowlist). Test exists
 - [ ] Dependency audits run and every finding handled (see "Dependency audits" above), results noted in the release notes. No run recorded

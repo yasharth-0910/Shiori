@@ -1,8 +1,8 @@
 // Main process. Serves the built renderer from a local shiori:// scheme (PDF.js needs
 // fetch, which file:// blocks) and cancels every request that is not shiori://.
-// The renderer gets fifteen IPC functions (preload.ts); main owns the file picker, the
-// sidecar and its token (D-83), and the model download (D-100).
-import { app, BrowserWindow, dialog, ipcMain, protocol, session, shell, type IpcMainInvokeEvent } from "electron";
+// The renderer gets twenty IPC functions (preload.ts); main owns the file picker, the
+// sidecar and its token (D-83), the model download (D-100) and the saved documents (D-119, D-121).
+import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, session, shell, type IpcMainInvokeEvent } from "electron";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -11,7 +11,10 @@ import * as llama from "./llama";
 import { CUSTOM_ID, createScanner, defaultChoice, discover, importAsGguf, knownRoots, modelDirs, realWhere, systemFacts, type Found } from "./discover";
 import { recommend, REGISTRY, type ModelEntry } from "./registry";
 import * as sidecar from "./sidecar";
-import { bundledLlama } from "./paths";
+import { bundledLlama, storageBase } from "./paths";
+import { readSaveDocuments, writeSaveDocuments } from "./settings";
+import { createStorage, type Queue } from "./storage";
+import type { Result } from "./store";
 import { runHighlightCheck } from "./hlcheck";
 import { createDownloader } from "./download";
 import { requestFilter } from "./netfilter";
@@ -45,10 +48,6 @@ app.on("session-created", (s) => {
 });
 
 const ID = /^[0-9a-f]{64}$/;
-const SENTENCE = /^(?:p\d+_s\d+|h_s\d+|value:title)$/; // a sentence id, as core makes them, or the title value's queue key (D-91)
-type Translated =
-  | { ok: true; items: Record<string, { en: string; numbers_match: boolean; protected_lost?: boolean }>; done: number; total: number; failed: string[] }
-  | { ok: false; reason: "no_model" | "no_document" | "failed" };
 const picked = new Map<string, string>(); // document id -> the PDF the user chose; main only
 // SHIORI_PICK replaces the picker in dev checks only; a packaged app ignores it (D-84).
 const PICK = app.isPackaged ? undefined : process.env.SHIORI_PICK;
@@ -61,7 +60,7 @@ const HLCHECK = app.isPackaged ? undefined : process.env.SHIORI_HLCHECK;
 // Started on the first Add document, restarted when the user picks another model, stopped when the app quits.
 type Backend = { state: "starting" | "ready" | "failed"; model: boolean; modelId: string | null; modelFile: string | null; note: string | null; error: string | null };
 let backend: Backend | null = null;
-const jobs = new Map<string, { posted: boolean; error: string | null; cancelled: boolean; finished: boolean }>();
+const jobs = new Map<string, { posted: boolean; error: string | null; cancelled: boolean; finished: boolean; docType?: string }>();
 const busy = () => [...jobs.values()].some((j) => !j.finished && !j.cancelled);
 
 // Where model files are looked for: the repo's models/ in dev, the user data folder when packaged.
@@ -113,19 +112,49 @@ function ensureBackend(choice: string | null, found: Found): Backend {
   return b;
 }
 
-function serve(request: Request): Response {
-  const rel = decodeURIComponent(new URL(request.url).pathname);
-  // A chosen PDF is served by its document id, never by path (nothing is copied into dist).
-  const doc = /^\/doc\/([0-9a-f]{64})\.pdf$/.exec(rel);
-  if (doc) {
-    const file = picked.get(doc[1] as string);
-    if (!file) return new Response("not found", { status: 404 });
+// Saved documents (storage_design.md, D-121). The service holds the rules; main gives it safeStorage, the settings file,
+// the confirm dialog and its own maps. Nothing is read, and no keyring is asked, until it is used.
+const storage = createStorage({
+  base: storageBase(process.platform, process.env, app.getPath("userData")),
+  platform: process.platform,
+  safe: safeStorage,
+  settings: { read: readSaveDocuments, write: writeSaveDocuments },
+  appVersion: app.getVersion(),
+  confirm: async (message, detail) => {
+    const opts = { type: "warning" as const, buttons: ["Cancel", "Delete"], defaultId: 0, cancelId: 0, message, detail };
+    const win = BrowserWindow.getAllWindows()[0];
+    const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    return r.response === 1;
+  },
+  forget: (ids) => {
+    for (const id of ids) {
+      picked.delete(id);
+      jobs.delete(id);
+    }
+  },
+});
+
+// The user's own file while it can be read, else the stored copy. Never cached.
+function serveDocument(id: string): Response {
+  const file = picked.get(id);
+  let bytes: Buffer | null = null;
+  if (file) {
     try {
-      return new Response(new Uint8Array(userFile("pdf_read", () => fs.readFileSync(file))), { headers: { "content-type": "application/pdf" } });
+      bytes = userFile("pdf_read", () => fs.readFileSync(file));
     } catch {
-      return new Response("not found", { status: 404 }); // gone or unreadable; userFile logged the type
+      // gone or unreadable; userFile logged the type
     }
   }
+  bytes ??= storage.source(id);
+  if (!bytes) return new Response("not found", { status: 404 });
+  return new Response(new Uint8Array(bytes), { headers: { "content-type": "application/pdf", "cache-control": "no-store" } });
+}
+
+function serve(request: Request): Response {
+  const rel = decodeURIComponent(new URL(request.url).pathname);
+  // A PDF is served by its document id, never by path (nothing is copied into dist).
+  const doc = /^\/doc\/([0-9a-f]{64})\.pdf$/.exec(rel);
+  if (doc) return serveDocument(doc[1] as string);
   const file = path.normalize(path.join(DIST, rel === "/" ? "index.html" : rel));
   if (!file.startsWith(DIST + path.sep) || !fs.existsSync(file)) return new Response("not found", { status: 404 });
   const type = MIME[path.extname(file)] ?? "application/octet-stream";
@@ -333,7 +362,8 @@ function registerIpc(): void {
     if (b.state === "starting") return { ...base, stage: b.model ? "loading_model" : "queued" };
     if (b.state === "failed" || job.error) return fin({ ...base, stage: "failed", error: b.error ?? job.error });
     if (!job.posted) return { ...base, stage: "queued" };
-    const s = await sidecar.call<{ stage: string; detail: string | null }>("GET", `/documents/${doc}/status?since=${cursor}`);
+    const s = await sidecar.call<{ stage: string; detail: string | null; doc_type?: string }>("GET", `/documents/${doc}/status?since=${cursor}`);
+    job.docType = s.doc_type; // stored with the result
     const running = s.stage !== "done" && s.stage !== "failed" && s.stage !== "cancelled";
     return fin({ ...s, model, model_id: base.model_id, detail: s.detail ?? (running ? b.note : null) });
   });
@@ -347,18 +377,15 @@ function registerIpc(): void {
     if (job.posted) await sidecar.call("POST", `/documents/${doc}/cancel`);
   });
   // The translation queue (D-85, D-88): `ids` are the sentences of the field just opened, moved to the front; an empty
-  // list is a plain poll. Returns what is ready and the counts. Never throws for "no model".
-  ipcMain.handle("shiori:translate", async (e, id: unknown, ids: unknown): Promise<Translated> => {
+  // list is a plain poll. Returns what is ready and the counts. Never throws for "no model". A saved result with no job
+  // is answered from the store.
+  ipcMain.handle("shiori:translate", (e, id: unknown, ids: unknown, modelId: unknown) => {
     own(e);
     const doc = docId(id);
-    if (!Array.isArray(ids) || ids.length > 200 || !ids.every((i) => typeof i === "string" && SENTENCE.test(i))) throw new Error("bad_sentence_ids");
-    if (!jobs.has(doc)) return { ok: false, reason: "no_document" }; // e.g. the fixture demo
-    if (!backend?.model) return { ok: false, reason: "no_model" };
-    try {
-      return { ok: true, ...(await sidecar.call<Omit<Extract<Translated, { ok: true }>, "ok">>("POST", `/documents/${doc}/translate`, { ids })) };
-    } catch (err) {
-      return { ok: false, reason: (err as Error).message === "sidecar_http_503" ? "no_model" : "failed" };
-    }
+    const live = jobs.has(doc)
+      ? { modelId: backend?.model ? backend.modelId : null, ask: (front: string[]) => sidecar.call<Queue>("POST", `/documents/${doc}/translate`, { ids: front }) }
+      : null;
+    return storage.translate(doc, ids, modelId, live);
   });
   // Export (D-98): the renderer builds the text (src/export.ts); main only asks where to save it and writes it.
   // Returns false when the user cancels. Nothing is opened afterwards, and the path and text are never logged.
@@ -443,9 +470,34 @@ function registerIpc(): void {
     if (!file) return { ok: false, reason: "gone" };
     return importAsGguf(file, path.join(app.getPath("userData"), "downloads"), (f) => dl().importFile(f));
   });
+  // The finished result. Main keeps it, saves it if the answer is yes, and says so in `saved`.
   ipcMain.handle("shiori:fields", (e, id: unknown) => {
     own(e);
-    return sidecar.call("GET", `/documents/${docId(id)}/fields`);
+    const doc = docId(id);
+    const job = jobs.get(doc);
+    const info = job ? { modelId: backend?.model ? backend.modelId : null, docType: job.docType, sourcePath: picked.get(doc) } : null;
+    return storage.fields(doc, info, () => sidecar.call<Result>("GET", `/documents/${doc}/fields`));
+  });
+  // Saved documents (storage_design.md section 5). The service checks every argument.
+  ipcMain.handle("shiori:documents", (e) => {
+    own(e);
+    return storage.listDocuments();
+  });
+  ipcMain.handle("shiori:storage", (e) => {
+    own(e);
+    return storage.getStorage();
+  });
+  ipcMain.handle("shiori:set-keep", (e, keep: unknown) => {
+    own(e);
+    return storage.setKeepDocuments(keep);
+  });
+  ipcMain.handle("shiori:delete", (e, id: unknown) => {
+    own(e);
+    return storage.deleteDocument(id);
+  });
+  ipcMain.handle("shiori:delete-all", (e) => {
+    own(e);
+    return storage.deleteAllDocuments();
   });
 }
 
@@ -468,6 +520,7 @@ app.on("second-instance", () => {
 const filter = requestFilter();
 void app.whenReady().then(() => {
   if (!primary) return; // quit() is not immediate: start nothing in the second copy
+  storage.open(); // startup cleanup, before anything can save
   registerIpc();
   protocol.handle("shiori", serve);
   // Belt and braces next to the CSP: nothing a page asks for but shiori:// (and devtools, data, blob) goes out. Blocked
