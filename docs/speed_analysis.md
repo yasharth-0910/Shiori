@@ -9,6 +9,7 @@ Date: 2026-11-26. Analysis only. No source file, prompt, threshold or `EXTRACTOR
 - Model calls are almost all of extraction time: 1,906.6 s of 1,908 s logged for the 15 labeled dev documents. Mean 127.1 s per document, median 121.6 s, range 24.7 to 325.8 s.
 - Writing output is about two thirds of model time, reading prompts about one third (a fit, see Method).
 - No option that cuts the time of a first run is guaranteed to leave output unchanged. Only reusing a stored result on a repeat run is.
+- Speculative decoding (option 2) was tested on 2026-11-27 and 28. It changed 2 of 56 answers, so it is class C and is not adopted (section 6, D-122).
 - The scalar fallback took 245 s (12.9%) and added nothing to the final output on these 15 documents. On a separate 50-document cache it did keep answers (19 answers on 6 documents), so removing it would change output.
 - The 15 dev documents are the set the prompts were tuned on. Any option marked "might change output" needs evidence from outside them before it ships (D-96).
 
@@ -243,7 +244,7 @@ The calls and tokens column is what to judge a saving by. Seconds are estimates 
 | rank | option | class | saved per document: calls and tokens | estimated seconds per document | risk to output |
 |---|---|---|---|---|---|
 | 1 | Reuse the stored result when the same file is opened again | A | repeat only: 3.7 calls, 4,825 prompt (4,247 not reused today), 868 output | 127 s on a repeat, 0 on a first run | none if keyed correctly |
-| 2 | Draft output from text already in the prompt (llama.cpp ngram speculative decoding) | B | no calls or tokens; speed per token only | unknown. Ceiling about 56 s; could be 0 or negative | numeric drift |
+| 2 | Draft output from text already in the prompt (llama.cpp ngram speculative decoding) | C (was B; section 6) | no calls or tokens; speed per token only | measured on 15 documents: 7.4% less time, smaller than the 17.7% between two unflagged runs | changed 2 of 56 answers; one field of one document became not found |
 | 3 | Compact JSON, no whitespace | C | up to 188 output (newlines and indentation only: 88) | up to 19 s (9 s) | low to medium |
 | 4 | Short sentence ids (`[46]` for `[p1_s9]`) | C | 144 prompt, 43 output | about 5.6 s | medium |
 | 5 | Stop repeated items | C | up to 63 output | up to 6 s | medium |
@@ -262,7 +263,7 @@ The calls and tokens column is what to judge a saving by. Seconds are estimates 
 
 1. **Stored results.** Within one app session the sidecar already returns the existing job for the same bytes (`Worker.submit`). Across restarts everything is recomputed because the Library is in memory only (already on the roadmap). The key must cover the file hash, model hash, extractor version, prompts, schema and server version. A stored result holds document text, so it needs a privacy decision first.
 
-2. **Speculative drafting.** A simple count on the recorded tokens: 8,418 of 13,023 output tokens (65%) equal the token that followed the latest earlier occurrence of the same 2 tokens in the prompt or output (66% with 3). The ceiling assumes drafted tokens cost nothing, which is false. The bundled binary contains `--spec-type` and `--spec-ngram-*` options; whether they work well, or at all, with this hybrid model (which may need checkpoint rollback after a rejected draft) was not tested. This is not llama.cpp's own matching algorithm.
+2. **Speculative drafting.** A simple count on the recorded tokens: 8,418 of 13,023 output tokens (65%) equal the token that followed the latest earlier occurrence of the same 2 tokens in the prompt or output (66% with 3). The ceiling assumes drafted tokens cost nothing, which is false. The bundled binary contains `--spec-type` and `--spec-ngram-*` options; whether they work well, or at all, with this hybrid model (which may need checkpoint rollback after a rejected draft) was not tested. This is not llama.cpp's own matching algorithm. Tested afterwards, see section 6.
 
 3. **Compact JSON.** 2,814 tokens. The request uses `response_format` with a JSON schema, which lets the model add whitespace. Forcing compact output needs a different grammar. The tokens that follow are then chosen from a different history, so content can differ. Prompt example answers are already written without newlines.
 
@@ -301,6 +302,92 @@ The calls and tokens column is what to judge a saving by. Seconds are estimates 
 
 Not a time saving: the document is only marked done after the scalar call. Showing it as ready after the list calls would bring "done" forward by about 16 s with the same values. It changes app behaviour, not model time.
 
+## 6. Speculative decoding test
+
+Run on 2026-11-27 and 28 with the bundled llama-server b12651 and the same model, on the Mac. All work is in `data/cache/spec_ngram/` (a copy of the baseline folder, gitignored). The only change between old and new is the server flags. New means:
+
+    --spec-type ngram-map-k --spec-ngram-map-k-size-n 3 --spec-ngram-map-k-size-m 8
+
+The server starts with them, serves requests and logs a draft acceptance rate. No new draft model is needed.
+
+### One call
+
+The slowest list call (d4000027 `required_documents`, 5,600 prompt tokens, 844 output tokens), a fresh server for each run. Every one of the 14 runs, all configs, returned the recorded answer.
+
+Screening, one run each. The AC rows and the battery rows cannot be compared.
+
+| flags | output tokens/s | power |
+|---|---|---|
+| none | 15.83 | AC |
+| `ngram-simple`, defaults | 14.19 | AC |
+| `ngram-simple`, sizes 3 and 8 | 19.14 | AC |
+| `ngram-map-k`, sizes 3 and 8 | 20.09 | AC |
+| `ngram-map-k4v`, sizes 3 and 8 | 10.68 | battery, Low Power Mode |
+| `ngram-mod`, defaults | 5.93 | battery, Low Power Mode |
+| `ngram-mod`, match 3, min 2, max 8 | 10.61 | battery, Low Power Mode |
+| `ngram-cache`, defaults | 12.28 | battery, Low Power Mode |
+
+`ngram-map-k` was chosen from this one call. Then old and new alternated three times on battery in Low Power Mode:
+
+| | old | new |
+|---|---|---|
+| output tokens/s | 6.02, 6.12, 6.17 | 12.12, 12.08, 12.08 |
+| output s | 140.2, 137.9, 136.9 | 69.7, 69.9, 69.9 |
+| whole call s | 222.9, 218.0, 217.0 | 149.3, 150.1, 149.8 |
+
+The whole call took 31 to 33% less time. This was not alternated on AC.
+
+### 15 documents
+
+Order: old1, new2, old2, new3, all on AC with Low Power Mode off (power sampled every 30 s). A further flagged run, new1, ran first, partly on battery: its answers count, its seconds do not.
+
+| run | calls | prompt tokens | output tokens | prompt s | output s | total s | answers differing from baseline |
+|---|---|---|---|---|---|---|---|
+| old1 | 56 | 72,368 | 13,082 | 525.0 | 1,054.8 | 1,579.8 | 0 |
+| new2 | 56 | 72,369 | 14,465 | 590.3 | 972.7 | 1,563.0 | 2 |
+| old2 | 56 | 72,368 | 13,082 | 608.2 | 1,250.7 | 1,858.9 | 0 |
+| new3 | 56 | 72,369 | 14,465 | 615.0 | 1,005.7 | 1,620.8 | 2 |
+
+The one extra prompt token comes from how the count is derived from the log when an answer is cut off. Each flagged run drafted 8,111 tokens and accepted 5,913.
+
+Mean of the two runs by field group:
+
+| group | calls | prompt tokens old / new | output tokens old / new | seconds old / new |
+|---|---|---|---|---|
+| eligibility | 13 | 13,759 / 13,760 | 5,928 / 7,311 | 635.4 / 556.8 |
+| required_documents | 14 | 21,955 / 21,955 | 2,838 / 2,838 | 436.3 / 424.1 |
+| deadlines | 14 | 15,658 / 15,658 | 3,569 / 3,569 | 417.4 / 364.3 |
+| scalars | 15 | 20,996 / 20,996 | 747 / 747 | 230.3 / 246.8 |
+| all | 56 | 72,368 / 72,369 | 13,082 / 14,465 | 1,719.4 / 1,591.9 |
+
+### Answers
+
+new1, new2 and new3 differ on the same two eligibility requests. old1 and old2 match the baseline on all 56. Each other flagged answer matches the baseline.
+
+| document, request | change | in the 3 flagged runs | final output |
+|---|---|---|---|
+| d230e51e, `5b28002d` | answer went from 663 output tokens to the 2,048 cap and was cut off | cut off in all 3 | eligibility goes from 5 items to not found; 5 cited sentences drop out; translation requests 36 to 31 |
+| f19cddbd, `f42888b1` | item 5 of 5 has a different `kind` and `text_ja` | the same new answer in all 3 | unchanged |
+
+The other 14 `full/` files and all 60 `rules/` files are byte-identical to the baseline. Why the answers change was not found.
+
+### Speed
+
+| measure | old1, old2 | new2, new3 |
+|---|---|---|
+| total s | 1,579.8, 1,858.9 (17.7% apart) | 1,563.0, 1,620.8 (3.7% apart) |
+| total s without the two differing calls | 1,481.8, 1,747.6 | 1,446.7, 1,502.8 |
+| output tokens/s without the two differing calls | 12.44, 10.45 | 13.84, 13.35 |
+| prompt tokens/s | 121.34, 104.74 | 107.91, 103.58 |
+
+On the mean, new took 7.4% less total time (8.7% without the differing calls). That is smaller than the gap between the two unflagged runs, and new3 was 2.6% slower in total than old1. Output without the differing calls was faster in both new runs than in both old runs, by 7 to 32% between pairs. A whole-run saving is not shown.
+
+### Result
+
+By the rule in the next section, a difference moves the option to class C. It is not adopted (D-122). Not done: the other six configs on 15 documents, eval scoring, another machine, Windows.
+
+Scripts: `smoke.py` (one call), `run.py` (full recordings), `compare.py` (answer diff and totals), `diffs.py` (structure of each difference), `table.py` (per group totals and spread).
+
 ## How to prove an option did not change output
 
 **Important limit of the baseline compare.** The replay key hashes only system text, user text, schema and max tokens. It does not cover llama-server flags, other request body fields (`cache_prompt` and the like) or a `grammar` field added inside the client. For options 2, 7 and 15, `compare` would pass without testing anything.
@@ -324,7 +411,7 @@ Never use the test split for any of this.
 
 1. Speed on a quiet machine, and why identical runs differ.
 2. Whether answers stay identical on another machine or server build.
-3. Speculative decoding: speed and answer differences.
+3. Speculative decoding: done for `ngram-map-k` on this Mac (section 6). Still open: the other configs on 15 documents, and the cause of the changed answers.
 4. Cache hits and speed with one slot per field or the cache flags; peak memory with a larger `-c` or `-np`.
 5. Compact JSON grammar: speed and answer differences.
 6. Document-first prompt: real reuse on this model with retrieved windows.

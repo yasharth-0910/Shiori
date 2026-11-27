@@ -269,3 +269,5 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-27 (D-121): storage step 5. `storage.ts` is wired into `main.ts`; the bridge has twenty functions. Tests use a fake `safeStorage`, fake settings and a temp folder, plus a one-off run of the compiled `main.js` against a stand-in Electron. Not run in real Electron; the by-hand check of step 5 is open. Do not release before steps 6 to 8.
 
 - 2026-11-27: the by-hand check of storage step 5 passed on macOS in a dev run (reported by Yasharth): saved, found again after a restart, no text or path in the log, no readable Japanese in the store. Next is step 6, the Keychain gate (`storage_design.md` section 7).
+
+- 2026-11-28 (D-122): tested llama.cpp ngram speculative decoding (`ngram-map-k`) on the 15 dev documents. It changed 2 of 56 answers in all three flagged runs, one document's eligibility became not found, and the time saved (7.4%) was within the gap between two unflagged runs. Dropped; the app's server flags are unchanged. Details in `speed_analysis.md` section 6.

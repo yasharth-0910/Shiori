@@ -1299,3 +1299,13 @@ Decision:
 - The PDF viewer falls back to the stored copy when the picked file cannot be read.
 Alternatives: the rules inside `main.ts` (rejected: it imports Electron, so nothing there can be tested with `node --test`); factories for the store and keeper passed into the service instead of the tsconfig option (rejected: more code to work around module names).
 Consequences: bridge grows from fifteen to twenty functions (`listDocuments`, `getStorage`, `setKeepDocuments`, `deleteDocument`, `deleteAllDocuments`). No screen calls them yet. Steps 5 to 8 must ship in one release (design section 6), so no release should be built from this state. `EXTRACTOR_VERSION` stays 0.3.0 and the sidecar is unchanged. The by-hand check of step 5 passed on macOS in a dev run after this was built (reported by Yasharth, 2026-11-27); delete, the dialogs and the viewer reading the stored copy were not part of it.
+
+## D-122: ngram speculative decoding is not adopted
+
+Date: 2026-11-28
+Status: accepted (the class C rule is from Yasharth's task of 2026-11-27; recording asked for on 2026-11-28)
+Context: option 2 of `speed_analysis.md` (draft output from text already in the prompt) was class B, to be shown to leave output unchanged. Tested with the bundled llama-server b12651, Qwen3.5-9B Q4_K_M, `--spec-type ngram-map-k` with sizes 3 and 8, on the 15 dev documents (section 6 of that file).
+Decision: the option moves to class C. The flags are not added to `app/electron/llama.ts`.
+Reason: all three flagged runs changed the same 2 of 56 answers, and on one document eligibility went from 5 items to not found. Two unflagged runs matched the baseline. Mean total time was 7.4% lower on AC, less than the 17.7% between the two unflagged runs.
+Alternatives: other `--spec-type` values. They were tried on one call only and not on the 15 documents.
+Consequences: no source file, prompt, threshold or `EXTRACTOR_VERSION` (0.3.0) changes. Another speculative setting needs the same full recording and diff before it ships.
