@@ -1,6 +1,6 @@
 # Privacy design
 
-The promise: **the app never sends a document, extracted text or result off the user's machine.** No screen turns saving on yet, so by default it keeps results in memory only (D-116) and writes no document or result file of its own. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and delete are partly built: the main process does both (D-121), the screens are planned, not built (D-119, `storage_design.md`).
+The promise: **the app never sends a document, extracted text or result off the user's machine.** Saving is off by default, so it keeps results in memory only (D-116) and writes no document or result file of its own until you say yes. Files you export are plain text and yours to look after, including whatever your calendar or sync tools do with them. Encrypted saving and delete are partly built: the main process does both (D-121) and the screens call it (D-123, `storage_design.md`); the screens have not been run against the real main process.
 
 This file says what the code does today (checked 2026-11-27). Anything marked **Planned, not built** is not in the app. Releases v0.1.0 and v0.1.1 do not have the spellchecker and HTTP cache settings described below (D-118).
 
@@ -25,7 +25,7 @@ This file says what the code does today (checked 2026-11-27). Anything marked **
 | App or a dependency sends data out | Page requests cancelled at the Electron session; CSP; shipped Python may not import network or cloud SDK modules (tests); sidecar telemetry off (D-117) |
 | Another local app queries our model or sidecar | Bind to 127.0.0.1, random ports, a new token or key at each start |
 | Laptop stolen or disk imaged | By default nothing is saved. Saved copies (only if saving is on, which no screen offers yet) are encrypted (`storage_design.md`); checked by hand on macOS in a dev run only (2026-11-27). Your original files and exports are not protected by it |
-| Deleted documents recovered from SSD | Delete removes the document's key file first (`app/electron/store.ts`). Old disk blocks and earlier backups can still hold it (`storage_design.md` section 3). No screen offers delete yet |
+| Deleted documents recovered from SSD | Delete removes the document's key file first (`app/electron/store.ts`). Old disk blocks and earlier backups can still hold it (`storage_design.md` section 3). |
 | Document text ends up in logs or crash dumps | The app's own log lines carry no document text; the app never starts Electron's crash reporter. Filter for Japanese text in child process output: **Planned, not built** (see "Logging") |
 | User documents end up in training data | No code uploads documents or results |
 
@@ -52,14 +52,14 @@ Out of scope: a compromised OS or a malicious user with full access to an unlock
 - By default the Library, results and translations are held in memory and are gone when the app quits (D-116).
 - The app writes model files and partial downloads, the exports you choose to save, and whatever Electron itself keeps in the user data folder.
 - No temp files for document text: no code in `core/` or `sidecar/` that the app runs writes one. The packaged app has no OCR (D-112). What the OCR engine does inside a dev run has not been checked.
-- Encrypted saved documents: built in the main process (D-119, D-121) and used only when `settings.json` says `"saveDocuments": "yes"`. The question, the switch and a Library that shows saved documents are **Planned, not built** (`storage_design.md` steps 7 and 8).
+- Encrypted saved documents: built in the main process (D-119, D-121) and used only when `settings.json` says `"saveDocuments": "yes"`. The question, the switch and a Library that shows saved documents are built (D-123), tested with a fake bridge only.
 
 **Deletion**
-- Delete of one saved document and "Delete all": built in the main process behind a confirm dialog (D-121). Buttons for them are **Planned, not built** (`storage_design.md` steps 7 and 8).
+- Delete of one saved document and "Delete all": built in the main process behind a confirm dialog (D-121). Buttons for them are built (D-123), tested with a fake bridge only.
 - Quitting drops what the app held in memory. Operating system swap files are not covered.
 
 **Ephemeral mode**
-- Off is the default: until the saved answer is yes, no document data is written (tested with a temp folder). A setting for it on screen: **Planned, not built** (`storage_design.md`).
+- Off is the default: until the saved answer is yes, no document data is written (tested with a temp folder). The switch in Settings is built (D-123), tested with a fake bridge only.
 
 **Logging**
 - The app writes no log file. Messages go to the terminal output of the process.

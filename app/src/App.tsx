@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { countStates, titleOf } from "./fields";
-import { Library, type Doc } from "./Library";
+import { Library } from "./Library";
 import { ModelPicker } from "./ModelPicker";
 import { Onboarding } from "./Onboarding";
 import { showOnboarding, type Stage } from "./firstrun";
-import { resultKey } from "./modelinfo";
-import type { ModelList } from "./shiori.d.ts";
+import type { ModelList, StorageInfo } from "./shiori.d.ts";
+import {
+  afterYes, askAfterFinish, emptyText, markFailed, QUESTION, savedIds, showQuestion, storeNotes, withDemo, withFinished, withoutDocs, withRows, type Doc,
+} from "./saving";
 import { Processing } from "./Processing";
+import { Settings } from "./Settings";
 import { Setup } from "./Setup";
 import { Workspace } from "./Workspace";
 import type { Fixture } from "./types";
@@ -20,12 +23,45 @@ export function App() {
   const [stage, setStage] = useState<Stage>("intro"); // intro | find | ready are the onboarding (D-115); models is the Models page
   const [adding, setAdding] = useState<{ doc_id: string; name: string } | null>(null);
 
+  // Saved documents (D-123). `info` stays null until getStorage is needed: it can raise a keyring prompt.
+  const [info, setInfo] = useState<StorageInfo | null>(null);
+  const infoRef = useRef(info);
+  infoRef.current = info;
+  const [finishedAny, setFinishedAny] = useState(false);
+  const [storeError, setStoreError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const askStorage = useCallback(async () => {
+    try {
+      const i = (await window.shiori?.getStorage()) ?? null;
+      setInfo(i);
+      return i;
+    } catch {
+      setStoreError("Shiori could not read the saved documents.");
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     fetch("./fixture.json")
       .then((r) => r.json() as Promise<Fixture>)
-      .then((fx) => setDocs([{ fx, counts: countStates(fx) }]))
-      .catch(() => setDocs([])); // no fixture: start with an empty Library
+      .then((fx) => {
+        const demo = { fx, counts: countStates(fx) };
+        setDocs((all) => withDemo(all ?? [], demo));
+      })
+      .catch(() => setDocs((all) => all ?? [])); // no fixture: start with an empty Library
   }, []);
+
+  useEffect(() => {
+    void window.shiori?.listDocuments().then(
+      (list) => {
+        if (!list.length) return; // nothing to open: getStorage is not asked at startup
+        const rows = list.map((fx) => ({ fx, counts: countStates(fx), saved: true }));
+        setDocs((all) => withRows(all ?? [], rows));
+        void askStorage();
+      },
+      () => setStoreError("Shiori could not read the saved documents."),
+    );
+  }, [askStorage]);
 
   useEffect(() => {
     void window.shiori?.listModels().then((l) => {
@@ -59,13 +95,59 @@ export function App() {
     if (list.skipPicker) return start(); // dev checks (SHIORI_PICK) skip the dialog
     setPicker({ list, value: list.default, note: null });
   };
+  // Stable: Processing's polling restarts when this function changes.
   const finished = useCallback((fx: Fixture) => {
     const d = { fx, counts: countStates(fx) };
     // One result per document and model: the same PDF run with another model is a separate row.
-    setDocs((all) => [...(all ?? []).filter((x) => resultKey(x.fx.doc_id, x.fx.model_id) !== resultKey(fx.doc_id, fx.model_id)), d]);
+    setDocs((all) => withFinished(all ?? [], d));
     setAdding(null);
     setOpen(d);
-  }, []);
+    setFinishedAny(true);
+    if (askAfterFinish(infoRef.current)) void askStorage().then((i) => i && setDocs((all) => markFailed(all ?? [], fx, i)));
+  }, [askStorage]);
+
+  // One storage action at a time; whatever happened, the state is read again.
+  const act = async (failed: string, op: (api: NonNullable<Window["shiori"]>) => Promise<boolean>) => {
+    if (!window.shiori) return;
+    setBusy(true);
+    setStoreError(null);
+    try {
+      if (await op(window.shiori)) await askStorage();
+    } catch {
+      setStoreError(failed);
+      await askStorage();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const answer = (keep: boolean) => {
+    const first = infoRef.current?.keep === null;
+    return act("Could not save your answer.", async (api) => {
+      await api.setKeepDocuments(keep);
+      if (keep) {
+        const listed = await api.listDocuments();
+        setDocs((all) => afterYes(all ?? [], listed, first));
+      }
+      return true;
+    });
+  };
+  // main shows the confirm dialog; false means cancelled.
+  const deleteOne = (docId: string) =>
+    act("Could not delete this document.", async (api) => {
+      if (!(await api.deleteDocument(docId))) return false;
+      setDocs((all) => withoutDocs(all ?? [], [docId]));
+      return true;
+    });
+  const deleteAll = () => {
+    const gone = savedIds(docs ?? []);
+    return act("Could not delete the saved documents.", async (api) => {
+      if (!(await api.deleteAllDocuments())) return false;
+      setDocs((all) => withoutDocs(all ?? [], savedIds(all ?? []))); // results that were never saved stay open
+      setOpen((o) => (o && gone.includes(o.fx.doc_id) ? null : o));
+      return true;
+    });
+  };
+  const notes = [...storeNotes(info), ...(storeError ? [storeError] : [])];
 
   const name = open ? titleOf(open.fx) : null;
   return (
@@ -78,14 +160,9 @@ export function App() {
         {open && <span className="docname" title={name?.ja ?? undefined}>{name?.en ?? name?.ja ?? "Document"}</span>}
         <span className="grow" />
         {open && <button className="btn" disabled title="Export is not available yet">Export</button>}
-        <button className="btn sq" aria-label="Settings" aria-expanded={settings} onClick={() => setSettings(!settings)}>⚙</button>
+        <button className="btn sq" aria-label="Settings" aria-expanded={settings} onClick={() => { if (!settings) void askStorage(); setSettings(!settings); }}>⚙</button>
       </header>
-      {settings && (
-        <div className="pop" role="dialog" aria-label="Settings">
-          <b>Settings</b>
-          <p className="meta">There is nothing to set yet.</p>
-        </div>
-      )}
+      {settings && <Settings info={info} busy={busy} error={storeError} onKeep={(keep) => void answer(keep)} onDeleteAll={() => void deleteAll()} />}
       {picker && (
         <div className="scrim">
           <div className="dialog" role="dialog" aria-label="Add document">
@@ -100,6 +177,16 @@ export function App() {
           </div>
         </div>
       )}
+      {showQuestion(finishedAny, info) && !(setup && stage !== "models") && (
+        <div className="ask" role="region" aria-label="Saving">
+          <span>{QUESTION}</span>
+          <div className="rowactions">
+            <button className="btn" disabled={busy} onClick={() => void answer(true)}>Yes</button>
+            <button className="btn" disabled={busy} onClick={() => void answer(false)}>No</button>
+          </div>
+          {storeError && <span className="meta">{storeError}</span>}
+        </div>
+      )}
       <main>
         {!docs && <div className="err">Loading</div>}
         {setup && stage === "models" && <Setup list={setup} onRefresh={async () => setSetup((await window.shiori?.listModels()) ?? null)} onClose={() => setSetup(null)} onFind={() => setStage("find")} />}
@@ -107,7 +194,7 @@ export function App() {
           <Onboarding list={setup} stage={stage} onStage={setStage} onRefresh={async () => setSetup((await window.shiori?.listModels()) ?? null)} onAdd={() => { setSetup(null); void add(); }} onClose={() => setSetup(null)} />
         )}
         {docs && !setup && adding && <Processing docId={adding.doc_id} name={adding.name} onDone={finished} onBack={() => setAdding(null)} />}
-        {docs && !setup && !adding && !open && <Library docs={docs} onOpen={setOpen} onAdd={add} canAdd={!!window.shiori} />}
+        {docs && !setup && !adding && !open && <Library docs={docs} onOpen={setOpen} onAdd={add} canAdd={!!window.shiori} notes={notes} empty={emptyText(info)} onDelete={(id) => void deleteOne(id)} busy={busy} />}
         {open && !setup && <Workspace fx={open.fx} counts={open.counts} />}
       </main>
     </div>

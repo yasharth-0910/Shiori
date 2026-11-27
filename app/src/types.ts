@@ -31,6 +31,7 @@ export type Fixture = {
   text?: string; // HTML only: the extracted text the anchors index into; shown as plain text, never parsed as HTML
   en_summary?: Anchor | null; // HTML only: the page's own English Summary section, when it has one
   model_id?: string | null; // registry id of the model that produced these answers (D-99); absent for the fixture
+  saved?: boolean; // getFields only: main wrote this result to the store (D-121)
   doc_type?: string; // what the sidecar read from the first page (D-92); not part of the stored fields JSON
   fields: Field[];
   sentences: Record<string, Sentence>;

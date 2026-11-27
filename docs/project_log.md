@@ -271,3 +271,6 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 - 2026-11-27: the by-hand check of storage step 5 passed on macOS in a dev run (reported by Yasharth): saved, found again after a restart, no text or path in the log, no readable Japanese in the store. Next is step 6, the Keychain gate (`storage_design.md` section 7).
 
 - 2026-11-28 (D-122): tested llama.cpp ngram speculative decoding (`ngram-map-k`) on the 15 dev documents. It changed 2 of 56 answers in all three flagged runs, one document's eligibility became not found, and the time saved (7.4%) was within the gap between two unflagged runs. Dropped; the app's server flags are unchanged. Details in `speed_analysis.md` section 6.
+
+- 2026-11-28 (D-123): storage steps 7 and 8 built in the renderer, before step 6. Plan change: no `getStorage` at startup, so a locked store is not announced until Settings opens or a document finishes (open question). Screens rendered with a fake bridge only. The update sentence is still a placeholder.
+

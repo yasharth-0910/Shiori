@@ -38,6 +38,12 @@ def test_preload_exposes_exactly_twenty_functions() -> None:
     assert len(re.findall(r"ipcRenderer\.invoke\(", src)) == 20
 
 
+def test_the_renderer_types_declare_the_same_twenty_functions() -> None:
+    src = (ELECTRON.parent / "src" / "shiori.d.ts").read_text()
+    body = src[src.index("shiori?: {") :]
+    assert set(re.findall(r"^      (\w+)\(", body, re.M)) == TWENTY
+
+
 def test_preload_gives_no_raw_ipc_or_node() -> None:
     src = (ELECTRON / "preload.ts").read_text()
     assert re.findall(r"""(?:from|require\()\s*["']([^"']+)["']""", src) == ["electron"]

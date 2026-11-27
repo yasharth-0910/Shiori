@@ -49,7 +49,7 @@ export function Workspace({ fx, counts }: { fx: Fixture; counts: Record<State, n
 
   const ask = (ids: string[]): Promise<TrState> => {
     if (!window.shiori) return Promise.resolve({ status: "unavailable", reason: "no_document" });
-    return window.shiori.translate(fx.doc_id, ids).then(
+    return window.shiori.translate(fx.doc_id, ids, fx.model_id).then(
       (r): TrState => (r.ok ? { status: "ok", items: r.items, done: r.done, total: r.total, failed: r.failed } : { status: "unavailable", reason: r.reason }),
       (): TrState => ({ status: "unavailable", reason: "failed" }),
     );

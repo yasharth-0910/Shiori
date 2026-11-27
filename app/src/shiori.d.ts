@@ -43,7 +43,16 @@ export type Status = {
   cursor: number;
 };
 
-// The fifteen functions preload.ts exposes. Nothing else crosses the bridge.
+// Saved documents (D-119, D-121). Mirrors StorageInfo in electron/storage.ts. `keep` null: not answered.
+export type StorageInfo = {
+  keep: boolean | null;
+  state: "ok" | "no_keyring" | "no_local_folder" | "locked";
+  saved: number; // documents, not Library rows
+  unreadable: number;
+  message: string | null; // "Saving is not available on this computer: <reason>"
+};
+
+// The twenty functions preload.ts exposes. Nothing else crosses the bridge.
 declare global {
   interface Window {
     shiori?: {
@@ -51,8 +60,10 @@ declare global {
       listModels(): Promise<ModelList>;
       getStatus(docId: string, since?: number): Promise<Status>;
       cancel(docId: string): Promise<void>;
-      getFields(docId: string): Promise<Fixture>;
-      translate(docId: string, ids: string[]): Promise<Translated>;
+      // `saved`: main wrote this result to the store.
+      getFields(docId: string): Promise<Fixture & { saved: boolean }>;
+      // `modelId` is the result's model; a saved result with no running job is answered from the store.
+      translate(docId: string, ids: string[], modelId?: string | null): Promise<Translated>;
       // Native save dialog (main process); resolves true when a file was written, false when the user cancelled.
       saveExport(kind: "csv" | "ics", name: string, content: string): Promise<boolean>;
       // Opens the .ics saved in this session with the default calendar app; false when none was saved. Takes no path.
@@ -68,6 +79,15 @@ declare global {
       scanCancel(): Promise<void>;
       // Registers a match by its index (never a path), through the same import as chooseModelFile: the file is copied in.
       useScanned(index: number): Promise<UseResult>;
+      // The saved documents, one entry per document and model. Empty when there are none or the store cannot be used.
+      listDocuments(): Promise<Fixture[]>;
+      // Can raise a keyring prompt: call it only at the times storage_design.md lists.
+      getStorage(): Promise<StorageInfo>;
+      // Records the answer. The first Yes also saves this session's finished documents; the counts are those.
+      setKeepDocuments(keep: boolean): Promise<{ saved: number; failed: number }>;
+      // main asks in a native dialog; false when cancelled.
+      deleteDocument(docId: string): Promise<boolean>;
+      deleteAllDocuments(): Promise<boolean>;
     };
   }
 }

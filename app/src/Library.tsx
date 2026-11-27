@@ -1,19 +1,27 @@
 import { useState } from "react";
 import { issuerOf, titleOf } from "./fields";
 import { resultKey } from "./modelinfo";
-import { stateOf, type State } from "./status";
+import type { Doc } from "./saving";
+import { stateOf } from "./status";
 import { bidDeadline, type Due } from "./summary";
-import type { Fixture } from "./types";
 
 type Sort = "deadline" | "recent";
-export type Doc = { fx: Fixture; counts: Record<State, number> };
 
 // Soonest upcoming deadline first, then closed ones (most recent first), then documents with none.
 const dueKey = (due: Due | null) => (!due ? 1e9 : due.days >= 0 ? due.days : 1e6 - due.days);
 
-type Props = { docs: Doc[]; onOpen: (d: Doc) => void; onAdd: () => Promise<void>; canAdd: boolean };
+type Props = {
+  docs: Doc[];
+  onOpen: (d: Doc) => void;
+  onAdd: () => Promise<void>;
+  canAdd: boolean;
+  notes: string[]; // storage notices
+  empty: string; // what an empty Library says
+  onDelete: (docId: string) => void;
+  busy: boolean;
+};
 
-export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
+export function Library({ docs, onOpen, onAdd, canAdd, notes, empty, onDelete, busy }: Props) {
   const [sort, setSort] = useState<Sort>("deadline");
   const [q, setQ] = useState("");
   const [note, setNote] = useState("");
@@ -47,6 +55,9 @@ export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
         </div>
       </div>
       {note && <p className="meta">{note}</p>}
+      {notes.map((n) => (
+        <p key={n} className="pnotice libnote" role="status">{n}</p>
+      ))}
       <table className="ledger">
         <thead>
           <tr>
@@ -79,20 +90,28 @@ export function Library({ docs, onOpen, onAdd, canAdd }: Props) {
                 </td>
                 <td>
                   <div className="stack">
+                    {d.notSaved && <span className="pill pill-needs_review">not saved</span>}
                     {d.counts.verified > 0 && <span className="pill pill-verified">{d.counts.verified} verified</span>}
                     {d.counts.needs_review > 0 && <span className="pill pill-needs_review">{d.counts.needs_review} need review</span>}
                     {d.counts.other_document > 0 && <span className="pill pill-other_document">{d.counts.other_document} see other document</span>}
                   </div>
                 </td>
                 <td>
-                  <button className="btn primary" onClick={() => onOpen(d)}>Open</button>
+                  <div className="rowactions">
+                    {d.saved && (
+                      <button className="btn" disabled={busy} aria-label={`Delete ${t.en ?? t.ja ?? "document"}`} onClick={() => onDelete(d.fx.doc_id)}>
+                        Delete
+                      </button>
+                    )}
+                    <button className="btn primary" onClick={() => onOpen(d)}>Open</button>
+                  </div>
                 </td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      {rows.length === 0 && <p className="empty">Documents are kept only while the app is open. Saving them between sessions is not in this version yet.</p>}
+      {rows.length === 0 && <p className="empty">{docs.length ? "No documents match the search." : empty}</p>}
     </div>
   );
 }

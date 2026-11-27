@@ -1165,6 +1165,8 @@ Consequences: the guard only works when it is run. It cannot see an upload made 
 
 ## Open questions
 
+- (2026-11-28, D-123) `listDocuments` cannot tell an empty store from a locked one, or from one where no record opens: all give `[]`. The screens do not ask `getStorage` at startup (it can raise a keyring prompt), so after a denied Keychain prompt the Library says "No documents yet." until Settings opens or a document finishes. Smallest main-side fix, not built: `listDocuments` also returns the number of saved folders, which `storage.ts` already counts without the key (`folderCount()`); the renderer then calls `getStorage` when that number is above 0, which raises no new prompt because `open()` has already asked at startup. It changes the return shape of one bridge function.
+- (2026-11-28, D-123) Design section 3 says "Delete all saved documents" is disabled only when the store folder holds nothing. `getStorage` reports document counts, not that. After the last document is deleted one by one, `master.key` stays but the count is 0, so the button is disabled. No document data is left in that case. Should main report it, or should the design say "when no document is saved"?
 - The local labeler failed `schema_valid` on one field in 6 of the 10 web documents after `repair` reported 0 problems, so the two checks disagree (found 2026-11-23, not yet looked into).
 - Does a prefecture's own bidder roster (入札参加資格者名簿, with 業務種目 and 格付区分 A, Okayama docs `427784e8`, `44473a6e`, `b66a3908`) count as `unified_qualification`? The field is defined for the national 全省庁統一資格; the review (test web batch 04, F-0256 to F-0258) answered absent and held them as UNSURE. The same conditions are already eligibility items of kind other. Decided in D-106: national only, absent.
 - `調達案件の仕様等 入札公告による。` inside a 入札公告 itself (`1bfaa824`) and `「入札説明書」で指定する特質を有すること。` (`262e3a41`): are they spec_access pointers (see_other_document) and which ref kind (spec, other_notice, bid_instructions)? The review used spec for the first and bid_instructions for the second, UNSURE (F-0262, F-0264, 2026-11-23).
@@ -1309,3 +1311,22 @@ Decision: the option moves to class C. The flags are not added to `app/electron/
 Reason: all three flagged runs changed the same 2 of 56 answers, and on one document eligibility went from 5 items to not found. Two unflagged runs matched the baseline. Mean total time was 7.4% lower on AC, less than the 17.7% between the two unflagged runs.
 Alternatives: other `--spec-type` values. They were tried on one call only and not on the 15 documents.
 Consequences: no source file, prompt, threshold or `EXTRACTOR_VERSION` (0.3.0) changes. Another speculative setting needs the same full recording and diff before it ships.
+
+## D-123: The saving screens: question line, saved Library, Settings
+
+Date: 2026-11-28
+Status: accepted (the startup rule is Yasharth's answer of 2026-11-28; the rest are choices made while building steps 7 and 8, not yet reviewed)
+Context: steps 7 and 8 of `storage_design.md` section 6 call the five storage functions from the renderer. The design says screens call `getStorage` only when something saved exists, after a document finishes, or when Settings opens, but the Library's notices come from `getStorage` and `listDocuments` returns `[]` for both an empty and a locked store.
+Decision:
+- No keyring prompt at startup. `getStorage` is called when `listDocuments` returns something, after a finished document (unless the answer is already known to be No), when Settings opens, and after an answer or a delete. Until then an empty Library says "No documents yet.". The locked-store gap is an open question.
+- Empty Library after `getStorage`: the design's sentence when saving is off and available; "Documents are kept only while the app is open." when not available or locked; "No documents yet." when it is on. A search with no match says "No documents match the search.".
+- Locked has no sentence from main, so the screens use "Saved documents cannot be opened, so saving is off. Nothing was deleted.". The switch stays enabled and shows the saved answer (the design disables it only when saving is not available).
+- "Delete all saved documents" is enabled when locked, else when a saved or unreadable document is counted.
+- The question line sits under the title bar on every screen except the onboarding screens. Yes and No look the same, so neither is suggested.
+- A row is "not saved" when saving is on and available and main did not save that result, including a failure during the first Yes. Delete shows only on rows main holds a copy of, never on the fixture demo.
+- `translate` now sends the result's model id, so a saved document gets its stored English.
+- The sentence about app updates is `UPDATE_NOTE` in `app/src/saving.ts`, shown in Settings, with the placeholder "TODO after the Keychain gate" until step 6 is run.
+- `app/tsconfig.json` sets `allowImportingTsExtensions` so `saving.ts` can import a value from `modelinfo.ts` and still run under `node --test`.
+Alternatives: `getStorage` at every startup (rejected by Yasharth: breaks the no-prompt promise of D-121); changing main first (not in this task).
+Consequences: no change to `app/electron`, the bridge, the sidecar or `EXTRACTOR_VERSION` (0.3.0). No release can be made yet: step 6 is a gate, the placeholder sentence must be replaced, and the screens have not been run against the real main process.
+
