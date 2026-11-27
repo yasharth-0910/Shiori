@@ -1271,3 +1271,12 @@ Decision: accept `docs/storage_design.md`.
 - Open questions 1 and 4 stay open and are logged under Open questions. Open questions 6 and 7 were settled before this entry (D-118 and `app/electron/userfile.ts`).
 Alternatives: the table "Alternatives rejected" in the design (SQLCipher per document, plain SQLite or JSON, `safeStorage` on every file, one keychain item per document, a user password, the sidecar as owner, one file for the whole library, an encrypted title index, remembering the PDF path, saving on by default, asking before the first document).
 Consequences: replaces the SQLCipher plan in `architecture.md` and `modules.md`. Delete does not promise that the data is gone forever: a recovered wrapped key plus the user's login, or an older backup, can still read it. Steps 5 to 8 must ship in the same release, and step 6 (the Keychain key surviving an update) is a gate. `EXTRACTOR_VERSION` (0.3.0) and the sidecar do not change.
+
+## D-120: The saved answer is stored as `saveDocuments`, "yes" or "no"
+
+Date: 2026-11-27
+Status: accepted (the key name and its three states are from Yasharth's task of 2026-11-27)
+Context: D-119 accepted a design that writes `{"keepDocuments": true or false}` to `settings.json`.
+Decision: the file is `{"saveDocuments": "yes"}` or `{"saveDocuments": "no"}`. The code has a third state, `unanswered`, for a missing file, a file that cannot be read or parsed, any other value, and `no_local_folder`; it is never written. A write goes to `settings.json.tmp`, is flushed, and is renamed over the file. A failed write returns `failed` and throws nothing, because Node file errors carry the path.
+Alternatives: the boolean `keepDocuments` from the first draft (replaced; no release wrote it).
+Consequences: replaces the key name in `storage_design.md` sections 2, 3 and 7. A crash can leave `settings.json.tmp`; it is never read and the next write replaces it. The planned bridge function names (`keep`, `setKeepDocuments`) do not change.

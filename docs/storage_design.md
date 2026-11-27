@@ -1,6 +1,6 @@
 # Storage design: keeping documents between sessions
 
-Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 in code and tests (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`); its by-hand Mac check is not recorded yet. No app code imports the store or the keeper. The app saves nothing. D-116 still describes the app: results are kept in memory only.
+Status: accepted (D-119, 2026-11-27). Of section 6, steps 0 to 2 are done (`app/electron/store.ts`), and step 3 (`app/electron/keeper.ts`, `storageBase` in `paths.ts`, the single instance lock in `main.ts`). The by-hand check of step 3 passed on macOS in a dev run (reported by Yasharth, 2026-11-27): the keeper through a throwaway script under Electron, the lock through two copies of the app. Not run: Windows, Linux, a packaged build, an update (section 7). Of step 4, only reading and writing the saved answer is done (`app/electron/settings.ts`, tests only, D-120); the rule for the first Yes is not built. No app code imports the store, the keeper or the settings file. The app saves nothing. D-116 still describes the app: results are kept in memory only.
 
 This replaces the "Storage", "Deletion" and "Ephemeral mode" parts of `privacy.md` (see "What this changes in other docs").
 
@@ -54,7 +54,7 @@ Exports (CSV, .ics) and Copy are different: the user asks for them, they are pla
     key                 this document's key, encrypted with the master key
     record.enc          the record above, as JSON
     source.enc          the PDF bytes (PDF only)
-<base>/settings.json        {"keepDocuments": true or false}, written only once the user answers
+<base>/settings.json        {"saveDocuments": "yes" or "no"}, written only once the user answers
 ```
 
 Where `<base>` is:
@@ -159,9 +159,9 @@ The saved answer has three values:
 
 | `settings.json` | Meaning | What happens |
 |---|---|---|
-| absent, or unreadable | not answered | Nothing is saved. The question is shown after a document finishes |
-| `false` | No | Nothing is saved. Never ask again |
-| `true` | Yes | Each document is saved when it finishes |
+| absent, unreadable, or any other value | not answered (`unanswered`) | Nothing is saved. The question is shown after a document finishes |
+| `"saveDocuments": "no"` | No | Nothing is saved. Never ask again |
+| `"saveDocuments": "yes"` | Yes | Each document is saved when it finishes |
 
 The question:
 
@@ -344,7 +344,7 @@ codesign -dv --verbose=4 "$HOME/Applications/Shiori.app" 2>&1 | grep CDHash
 3. For step 6 only (no question line yet), turn saving on by hand:
 
 ```bash
-mkdir -p "$HOME/Library/Application Support/shiori-app" && printf '{"keepDocuments": true}' > "$HOME/Library/Application Support/shiori-app/settings.json"
+mkdir -p "$HOME/Library/Application Support/shiori-app" && printf '{"saveDocuments": "yes"}' > "$HOME/Library/Application Support/shiori-app/settings.json"
 ```
 
 4. Start A from Terminal so the log is visible:

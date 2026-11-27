@@ -262,4 +262,6 @@ Rules for this file: every line cites a decision number (D-NN, `docs/decisions.m
 
 - 2026-11-27: storage step 2b done (delete one, delete all, startup cleanup in `store.ts`, tests only). Still not imported by app code, so nothing is saved.
 
-- 2026-11-27: storage step 3 code and tests (`keeper.ts`, `storageBase` in `paths.ts`, single instance lock in `main.ts`). The keeper is not imported by app code, and its by-hand Mac check is still open.
+- 2026-11-27: storage step 3 code and tests (`keeper.ts`, `storageBase` in `paths.ts`, single instance lock in `main.ts`). The keeper is not imported by app code. By-hand Mac check passed in a dev run (reported by Yasharth): a master key was made and survived a restart, and a second app copy did not start. Not run on Windows, Linux or a packaged build.
+
+- 2026-11-27 (D-120): storage step 4, first part: `settings.ts` reads and writes the saved answer, tests only. The key changed from `keepDocuments` to `saveDocuments`. The rest of step 4 (the first Yes, off blocking translation updates) is not built. Nothing is saved yet.
