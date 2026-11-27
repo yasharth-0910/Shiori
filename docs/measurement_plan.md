@@ -239,7 +239,7 @@ Every report gives two versions where possible: all rows and without `labeler_ov
 4. Report the point estimate, the 2.5 and 97.5 percentiles, and the number of rows that flipped in each direction.
 5. A **gain** is claimed only if the lower bound is above 0. Otherwise report "no measurable difference" and the smallest readable gain from section 2.
 
-No bootstrap code exists in `eval/` yet. It has to be written and tested before the first comparison that uses this protocol.
+`eval/bootstrap.py` does this for two saved dev reports: `uv run python -m eval.bootstrap <run_A.json> <run_B.json>`. It does not enforce all of step 1: run reports store no label file hashes, so it only refuses a row whose label status differs, and a changed label value or citation passes. Check the label files by hand until the reports carry hashes. It also does not split by `labeler_overlap` or reviewed rows, and does not check the other no-go conditions below.
 
 ### No-go conditions
 
